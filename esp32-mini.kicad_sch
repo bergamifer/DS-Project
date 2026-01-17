@@ -3189,6 +3189,30 @@
 			(embedded_fonts no)
 		)
 	)
+	(rectangle
+		(start 203.2 128.27)
+		(end 256.794 154.178)
+		(stroke
+			(width 0)
+			(type dash)
+		)
+		(fill
+			(type none)
+		)
+		(uuid 0f63f195-48b1-4168-beae-455359a77d94)
+	)
+	(text "El ESP32 deberia tener\nsu propio regulador \npara su alimentacion.\nActualmente se alimenta\ndel regulador del WeAct."
+		(exclude_from_sim no)
+		(at 230.378 141.732 0)
+		(effects
+			(font
+				(size 2.54 2.54)
+				(thickness 0.508)
+				(bold yes)
+			)
+		)
+		(uuid "18a6d748-c0e9-4836-867a-e934aac9f6dd")
+	)
 	(junction
 		(at 248.92 73.66)
 		(diameter 0)
