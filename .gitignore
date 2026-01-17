@@ -21,6 +21,10 @@ _autosave-*
 *-save.kicad_pcb
 fp-info-cache
 
+
+#Agrego este
+.gitignore
+
 # Netlist files (exported from Eeschema)
 *.net
 
