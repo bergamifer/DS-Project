@@ -466,7 +466,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "DS7.kicad_pro",
+    "filename": "DS.kicad_pro",
     "version": 3
   },
   "net_settings": {
@@ -690,7 +690,7 @@
     ],
     [
       "b7693d91-ba48-4049-9709-9e88d03d696b",
-      "STM32"
+      "WeAct miniSTM32"
     ],
     [
       "7f93613a-81ac-4b21-b4ec-bfcfa7fb6a2a",
