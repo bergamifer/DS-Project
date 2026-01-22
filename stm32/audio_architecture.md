@@ -34,8 +34,8 @@
                     ║   PC0, PC1, PB11 ◄── SAI4_B signals                      ║
                     ║                                                           ║
                     ║   ┌──────────┐  ┌──────────┐  ┌──────────┐              ║
-                    ║   │  DMA1    │  │  DMA1    │  │  DMA2    │              ║
-                    ║   │ Stream 0 │  │ Stream 5 │  │ Stream 2 │              ║
+                    ║   │  DMA1    │  │  DMA1    │  │  BDMA    │              ║
+                    ║   │ Stream 0 │  │ Stream 5 │  │ Channel7 │              ║
                     ║   │ (SAI1_A) │  │ (SAI1_B) │  │ (SAI4_B) │              ║
                     ║   └────┬─────┘  └────┬─────┘  └────┬─────┘              ║
                     ║        │             │             │                     ║
@@ -102,12 +102,13 @@
    - Receives BCK/LRCK from SAI4 (master mode)
 
 2. **SAI Reception**
-   - SAI4_B in master RX mode
+   - SAI4_B in master RX mode (D3 domain)
    - Generates BCK/LRCK for ADC
    - Receives data on PB11
 
-3. **DMA Transfer**
-   - DMA2 Stream 2: ADC data → memory buffer
+3. **BDMA Transfer** ⚠️ (NOT DMA2!)
+   - BDMA Channel 7 with DMAMUX2: ADC data → memory buffer
+   - SAI4 is in D3 domain, must use BDMA
 
 4. **Audio Processing**
    - CPU reads from input buffer
