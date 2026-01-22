@@ -9,6 +9,6 @@
 - SRAM4: 64 KB
 
 ## Allocation Plan
-- Delay buffers: SRAM1/2 (307 KB)
-- DMA buffers: AXI SRAM (18 KB)
-- Stack: DTCM
+- Delay buffers: SRAM1/2 (256 KB para 16 canales × 16KB cada uno, delays hasta 100ms)
+- DMA buffers: AXI SRAM (por definir según tamaño de buffer circular)
+- Stack y variables críticas: DTCM (128 KB - acceso más rápido)

@@ -205,7 +205,7 @@ STM32H743            ADC (PCM1802)
                      PB9 (SDA) ◄──── SDA
 ```
 
-**Observación:** ADC es ESCLAVO de clock. Recibe LRCK, BCK y DOUT del PCM1802. La sincronización debe venir del DAC.
+**Observación:** ADC PCM1802 configurado como ESCLAVO. Recibe MCLK (PE2), BCK y LRCK desde el STM32 (SAI4 o wired desde DAC). El STM32 recibe datos de audio vía DOUT (PB11). Sincronización garantizada por MCLK común.
 
 ---
 
@@ -247,26 +247,41 @@ STM32H743            ADC (PCM1802)
 - **Resistor:** R17 (33Ω) está correcto como impedancia serie
 - **Frecuencia típica:** 12-24 MHz. ¿A qué frecuencia estás corriendo?
 
-### 2. **SAI1 - Clock Principal para DACs**
-- ✓ PE4, PE5, PE6 → DAC0
-- ✓ PE9, PE8, PE7 → DAC1
-- **Problema detectado:** Ambos DACs comparten el mismo FS (LRCK) y SCK (BCK)
-  - Esto está OK si ambos DACs procesan los mismos datos al mismo tiempo
-  - Si necesitas sincronización independiente, requeriría un segundo SAI (no disponible fácilmente en este STM32)
-- **Recomendación:** Documentá bien el firmware: ¿Los DACs siempre tocan juntos o pueden ser independientes?
+### 2. **SAI1 - Configuración Dual para DACs (SAI1_A y SAI1_B)**
+- ✓ SAI1_A → DAC0 (PE4=FS, PE5=SCK, PE6=SD)
+- ✓ SAI1_B → DAC1 (PE9=FS, PE8=SCK, PE7=SD)
+- ✓ **MCLK compartido:** PE2 (SAI1_MCLK_A) alimenta ambos DACs
+- **Configuración:**
+  - SAI1_A: Master TX, genera su propio FS y SCK
+  - SAI1_B: Master TX, sincronizado con SAI1_A (SYNCEN[1:0]=01)
+  - Resultado: Dos buses I2S/TDM independientes con sync perfecto
+- **Ventaja:** 8 canales por DAC = 16 canales totales con timing idéntico
 
-### 3. **SAI4 - ADC en Modo Esclavo**
-- ✓ PC0, PC1, PB11 reciben clock y datos del ADC
-- **Crítico:** El ADC genera los clocks (LRCK, BCK). El STM32 **recibe** datos síncronos
-- **Verificación:** ¿La frecuencia de muestreo del ADC es la misma que los DACs? Si no, tendrás problemas de sync
-- **Recomendación:** Ambos deben usar el mismo MCLK (PE2) para mantenerse sincronizados
+### 3. **SAI4 - ADC en Modo Esclavo (Configuración Confirmada)**
+- ✓ PC0, PC1, PB11 configurados como **entradas** en el STM32
+- **Configuración ADC PCM1802:**
+  - MODE0=GND, MODE1=GND → **Slave mode (256/384/512 fS)**
+  - Recibe MCLK desde PE2 (compartido con DACs vía hardware)
+  - **El ADC NO genera clocks**, los recibe del sistema
+- **Arquitectura de clock:**
+  1. STM32 genera MCLK (PE2) → alimenta DACs y ADC
+  2. **Opción A:** SAI4 genera BCK/LRCK en modo Master y los envía al ADC
+  3. **Opción B:** ADC recibe BCK/LRCK wired desde DAC0 (PE5, PE4)
+  4. ADC sincroniza conversión y envía datos (DOUT) al STM32 vía PB11
+- **Recomendación:** Usar Opción A (SAI4 Master) para control total del timing
 
-### 4. **I2C1 - Direcciones de los Chips**
+### 4. **I2C1 - Direcciones de los Chips (formato 7-bit)**
 - PB8 (SCL) y PB9 (SDA) controlan 3 chips:
-  - PCM1690 #0 (DAC0) → Dirección 0x4C (default, strapping pin mode)
-  - PCM1690 #1 (DAC1) → Dirección 0x4E (requiere strapping pin en HIGH)
-  - PCM1802 (ADC) → Dirección 0x4D (default)
-- **Recomendación:** Verifica tus strapping pins en los datasheets. Podrían haber conflictos si no están bien configurados
+  - PCM1690 #0 (DAC0) → **0x4C** (AD1=GND, AD0=GND)
+  - PCM1690 #1 (DAC1) → **0x4E** (AD1=HIGH, AD0=GND)
+  - PCM1802 (ADC) → **0x4D** (dirección fija)
+- **Strapping Pins PCM1690:**
+  - TEST/ADR1 y MS/ADR0/RSV se conectan a GND o nivel alto
+  - **IMPORTANTE:** Verificar en datasheet si son **5V tolerant** o requieren **3.3V máximo**
+  - DAC0: TEST=GND, MS=GND → addr 0x4C
+  - DAC1: TEST=HIGH, MS=GND → addr 0x4E
+  - Conectar a **3.3V** (seguro) o 5V (verificar tolerancia)
+- **Nota:** Todas las direcciones en formato 7-bit. HAL_I2C usa este formato
 
 
 ### 6. **GPIO de Control - Timing**

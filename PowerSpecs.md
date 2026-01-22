@@ -289,13 +289,25 @@ Por sistema completo:
 **Total**: ~6W por sistema desde 12V → **500mA @ 12V**
 
 ### Para múltiples sistemas:
-| Sistemas | Corriente 12V | Fuente recomendada |
-|----------|---------------|-------------------|
-| 1-4 | 2A | Mean Well RS-35-12 (3A/36W) |
-| 5-8 | 4A | Mean Well LRS-50-12 (4.2A/50W) |
-| 9-16 | 8A | Mean Well LRS-100-12 (8.5A/102W) |
+| Sistemas | Corriente 12V | Potencia Total | Fuente recomendada |
+|----------|---------------|----------------|-------------------|
+| 1-4 | 2A | 24W | Mean Well RS-35-12 (3A/36W) |
+| 5-8 | 4A | 48W | Mean Well LRS-100-12 (8.5A/102W) ⭐ |
+| 9-16 | 8A | 96W | Mean Well LRS-150-12 (12.5A/150W) |
 
-Mouser P/N Mean Well LRS-50-12: `709-LRS5012`
+**Configuración objetivo:** 8 sistemas
+- Corriente requerida: 8 × 500mA = **4A @ 12V**
+- Potencia total: 8 × 6W = **48W**
+- **Fuente seleccionada:** Mean Well LRS-100-12
+  - Mouser P/N: `709-LRS10012`
+  - Salida: 12V @ 8.5A (102W max)
+  - Margen: 102W - 48W = **54W** (112% overhead) ✓
+
+### Distribución de Alimentación
+Para 8 sistemas, considerar:
+- **Opción A:** Bus de 12V común con protección por polyfuse individual en cada sistema
+- **Opción B:** Distribución estrella desde fuente central
+- **Recomendación:** Cable 18 AWG mínimo para bus de 4A, con protección individual de 500mA por sistema
 
 ---
 

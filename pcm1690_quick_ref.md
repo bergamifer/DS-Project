@@ -1,18 +1,34 @@
 # PCM1690 Quick Reference
 
 ## I2C Address Configuration
-| AD1 | AD0 | Address (Write) | Address (Read) |
+
+### Formato 7-bit (usado por HAL_I2C de STM32)
+| AD1 | AD0 | Address (7-bit) | Uso en proyecto |
 |-----|-----|-----------------|----------------|
-| 0   | 0   | 0x98           | 0x99          |
-| 0   | 1   | 0x9A           | 0x9B          |
-| 1   | 0   | 0x9C           | 0x9D          |
-| 1   | 1   | 0x9E           | 0x9F          |
+| 0   | 0   | **0x4C**       | DAC0 ⭐        |
+| 0   | 1   | 0x4D           | -              |
+| 1   | 0   | **0x4E**       | DAC1 ⭐        |
+| 1   | 1   | 0x4F           | -              |
+
+### Formato 8-bit (referencia datasheet)
+| AD1 | AD0 | Write | Read |
+|-----|-----|-------|------|
+| 0   | 0   | 0x98  | 0x99 |
+| 0   | 1   | 0x9A  | 0x9B |
+| 1   | 0   | 0x9C  | 0x9D |
+| 1   | 1   | 0x9E  | 0x9F |
+
+**Conexión de strapping pins:**
+- DAC0: TEST/ADR1=GND, MS/ADR0=GND → 0x4C
+- DAC1: TEST/ADR1=**HIGH**, MS/ADR0=GND → 0x4E
+- HIGH = 3.3V o 5V (verificar tolerancia en datasheet)
 
 **Init Sequence**:
-1. Write 0x40 = 0x80 (Reset)
+1. Write reg 0x40 = 0x80 (Reset)
 2. Wait 10ms
-3. Write 0x40 = 0x00 (TDM mode, unmute)
-4. Write 0x41-0x48 = 0xFF (max volume todas las salidas)
+3. Write reg 0x40 = 0xC0 (Normal operation, TDM mode)
+4. Write reg 0x41 = 0x06 (I2S format, 24-bit)
+5. Write reg 0x48-0x4F = 0xFF (max volume todos los canales)
 
 ## Pin Configuration
 - SCKI: 256fs o 384fs (típico 256fs = 12.288 MHz @ 48kHz)
