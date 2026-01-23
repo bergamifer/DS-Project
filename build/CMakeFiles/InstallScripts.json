@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/bergamifer/STM32CubeIDE/DS-Firmware/build/cmake_install.cmake",
+		"/Users/bergamifer/STM32CubeIDE/DS-Firmware/build/cmake/stm32cubemx/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

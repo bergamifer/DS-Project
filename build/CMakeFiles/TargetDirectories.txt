@@ -1,0 +1,6 @@
+/Users/bergamifer/STM32CubeIDE/DS-Firmware/build/CMakeFiles/DS-Firmware.dir
+/Users/bergamifer/STM32CubeIDE/DS-Firmware/build/CMakeFiles/edit_cache.dir
+/Users/bergamifer/STM32CubeIDE/DS-Firmware/build/CMakeFiles/rebuild_cache.dir
+/Users/bergamifer/STM32CubeIDE/DS-Firmware/build/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+/Users/bergamifer/STM32CubeIDE/DS-Firmware/build/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+/Users/bergamifer/STM32CubeIDE/DS-Firmware/build/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

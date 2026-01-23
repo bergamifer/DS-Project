@@ -122,15 +122,15 @@ void I2C1_Init(void)
 }
 ```
 
-### 2.3 DMA Configuration
+### 2.3 DMA/BDMA Configuration
 ```c
-void DMA_Init(void)
+void DMA_BDMA_Init(void)
 {
     // Enable DMA clocks
     __HAL_RCC_DMA1_CLK_ENABLE();
-    __HAL_RCC_DMA2_CLK_ENABLE();
+    __HAL_RCC_BDMA_CLK_ENABLE();  // SAI4 usa BDMA (dominio D3)
 
-    // DMA1 Stream 0: SAI1_A TX
+    // DMA1 Stream 0: SAI1_A TX (DMAMUX1 request 87)
     hdma_sai1_a.Instance = DMA1_Stream0;
     hdma_sai1_a.Init.Request = DMA_REQUEST_SAI1_A;
     hdma_sai1_a.Init.Direction = DMA_MEMORY_TO_PERIPH;
@@ -145,24 +145,34 @@ void DMA_Init(void)
     HAL_DMA_Init(&hdma_sai1_a);
     __HAL_LINKDMA(&hsai1_a, hdmatx, hdma_sai1_a);
 
-    // DMA1 Stream 5: SAI1_B TX
+    // DMA1 Stream 5: SAI1_B TX (DMAMUX1 request 88)
     hdma_sai1_b.Instance = DMA1_Stream5;
     hdma_sai1_b.Init.Request = DMA_REQUEST_SAI1_B;
     // ... similar config ...
 
-    // DMA2 Stream 2: SAI4_B RX
-    hdma_sai4_b.Instance = DMA2_Stream2;
-    hdma_sai4_b.Init.Request = DMA_REQUEST_SAI4_B;
+    // ⚠️ BDMA Channel 7: SAI4_B RX (DMAMUX2 request 16)
+    // SAI4 está en dominio D3, DEBE usar BDMA (no DMA1/DMA2)
+    // Ver dma_mapping_ref.md para detalles
+    hdma_sai4_b.Instance = BDMA_Channel7;
+    hdma_sai4_b.Init.Request = BDMA_REQUEST_SAI4_B;
     hdma_sai4_b.Init.Direction = DMA_PERIPH_TO_MEMORY;
-    // ... similar config ...
+    hdma_sai4_b.Init.PeriphInc = DMA_PINC_DISABLE;
+    hdma_sai4_b.Init.MemInc = DMA_MINC_ENABLE;
+    hdma_sai4_b.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
+    hdma_sai4_b.Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
+    hdma_sai4_b.Init.Mode = DMA_CIRCULAR;
+    hdma_sai4_b.Init.Priority = DMA_PRIORITY_MEDIUM;
+    // BDMA no tiene FIFO - omitir configuración FIFO
+    HAL_DMA_Init(&hdma_sai4_b);
+    __HAL_LINKDMA(&hsai4_b, hdmarx, hdma_sai4_b);
 
-    // DMA Interrupts
+    // DMA/BDMA Interrupts
     HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
     HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
-    HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 1, 0);
-    HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+    HAL_NVIC_SetPriority(BDMA_Channel7_IRQn, 1, 0);
+    HAL_NVIC_EnableIRQ(BDMA_Channel7_IRQn);
 }
 ```
 
@@ -411,7 +421,7 @@ void HAL_SAI_RxCpltCallback(SAI_HandleTypeDef *hsai)
 3. Audio_PLL3_Config()             // PLL3 @ 12.288 MHz
 4. GPIO_Init_All()                 // All GPIOs
 5. I2C1_Init()                     // I2C @ 100 kHz
-6. DMA_Init()                      // DMA1 and DMA2
+6. DMA_BDMA_Init()                 // DMA1 y BDMA (SAI4 usa BDMA)
 7. SAI1_A_Init()                   // Master async
 8. SAI1_B_Init()                   // Master sync
 9. SAI4_B_Init()                   // Master RX
