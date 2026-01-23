@@ -1,0 +1,9 @@
+# DS Beamforming Control Server - Dependencias
+# Todas son gratuitas y open source
+
+flask>=3.0.0              # Framework web principal
+flask-socketio>=5.3.6     # WebSockets para comunicación en tiempo real
+flask-cors>=4.0.0         # Permitir requests desde otros dispositivos en la red
+numpy>=1.26.0             # Cálculos matemáticos (delays, beamforming)
+simple-websocket          # WebSocket simple (compatible con Python 3.13)
+requests>=2.31.0          # HTTP client para comunicar con ESP32

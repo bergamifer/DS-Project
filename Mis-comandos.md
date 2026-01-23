@@ -5,3 +5,9 @@ cd /Users/bergamifer/STM32CubeIDE/DS-Firmware/firmware && rm -rf build && cmake 
 
 El .elf queda en build/Debug/DS-Firmware.elf
 
+-Iniciar servidor web
+cd webserver
+./run.sh
+
+-Para detener el servidor
+Presioná Ctrl+C en la terminal donde está corriendo

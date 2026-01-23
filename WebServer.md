@@ -10,61 +10,61 @@ Sistema de control centralizado para gestionar hasta **8 dispositivos DS indepen
 3. **Comunicación**: Cada DS tiene un ESP32 conectado vía UART al STM32; el servidor web contacta al ESP32 vía WiFi.
 4. **Escalabilidad futura**: Migración opcional a Raspberry Pi 4 o ESP32-S3 para independencia de computadora.
 
-### Instalación - Flask en macOS
+### Instalación Rápida (macOS/Linux/Raspberry Pi)
 
-#### Prerequisites:
-- Python 3.8+ instalado
-- Terminal acceso a Homebrew
+#### Prerequisitos:
+- Python 3.8+ (ya viene en macOS)
+- Todas las dependencias son **gratuitas y open source**
+- SQLite ya viene incluido en Python (no hay que instalar nada extra)
 
-#### Pasos:
-
-1. **Instala Homebrew** (si no lo tienes):
-   ```bash
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-   ```
-
-2. **Instala Python 3**:
-   ```bash
-   brew install python@3.11
-   ```
-
-3. **Verifica instalación**:
-   ```bash
-   python3 --version
-   ```
-
-4. **Crea proyecto Flask**:
-   ```bash
-   mkdir ~/beamforming_control
-   cd ~/beamforming_control
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-
-5. **Instala dependencias**:
-   ```bash
-   pip install flask flask-cors numpy
-   ```
-
-6. **Estructura de carpetas**:
-   ```
-   beamforming_control/
-   ├── app.py                 # Backend Flask
-   ├── templates/
-   │   └── index.html         # Frontend web
-   ├── static/
-   │   ├── css/
-   │   │   └── style.css
-   │   └── js/
-   │       └── beamforming.js
-   └── venv/
-   ```
-
-#### Ejecución:
+#### Verificar Python:
 ```bash
-source venv/bin/activate
-python3 app.py
-# Accede a http://localhost:5000 desde navegador
+python3 --version
+# Debería mostrar 3.8 o superior
+```
+
+> Si no tenés Python, en Mac: `brew install python@3.11`
+
+#### Ejecución (primera vez):
+```bash
+cd webserver
+./run.sh
+```
+
+El script automáticamente:
+1. Crea un entorno virtual
+2. Instala todas las dependencias
+3. Inicia el servidor
+
+#### Ejecuciones siguientes:
+```bash
+cd webserver
+./run.sh
+```
+
+#### Acceso:
+- Desde tu Mac: http://localhost:5001
+- Desde celular/tablet en la misma red: http://[IP-de-tu-Mac]:5001
+
+> **Nota:** El puerto 5000 está ocupado por AirPlay en macOS, por eso usamos 5001.
+
+#### Detener el servidor:
+Presioná `Ctrl+C` en la terminal donde está corriendo.
+
+#### Estructura de carpetas:
+```
+webserver/
+├── app.py                 # Backend Flask + WebSockets
+├── run.sh                 # Script de ejecución
+├── requirements.txt       # Dependencias
+├── ds_config.db           # Base de datos SQLite (se crea automáticamente)
+├── templates/
+│   └── index.html         # Frontend web
+└── static/
+    ├── css/
+    │   └── style.css
+    └── js/
+        └── main.js
 ```
 
 ### Parámetros de Control
@@ -186,15 +186,75 @@ def apply_radiation_compensation(gains, focal_distance, channel_distances):
     return compensated_gains
 ```
 
+### Configuración de Dispositivos ESP32
+
+#### Paso 1: Configurar IP del ESP32
+1. Seleccionar dispositivo (DS_01 - DS_08) en el dropdown
+2. Ingresar la IP del ESP32 correspondiente (ej: `192.168.1.231`)
+3. Click en **Guardar IP**
+4. Click en **Ping** para verificar conexión
+
+#### Paso 2: Enviar configuración
+1. Ajustar parámetros (gain, delays, mute)
+2. Click en **Enviar a Dispositivo**
+3. Verificar en el log que llegó correctamente
+
 ### Comunicación con ESP32
 
 Cada DS contiene un **ESP32** con firmware que:
-1. Recibe comandos HTTP/WebSocket desde el servidor Flask
-2. Parsea parámetros (delays, ganancias, mute)
-3. Envía vía UART al STM32H743 (protocolo binario o JSON)
-4. Reporta estado de vuelta al servidor
+1. Recibe comandos HTTP POST en `/command` desde el servidor Flask
+2. Parsea parámetros JSON (delays, ganancias, mute)
+3. Envía vía UART al STM32H743 (protocolo binario)
+4. Responde con status OK/ERROR al servidor
 
-Ver: [datasheets/uart_protocol.md](datasheets/uart_protocol.md)
+#### Endpoints del ESP32
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/command` | Recibe configuración JSON completa |
+| GET | `/status` | Retorna estado del dispositivo |
+| GET | `/ping` | Health check simple |
+
+#### Ejemplo de comando enviado al ESP32
+
+```json
+{
+  "command": "update_config",
+  "device_id": "DS_01",
+  "mute": 0,
+  "master_gain": 0.8,
+  "focal_distance": 3.5,
+  "channels": [
+    {"channel_num": 0, "delay_samples": 1440, "channel_gain": 1.0, "mute": 0},
+    {"channel_num": 1, "delay_samples": 1560, "channel_gain": 0.95, "mute": 0}
+  ]
+}
+```
+
+#### Respuesta esperada del ESP32
+
+```json
+{"status": "ok", "device_id": "DS_01", "message": "Config applied"}
+```
+
+Ver también: [Protocolo UART ESP32-STM32](#protocolo-uart-esp32-stm32) (próximamente)
+
+### Proyecto ESP32 (firmware separado)
+
+El firmware del ESP32 se mantiene en un **proyecto separado** para evitar conflictos con el toolchain de STM32.
+
+**Razones para mantenerlo separado:**
+- STM32CubeIDE usa ARM GCC toolchain
+- ESP32 usa Xtensa toolchain (ESP-IDF) o Arduino
+- Diferentes sistemas de build (Makefile vs CMake vs PlatformIO)
+- Evita contaminación de includes y configuraciones
+
+**Ubicación sugerida:**
+```
+~/STM32CubeIDE/
+├── DS-Firmware/          # Este proyecto (STM32 + WebServer)
+└── DS-ESP32-Firmware/    # Proyecto separado para ESP32
+```
 
 ### Roadmap de Migración
 
@@ -213,3 +273,4 @@ Ver: [datasheets/uart_protocol.md](datasheets/uart_protocol.md)
 - ✅ Todo integrado en hardware
 - ✅ Escalable a 8 sistemas sin computadora
 - ❌ RAM/CPU limitados (solo para configs simples)
+/Users/bergamifer/STM32CubeIDE/DS-Firmware/WebServer.md
