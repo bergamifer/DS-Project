@@ -473,7 +473,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 26.67 180)
+				(at 19.05 27.94 180)
 				(length 3.81)
 				(name "5V"
 					(effects
@@ -491,7 +491,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 24.13 180)
+				(at 19.05 25.4 180)
 				(length 3.81)
 				(name "PE0"
 					(effects
@@ -509,7 +509,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 21.59 180)
+				(at 19.05 22.86 180)
 				(length 3.81)
 				(name "PB8"
 					(effects
@@ -527,7 +527,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 19.05 180)
+				(at 19.05 20.32 180)
 				(length 3.81)
 				(name "PB6"
 					(effects
@@ -545,7 +545,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 16.51 180)
+				(at 19.05 17.78 180)
 				(length 3.81)
 				(name "PB4"
 					(effects
@@ -563,7 +563,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 13.97 180)
+				(at 19.05 15.24 180)
 				(length 3.81)
 				(name "PD7"
 					(effects
@@ -581,7 +581,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 11.43 180)
+				(at 19.05 12.7 180)
 				(length 3.81)
 				(name "PD5"
 					(effects
@@ -599,7 +599,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 8.89 180)
+				(at 19.05 10.16 180)
 				(length 3.81)
 				(name "PD3"
 					(effects
@@ -617,7 +617,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 6.35 180)
+				(at 19.05 7.62 180)
 				(length 3.81)
 				(name "PD1"
 					(effects
@@ -635,7 +635,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 3.81 180)
+				(at 19.05 5.08 180)
 				(length 3.81)
 				(name "PC12"
 					(effects
@@ -653,7 +653,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 1.27 180)
+				(at 19.05 2.54 180)
 				(length 3.81)
 				(name "PC10"
 					(effects
@@ -671,7 +671,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -1.27 180)
+				(at 19.05 0 180)
 				(length 3.81)
 				(name "PA12"
 					(effects
@@ -689,7 +689,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -3.81 180)
+				(at 19.05 -2.54 180)
 				(length 3.81)
 				(name "PA10"
 					(effects
@@ -707,7 +707,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -6.35 180)
+				(at 19.05 -5.08 180)
 				(length 3.81)
 				(name "PA8"
 					(effects
@@ -725,7 +725,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -8.89 180)
+				(at 19.05 -7.62 180)
 				(length 3.81)
 				(name "PC8"
 					(effects
@@ -743,7 +743,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -11.43 180)
+				(at 19.05 -10.16 180)
 				(length 3.81)
 				(name "PC6"
 					(effects
@@ -761,7 +761,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -13.97 180)
+				(at 19.05 -12.7 180)
 				(length 3.81)
 				(name "PD14"
 					(effects
@@ -779,7 +779,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -16.51 180)
+				(at 19.05 -15.24 180)
 				(length 3.81)
 				(name "PD12"
 					(effects
@@ -797,7 +797,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -19.05 180)
+				(at 19.05 -17.78 180)
 				(length 3.81)
 				(name "PD10"
 					(effects
@@ -815,7 +815,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -21.59 180)
+				(at 19.05 -20.32 180)
 				(length 3.81)
 				(name "PD8"
 					(effects
@@ -833,7 +833,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -24.13 180)
+				(at 19.05 -22.86 180)
 				(length 3.81)
 				(name "PB14"
 					(effects
@@ -851,7 +851,7 @@
 				)
 			)
 			(pin input line
-				(at 19.05 -26.67 180)
+				(at 19.05 -25.4 180)
 				(length 3.81)
 				(name "PB12"
 					(effects
@@ -872,7 +872,7 @@
 		(symbol "WeAct_MINISTM32_1_1"
 			(rectangle
 				(start -16.51 30.48)
-				(end 15.24 -27.94)
+				(end 15.24 -26.67)
 				(stroke
 					(width 0)
 					(type default)
@@ -1642,7 +1642,7 @@
 			(pin input line
 				(at 19.05 -22.86 180)
 				(length 3.81)
-				(name "3V3"
+				(name "5V"
 					(effects
 						(font
 							(size 1.27 1.27)

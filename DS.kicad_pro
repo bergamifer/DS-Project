@@ -37,9 +37,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 0.8,
-          "height": 1.27,
-          "width": 2.54
+          "drill": 3.0,
+          "height": 2.4,
+          "width": 4.0
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
@@ -58,7 +58,16 @@
           "width": 0.0
         }
       ],
-      "drc_exclusions": [],
+      "drc_exclusions": [
+        [
+          "starved_thermal|139381000|66324000|2130b696-8f6f-42a4-b7e3-a6b7807f045f|9567dda3-9a74-4488-8fee-6011cbb8e5e4|F.Cu",
+          ""
+        ],
+        [
+          "starved_thermal|169002000|62990000|2130b696-8f6f-42a4-b7e3-a6b7807f045f|b86675d9-0650-4957-8398-2dcd72c164a1|F.Cu",
+          ""
+        ]
+      ],
       "meta": {
         "version": 2
       },
@@ -189,6 +198,7 @@
       "track_widths": [
         0.0,
         0.2,
+        0.3,
         0.5
       ],
       "tuning_pattern_settings": {
@@ -579,12 +589,6 @@
         },
         {
           "group_by": false,
-          "label": "Datasheet",
-          "name": "Datasheet",
-          "show": true
-        },
-        {
-          "group_by": false,
           "label": "Description",
           "name": "Description",
           "show": false
@@ -605,7 +609,7 @@
           "group_by": true,
           "label": "DNP",
           "name": "${DNP}",
-          "show": true
+          "show": false
         },
         {
           "group_by": false,
@@ -630,14 +634,26 @@
           "label": "Price",
           "name": "Price",
           "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Datasheet",
+          "name": "Datasheet",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Version",
+          "name": "Version",
+          "show": false
         }
       ],
       "filter_string": "",
       "group_symbols": true,
       "include_excluded_from_bom": false,
       "name": "",
-      "sort_asc": false,
-      "sort_field": "Mouser part"
+      "sort_asc": true,
+      "sort_field": "Price"
     },
     "connection_grid_size": 50.0,
     "drawing": {
@@ -701,12 +717,12 @@
       "DAC1"
     ],
     [
-      "7f2e6986-d654-4f96-9410-08c641303e18",
-      "DAC2"
-    ],
-    [
       "51deadb4-9fb8-471c-a902-4285ed5e398b",
       "esp32-mini"
+    ],
+    [
+      "c6269117-8f35-49d7-aa3e-d028e7d8d958",
+      "DS_Power"
     ],
     [
       "a584f5df-ae11-4440-bcfa-22158cd51ef9",
