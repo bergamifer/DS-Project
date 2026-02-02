@@ -37,9 +37,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 3.0,
-          "height": 2.4,
-          "width": 4.0
+          "drill": 2.6,
+          "height": 2.6,
+          "width": 3.6
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
@@ -60,11 +60,15 @@
       ],
       "drc_exclusions": [
         [
-          "starved_thermal|139381000|66324000|2130b696-8f6f-42a4-b7e3-a6b7807f045f|9567dda3-9a74-4488-8fee-6011cbb8e5e4|F.Cu",
+          "clearance|106435000|73893000|d7243462-71a9-4e65-bb21-844513885858|ca341689-628e-4877-bcde-173dbb58a25f",
           ""
         ],
         [
-          "starved_thermal|169002000|62990000|2130b696-8f6f-42a4-b7e3-a6b7807f045f|b86675d9-0650-4957-8398-2dcd72c164a1|F.Cu",
+          "clearance|106435000|76560000|3a3da599-b844-4690-a008-4139021a406c|cf5527d3-605b-45d1-823d-05a491ce8660",
+          ""
+        ],
+        [
+          "starved_thermal|126317000|49729500|2130b696-8f6f-42a4-b7e3-a6b7807f045f|6c621ee3-b5ba-4f28-8dc0-d3b1e9a5d01d|F.Cu",
           ""
         ]
       ],
@@ -543,8 +547,8 @@
       "gencad": "",
       "idf": "",
       "netlist": "",
-      "plot": "gerber/",
-      "pos_files": "",
+      "plot": "Fabrication/gerber/",
+      "pos_files": "Fabrication/position/",
       "specctra_dsn": "",
       "step": "",
       "svg": "",
@@ -554,7 +558,7 @@
   },
   "schematic": {
     "annotate_start_num": 0,
-    "bom_export_filename": "${PROJECTNAME}.csv",
+    "bom_export_filename": "${PROJECTNAME}-bom.csv",
     "bom_fmt_presets": [],
     "bom_fmt_settings": {
       "field_delimiter": ",",
@@ -567,7 +571,7 @@
     },
     "bom_presets": [],
     "bom_settings": {
-      "exclude_dnp": false,
+      "exclude_dnp": true,
       "fields_ordered": [
         {
           "group_by": false,
@@ -583,8 +587,20 @@
         },
         {
           "group_by": false,
+          "label": "LCSC",
+          "name": "LCSC",
+          "show": true
+        },
+        {
+          "group_by": false,
           "label": "Footprint",
           "name": "Footprint",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Qty",
+          "name": "${QUANTITY}",
           "show": true
         },
         {
@@ -592,12 +608,6 @@
           "label": "Description",
           "name": "Description",
           "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Qty",
-          "name": "${QUANTITY}",
-          "show": true
         },
         {
           "group_by": false,
@@ -609,7 +619,7 @@
           "group_by": true,
           "label": "DNP",
           "name": "${DNP}",
-          "show": false
+          "show": true
         },
         {
           "group_by": false,
@@ -627,7 +637,7 @@
           "group_by": false,
           "label": "Mouser part",
           "name": "Mouser part",
-          "show": true
+          "show": false
         },
         {
           "group_by": false,
@@ -646,6 +656,30 @@
           "label": "Version",
           "name": "Version",
           "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Mouser Part Number",
+          "name": "Mouser Part Number",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Manufacturer_Part_Number",
+          "name": "Manufacturer_Part_Number",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Mouser Price/Stock",
+          "name": "Mouser Price/Stock",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Height",
+          "name": "Height",
+          "show": false
         }
       ],
       "filter_string": "",
@@ -653,7 +687,7 @@
       "include_excluded_from_bom": false,
       "name": "",
       "sort_asc": true,
-      "sort_field": "Price"
+      "sort_field": "Reference"
     },
     "connection_grid_size": 50.0,
     "drawing": {
@@ -705,8 +739,8 @@
       "ADC"
     ],
     [
-      "b7693d91-ba48-4049-9709-9e88d03d696b",
-      "WeAct miniSTM32"
+      "51ea6481-0eee-45d4-9de8-34af618ab641",
+      "DAC2"
     ],
     [
       "7f93613a-81ac-4b21-b4ec-bfcfa7fb6a2a",
@@ -717,8 +751,16 @@
       "DAC1"
     ],
     [
+      "be371a88-efb0-4d81-a145-de12e98fac57",
+      "stm32_custom"
+    ],
+    [
       "51deadb4-9fb8-471c-a902-4285ed5e398b",
       "esp32-mini"
+    ],
+    [
+      "dd1611f7-e72c-48f4-8076-9494b5857835",
+      "DAC3"
     ],
     [
       "c6269117-8f35-49d7-aa3e-d028e7d8d958",
