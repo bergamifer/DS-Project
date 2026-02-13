@@ -1,0 +1,32 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "ca862893-b1f2-4144-9954-46c6baa99fbd")
+	(paper "A4")
+	(title_block
+		(title "DS_Amp - Power Supply")
+		(date "2026-02-05")
+		(rev "1.0")
+		(comment 1 "Entrada: 5V / 10A externa")
+		(comment 2 "Bulk caps + proteccion")
+	)
+	(lib_symbols)
+	(text "POWER SUPPLY\n\nEntrada: 5V DC desde PSU externa\nConsumo max: ~8A (32ch x 1W @ 85% eff)\n\nComponentes:\n- J_PWR: Terminal block 2-pin (5.08mm)\n- C_bulk: 1x 1000uF / 10V electrolitic\n- C_bypass: 4x 10uF ceramic\n- C_hf: 4x 0.1uF ceramic\n- D_prot: 1x Schottky (proteccion reversa)\n\nPistas de power: min 2mm (netclass Power)"
+		(exclude_from_sim no)
+		(at 25.908 39.37 0)
+		(effects
+			(font
+				(size 1.524 1.524)
+			)
+			(justify left)
+		)
+		(uuid "5e24d848-33b0-4918-8cb5-1486082a4eff")
+	)
+	(sheet_instances
+		(path "/"
+			(page "#")
+		)
+	)
+	(embedded_fonts no)
+)

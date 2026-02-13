@@ -12357,6 +12357,170 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Device:C_Polarized_Small_US"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0.254)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "C"
+				(at 0.254 1.778 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "C_Polarized_Small_US"
+				(at 0.254 -2.032 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Polarized capacitor, small US symbol"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "cap capacitor"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "CP_*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "C_Polarized_Small_US_0_1"
+				(polyline
+					(pts
+						(xy -1.524 0.508) (xy 1.524 0.508)
+					)
+					(stroke
+						(width 0.3048)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.27 1.524) (xy -0.762 1.524)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.016 1.27) (xy -1.016 1.778)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(arc
+					(start -1.524 -0.762)
+					(mid 0 -0.3734)
+					(end 1.524 -0.762)
+					(stroke
+						(width 0.3048)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "C_Polarized_Small_US_1_1"
+				(pin passive line
+					(at 0 2.54 270)
+					(length 2.032)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -2.54 90)
+					(length 2.032)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "Device:C_Small"
 			(pin_numbers
 				(hide yes)
@@ -13114,12 +13278,6 @@
 		(uuid "03094041-f2aa-41cb-8df9-d101971032df")
 	)
 	(junction
-		(at 124.46 110.49)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "1319d2d4-57fc-406a-a831-d057eefb4fcb")
-	)
-	(junction
 		(at 199.39 123.19)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -13150,6 +13308,12 @@
 		(uuid "c25338fd-3f22-47bc-81eb-0b39359d1b83")
 	)
 	(junction
+		(at 124.46 115.57)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "d0b85786-2962-4a9a-bc89-932fe1f77e83")
+	)
+	(junction
 		(at 132.08 115.57)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -13162,10 +13326,10 @@
 		(uuid "e0ea9616-36a9-4414-8f57-a4dc33b2758d")
 	)
 	(junction
-		(at 124.46 115.57)
+		(at 124.46 110.49)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "ff78d45d-e823-49ec-b5f8-cfc35d98b0a2")
+		(uuid "e3e398d0-e3c4-4a66-ba37-081f21aa2b20")
 	)
 	(wire
 		(pts
@@ -13289,16 +13453,6 @@
 	)
 	(wire
 		(pts
-			(xy 124.46 110.49) (xy 132.08 110.49)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "921f5cb9-385f-4aff-93fe-ed0169d4b479")
-	)
-	(wire
-		(pts
 			(xy 92.71 105.41) (xy 92.71 107.95)
 		)
 		(stroke
@@ -13376,6 +13530,16 @@
 			(type default)
 		)
 		(uuid "c9edbeb6-61d8-4feb-9fd3-cd1bfddd2318")
+	)
+	(wire
+		(pts
+			(xy 124.46 110.49) (xy 132.08 110.49)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d082122d-e4ed-45b6-9fc2-8b3dee07f25f")
 	)
 	(wire
 		(pts
@@ -23981,7 +24145,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
+		(property "Footprint" "Connector_JST:JST_XH_S4B-XH-A-1_1x04_P2.50mm_Horizontal"
 			(at 95.25 96.52 0)
 			(effects
 				(font
@@ -23990,7 +24154,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8590903795620519936"
 			(at 95.25 96.52 0)
 			(effects
 				(font
@@ -24008,7 +24172,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.0238"
+		(property "Price" "0.0896"
 			(at 95.25 96.52 0)
 			(effects
 				(font
@@ -24026,7 +24190,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "B4B-XH-A"
+		(property "Manufacturer_Part_Number" "S4B-XH-A-R(LF)(SN)"
 			(at 95.25 96.52 0)
 			(effects
 				(font
@@ -24035,7 +24199,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C594232"
+		(property "LCSC" "C5361047"
 			(at 95.25 96.52 0)
 			(effects
 				(font
@@ -24075,7 +24239,7 @@
 		(dnp no)
 		(uuid "7b659e58-f43d-4e97-8243-d4ea79023b1a")
 		(property "Reference" "C8"
-			(at 196.596 116.586 90)
+			(at 204.216 116.586 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24084,7 +24248,7 @@
 			)
 		)
 		(property "Value" "0.1u"
-			(at 194.564 116.586 90)
+			(at 202.184 116.586 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24197,7 +24361,7 @@
 			)
 		)
 		(property "Value" "0.1u"
-			(at 127.254 110.998 90)
+			(at 119.38 112.776 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24405,6 +24569,120 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:C_Polarized_Small_US")
+		(at 191.77 118.11 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "bcac25f5-0055-4e87-9b41-0dcd97df2566")
+		(property "Reference" "C7"
+			(at 186.69 119.38 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "10u TANT"
+			(at 188.722 121.666 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "DS_local_library:CAPPM3216X180N"
+			(at 191.77 118.11 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://www.vishay.com/docs/40178/tmcm.pdf"
+			(at 191.77 118.11 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Polarized capacitor, small US symbol"
+			(at 191.77 118.11 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" ""
+			(at 191.516 102.87 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.1220"
+			(at 191.77 118.11 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 191.77 118.11 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TMCMA1C106MTRF"
+			(at 191.77 118.11 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C1958016"
+			(at 191.77 118.11 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "5957cfb5-8372-4c27-84e6-91f33fd90937")
+		)
+		(pin "2"
+			(uuid "107c62b9-bf24-4d9c-806c-f7d5bad53b8b")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/129b3238-cb56-46ef-8d84-9e0026f2ffd4"
+					(reference "C7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:+5VA")
 		(at 113.03 113.03 0)
 		(unit 1)
@@ -24603,8 +24881,8 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:C_Small")
-		(at 124.46 113.03 180)
+		(lib_id "Device:C_Polarized_Small_US")
+		(at 124.46 113.03 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -24612,7 +24890,7 @@
 		(dnp no)
 		(uuid "f5373b2d-7918-483b-9374-ada922136e47")
 		(property "Reference" "C4"
-			(at 121.666 111.252 90)
+			(at 127.254 114.808 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24621,7 +24899,7 @@
 			)
 		)
 		(property "Value" "10u TANT"
-			(at 119.634 111.252 90)
+			(at 121.412 116.586 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24629,7 +24907,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_1206_3216Metric"
+		(property "Footprint" "DS_local_library:CAPPM3216X180N"
 			(at 124.46 113.03 0)
 			(effects
 				(font
@@ -24638,7 +24916,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://www.vishay.com/docs/40178/tmcm.pdf"
 			(at 124.46 113.03 0)
 			(effects
 				(font
@@ -24647,16 +24925,8 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "CAP TANT 10UF 20% 10V 1206"
-			(at 124.206 127 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Mouser part" "187-CL10A106MA8NRWC "
-			(at 124.714 128.27 90)
+		(property "Description" "Polarized capacitor, small US symbol"
+			(at 124.46 113.03 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24664,7 +24934,16 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.077"
+		(property "Mouser part" ""
+			(at 124.206 97.79 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.1220"
 			(at 124.46 113.03 90)
 			(effects
 				(font
@@ -24682,7 +24961,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TMCHA1A106MTRF"
+		(property "Manufacturer_Part_Number" "TMCMA1C106MTRF"
 			(at 124.46 113.03 90)
 			(effects
 				(font
@@ -24691,7 +24970,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1952791"
+		(property "LCSC" "C1958016"
 			(at 124.46 113.03 90)
 			(effects
 				(font
@@ -24710,119 +24989,6 @@
 			(project "DS7"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/129b3238-cb56-46ef-8d84-9e0026f2ffd4"
 					(reference "C4")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:C_Small")
-		(at 191.77 118.11 180)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "f58d94f4-94e8-4e2f-ae1d-1e87e3edcb6a")
-		(property "Reference" "C7"
-			(at 188.976 116.586 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "10u TANT"
-			(at 186.944 116.586 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Capacitor_SMD:C_1206_3216Metric"
-			(at 191.77 118.11 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 191.77 118.11 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "CAP TANT 10UF 20% 10V 1206"
-			(at 191.77 131.318 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Mouser part" "187-CL10A106MA8NRWC "
-			(at 192.024 92.202 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Price" "0.077"
-			(at 191.77 118.11 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Version" ""
-			(at 191.77 118.11 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Manufacturer_Part_Number" "TMCHA1A106MTRF"
-			(at 191.77 118.11 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C1952791"
-			(at 191.77 118.11 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "a8574a33-b92e-4912-b1c9-2446a909b08b")
-		)
-		(pin "2"
-			(uuid "5ad61984-92b9-4370-a74f-14e95186bedb")
-		)
-		(instances
-			(project "DS7"
-				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/129b3238-cb56-46ef-8d84-9e0026f2ffd4"
-					(reference "C7")
 					(unit 1)
 				)
 			)

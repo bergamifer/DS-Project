@@ -118,7 +118,7 @@
         "silk_overlap": "warning",
         "skew_out_of_range": "error",
         "solder_mask_bridge": "error",
-        "starved_thermal": "error",
+        "starved_thermal": "warning",
         "text_height": "warning",
         "text_on_edge_cuts": "error",
         "text_thickness": "warning",
@@ -459,7 +459,7 @@
       "no_connect_dangling": "warning",
       "pin_not_connected": "error",
       "pin_not_driven": "error",
-      "pin_to_pin": "warning",
+      "pin_to_pin": "error",
       "power_pin_not_driven": "error",
       "same_local_global_label": "warning",
       "similar_label_and_power": "warning",
@@ -539,6 +539,42 @@
       {
         "netclass": "HV",
         "pattern": "/DAC/VOUT3-"
+      },
+      {
+        "netclass": "HV",
+        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP*"
+      },
+      {
+        "netclass": "Default",
+        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP1"
+      },
+      {
+        "netclass": "Default",
+        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP2"
+      },
+      {
+        "netclass": "Default",
+        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP3"
+      },
+      {
+        "netclass": "Default",
+        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP4"
+      },
+      {
+        "netclass": "Default",
+        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP64"
+      },
+      {
+        "netclass": "Default",
+        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP63"
+      },
+      {
+        "netclass": "Default",
+        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP61"
+      },
+      {
+        "netclass": "Default",
+        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP62"
       }
     ]
   },
@@ -607,7 +643,7 @@
           "group_by": false,
           "label": "Description",
           "name": "Description",
-          "show": false
+          "show": true
         },
         {
           "group_by": false,
@@ -718,7 +754,7 @@
     },
     "net_format_name": "KiCad",
     "page_layout_descr_file": "",
-    "plot_directory": "",
+    "plot_directory": "plot/",
     "space_save_all_events": true,
     "spice_current_sheet_as_root": false,
     "spice_external_command": "spice \"%I\"",
@@ -751,24 +787,88 @@
       "DAC1"
     ],
     [
-      "be371a88-efb0-4d81-a145-de12e98fac57",
-      "stm32_custom"
+      "dd1611f7-e72c-48f4-8076-9494b5857835",
+      "DAC3"
     ],
     [
       "51deadb4-9fb8-471c-a902-4285ed5e398b",
       "esp32-mini"
     ],
     [
-      "dd1611f7-e72c-48f4-8076-9494b5857835",
-      "DAC3"
+      "be371a88-efb0-4d81-a145-de12e98fac57",
+      "stm32_custom"
     ],
     [
       "c6269117-8f35-49d7-aa3e-d028e7d8d958",
       "DS_Power"
     ],
     [
-      "a584f5df-ae11-4440-bcfa-22158cd51ef9",
-      "connectors_ampli"
+      "75ac028a-e1d4-447c-89fd-2224da49f1f3",
+      "ALL_AMPS"
+    ],
+    [
+      "f424c636-f5a6-449b-bf45-f5c9d75cfde5",
+      "Amp_Bank_A1"
+    ],
+    [
+      "cb2c404b-cd14-4a9b-b219-d260ee336c01",
+      "Amp_Bank_A2"
+    ],
+    [
+      "730cd834-eccd-45d8-89ec-c34e9c180675",
+      "Amp_Bank_A3"
+    ],
+    [
+      "7cc95407-6d28-4956-8add-6797e7018242",
+      "Amp_Bank_A4"
+    ],
+    [
+      "d34e4b53-f91f-40c8-97a0-01a247e49716",
+      "Amp_Bank_A5"
+    ],
+    [
+      "a5935750-5f02-4fd9-a584-54f461348a72",
+      "Amp_Bank_A6"
+    ],
+    [
+      "c183f130-4c58-4bab-ba07-bceadf2fecca",
+      "Amp_Bank_A7"
+    ],
+    [
+      "8b422221-c5aa-4f8b-9b48-fd5742db3d46",
+      "Amp_Bank_A8"
+    ],
+    [
+      "67a660be-ab7a-4103-9ee5-14a9df089f5d",
+      "Amp_Bank_A9"
+    ],
+    [
+      "c4c7ece7-29a4-4aff-aa76-dd856c5046a5",
+      "Amp_Bank_A10"
+    ],
+    [
+      "dacc2298-b218-4152-8767-0adc7b8f65c0",
+      "Amp_Bank_A11"
+    ],
+    [
+      "68953218-066b-4312-982f-4447c0d453ac",
+      "Amp_Bank_A12"
+    ],
+    [
+      "c6f69862-5787-4e81-8a28-86f0a39d73e3",
+      "Amp_Bank_A13"
+    ],
+    [
+      "e273877f-fb0e-4e37-a97b-4573ce1804c1",
+      "Amp_Bank_A14"
+    ],
+    [
+      "16ecdc9f-2955-41c5-9136-75600ff03441",
+      "Amp_Bank_A15"
+    ],
+    [
+      "2b0daeb3-3c79-482b-9f9c-7b6a2b9774e3",
+      "Amp_Bank_A"
     ]
   ],
   "text_variables": {}
