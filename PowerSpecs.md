@@ -1,5 +1,163 @@
 # Sistema de Alimentación - Beamforming Array (Revisado)
 
+> Este documento cubre la alimentación de ambas placas: **DS9** (DACs/MCU) y **DS_Amp** (hat amplificador 32ch).
+
+---
+---
+
+# PARTE 1: DS_Amp (Hat Amplificador 32ch)
+
+## Arquitectura de Power
+
+```
+PSU Externa 5V/10A
+  │
+  ├─[Terminal Block 5.08mm]─→ Protección ─→ 5VA ──────────────────→ 32× PAM8302A
+  │                                          │
+  │                                          └─[Ferrite Bead]─→ 5VD ─[AMS1117-3.3]─→ 3.3V
+  │
+  GND (plano continuo, NO split)
+```
+
+**Dirección del filtrado: PSU → 5VA → filtro → 5VD**
+- La PSU conecta directo al rail de mayor corriente (amplificadores)
+- Se filtra hacia el digital (menor corriente) con ferrite bead
+- Los amps generan ruido pero no les molesta su propio ruido
+
+## Consumo DS_Amp
+
+### 32× PAM8302A (Class-D mono, 5V)
+- Corriente por IC @ 1W/8Ω: ~250mA
+- Corriente pico por IC: ~400mA
+- **Total 32 ICs**: ~8A promedio, ~10A pico
+- Eficiencia Class-D: ~88%
+
+### Lógica digital (3.3V, si aplica)
+- Shift registers / GPIO expander: ~10-50mA
+- LEDs indicadores: ~20mA
+- **Total 3.3V**: ~50-100mA
+
+### Resumen de consumo
+| Rail | Corriente típica | Corriente pico | Potencia |
+|------|-------------------|----------------|----------|
+| 5VA | ~8A | ~10A | ~40-50W |
+| 5VD | ~100mA | ~200mA | ~0.5-1W |
+| 3.3V | ~50mA | ~100mA | ~0.17-0.33W |
+
+## Esquema de Power DS_Amp
+
+```
+J_PWR (5.08mm) ──┬──[SS54 Schottky]──┬── 5VA ─────────────────→ PAM8302A × 32
+                  │                   │
+                  │               [1000µF] × 2 (bulk electrolítico)
+                  │               [10µF] cerámico (distribuidos)
+                  │                   │
+                  │                  GND
+                  │
+                  │   5VA ──[FB 600Ω@100MHz]──┬── 5VD
+                  │                           │
+                  │                        [10µF]
+                  │                        [0.1µF]
+                  │                           │
+                  │                          GND
+                  │
+                  │   5VD ──[AMS1117-3.3]──┬── 3.3V
+                  │          │             │
+                  │       [10µF]        [10µF]
+                  │       input         output
+                  │          │             │
+                  │         GND           GND
+                  │
+                 GND ─────────────────────────── Plano continuo
+```
+
+## BOM Sección Power DS_Amp
+
+### Entrada y protección
+| Componente | Valor | Qty | LCSC | Función |
+|------------|-------|-----|------|---------|
+| Terminal block | 5.08mm 2-pin | 1 | C8269 | Entrada PSU 5V |
+| Schottky | SS54 (5A/40V) | 1 | C22452 | Protección inversión de polaridad |
+
+### Regulación
+| Componente | Valor | Qty | LCSC | Función |
+|------------|-------|-----|------|---------|
+| Ferrite bead | 600Ω@100MHz 500mA | 1 | C1015 | Aislamiento 5VA → 5VD |
+| AMS1117-3.3 | SOT-223 | 1 | C6186 | LDO 5V → 3.3V |
+
+### Capacitores
+| Componente | Valor | Qty | LCSC | Función |
+|------------|-------|-----|------|---------|
+| Electrolítico | 1000µF/10V | 2 | - | Bulk bypass entrada |
+| Cerámico 0805 | 10µF/10V | 3+ | C15850 | Bypass 5VD + LDO in/out |
+| Cerámico 0402 | 0.1µF/50V | 1 | C14663 | HF bypass 5VD |
+
+### Bypass distribuido para PAM8302A
+| Componente | Valor | Qty | LCSC | Función |
+|------------|-------|-----|------|---------|
+| Cerámico 0402 | 1µF | 32 | C52923 | Bypass HF por IC (obligatorio) |
+| Cerámico 0805 | 10µF | 16 | C15850 | Bypass MF compartido (1 cada 2 ICs) |
+| Cerámico 0402 | 0.1µF | 64 | C14663 | Coupling entrada IN+/IN- |
+
+## Ground: Plano Continuo (NO split)
+
+```
+CORRECTO:                        INCORRECTO:
+
+  Un solo plano GND                GNDA ──┤gap├── GNDD
+  continuo en bottom layer         (split ground)
+
+  La separación se hace            Fuerza corrientes de retorno
+  SOLO en el rail positivo         por caminos largos → más ruido
+  (5VA vs 5VD), nunca en GND
+```
+
+Con Class-D, las corrientes de retorno necesitan un camino de baja impedancia.
+Un ground dividido fuerza las corrientes por el gap y genera más ruido, no menos.
+
+## Thermal Management DS_Amp
+
+### AMS1117-3.3
+- Disipación: (5V - 3.3V) × 0.1A = **0.17W** (insignificante)
+- No requiere consideraciones especiales
+
+### PAM8302A
+- Disipación por IC: ~12% de potencia = ~0.12W por IC
+- Total 32 ICs: ~3.8W distribuidos en toda la PCB
+- No requiere disipadores: el cobre de la PCB es suficiente
+
+### PSU externa
+- La fuente switching de 5V/10A maneja toda la disipación principal
+- No hay LDO de alta potencia en la placa (a diferencia de DS9)
+
+## PSU Recomendada para DS_Amp
+
+| Cantidad de hats | Corriente 5V | PSU recomendada |
+|------------------|--------------|-----------------|
+| 1 | 10A | Mean Well RS-50-5 (10A/50W) |
+| 2 | 20A | 2× PSU individuales |
+
+**IMPORTANTE**: Cada hat DS_Amp tiene su propia PSU de 5V. NO compartir PSU entre hats.
+
+## Checklist PCB Layout DS_Amp Power
+
+- [ ] Terminal block J_PWR cerca del borde de la PCB
+- [ ] Schottky SS54 inmediatamente después de J_PWR
+- [ ] Bulk caps (1000µF) al lado de J_PWR
+- [ ] Copper pour de 5VA en top layer (pistas de mínimo 2mm para distribución)
+- [ ] Ground pour continuo en bottom layer (SIN cortes)
+- [ ] Ferrite bead entre 5VA y 5VD cerca de la zona digital
+- [ ] AMS1117-3.3 cerca de los componentes digitales (si los hay)
+- [ ] 1µF bypass pegado a cada PAM8302A (<3mm de VDD pin)
+- [ ] 10µF compartido centrado entre cada par de PAM8302A
+- [ ] Vías de bypass caps al plano GND al lado del pad (no lejos)
+- [ ] Test points: 5VA, 5VD, 3.3V, GND
+
+---
+---
+
+# PARTE 2: DS9 (DACs + MCU)
+
 ## Estrategia de Alimentación
 
 **Premisa**: El STM32 WeAct usa su LDO interno (SY8088AAC 1A) - NO robarle corriente para periféricos externos.
