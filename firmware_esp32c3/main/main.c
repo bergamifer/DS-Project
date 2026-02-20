@@ -5,8 +5,11 @@
  *   [STM32] debug output del STM32H743 (forwardeado desde UART1 RX)
  *
  * Hardware DS9:
- *   UART1 TX → GPIO 1 → PA1 → STM32 UART4 RX   tramas binarias
- *   UART1 RX ← GPIO 0 ← PA0 ← STM32 UART4 TX   texto debug ASCII
+ *   UART1 TX → GPIO 0 → PA1 → STM32 UART4 RX   tramas binarias
+ *   UART1 RX ← GPIO 1 ← PA0 ← STM32 UART4 TX   texto debug ASCII
+ *
+ *   NOTA DS9 PCB: las trazas GPIO0/GPIO1 van a PA1/PA0 respectivamente
+ *   (cruzadas respecto al numero de pin). GPIO0→PA1 y GPIO1→PA0.
  *
  * USB Serial/JTAG (GPIO 18/19) → PC: terminal de monitoreo
  */
@@ -35,10 +38,10 @@
 #define WIFI_PASS        "12943801"
 #define DEVICE_ID        "DS_01"
 
-// UART0: link con STM32 (UART1 no recibe en GPIO0, probar UART0 — consola va por USB)
+// UART0: link con STM32. DS9 PCB: GPIO0→PA1(STM32 RX), GPIO1→PA0(STM32 TX)
 #define STM32_UART_NUM   UART_NUM_0
-#define STM32_UART_TX    GPIO_NUM_1   // ESP32 TX → GPIO1 → PA1 → STM32 UART4 RX
-#define STM32_UART_RX    GPIO_NUM_0   // ESP32 RX ← GPIO0 ← PA0 ← STM32 UART4 TX
+#define STM32_UART_TX    GPIO_NUM_0   // ESP32 TX → GPIO0 → PA1 → STM32 UART4 RX
+#define STM32_UART_RX    GPIO_NUM_1   // ESP32 RX ← GPIO1 ← PA0 ← STM32 UART4 TX
 #define STM32_UART_BAUD  115200
 #define UART_BUF_SIZE    512
 
@@ -181,7 +184,7 @@ static void stm32_monitor_task(void *arg)
            transitions, samples, (highs * 100) / samples);
     if (transitions == 0) {
         printf("[ESP32] GPIO TEST: 0 transiciones = NO HAY DATOS en GPIO%d!\n", STM32_UART_RX);
-        printf("[ESP32] GPIO TEST: Verificar cableado PA0 <-> GPIO0\n");
+        printf("[ESP32] GPIO TEST: Verificar cableado PA0 <-> GPIO1 (STM32 TX)\n");
     } else {
         printf("[ESP32] GPIO TEST: %lu transiciones = HAY DATOS! Problema es del UART driver\n", transitions);
     }
@@ -540,8 +543,8 @@ void app_main(void)
     printf("[ESP32] ============================================\n");
     printf("[ESP32]  ESP32-C3-MINI-1 — DS9 Beamforming Bridge  \n");
     printf("[ESP32] ============================================\n");
-    printf("[ESP32] UART1 TX=GPIO%d → STM32 PA1 | RX=GPIO%d ← STM32 PA0\n",
-           STM32_UART_TX, STM32_UART_RX);
+    printf("[ESP32] UART1 RX=GPIO%d ← STM32 PA1 | TX=GPIO%d → STM32 PA0\n",
+           STM32_UART_RX, STM32_UART_TX);
     printf("[ESP32] [STM32] = output del STM32H743 forwardeado aqui\n");
     printf("[ESP32] ============================================\n\n");
 
@@ -565,8 +568,8 @@ void app_main(void)
         vTaskDelay(10 / portTICK_PERIOD_MS);
         int g0 = gpio_get_level(GPIO_NUM_0);
         int g1 = gpio_get_level(GPIO_NUM_1);
-        printf("[ESP32] DIAG: GPIO0 (RX<-STM32 TX PA0) = %d, GPIO1 (TX->STM32 RX PA1) = %d\n", g0, g1);
-        printf("[ESP32] DIAG: Esperado: GPIO0=1 (UART idle HIGH) si STM32 conectado\n");
+        printf("[ESP32] DIAG: GPIO0 (TX->STM32 RX PA1) = %d, GPIO1 (RX<-STM32 TX PA0) = %d\n", g0, g1);
+        printf("[ESP32] DIAG: Esperado: GPIO1=1 (UART idle HIGH) si STM32 conectado\n");
     }
 
     // UART1 → STM32
