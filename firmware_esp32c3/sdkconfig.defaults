@@ -1,0 +1,11 @@
+# sdkconfig.defaults — ESP32-C3-MINI-1 DS9 Beamforming Bridge
+# Run once: idf.py set-target esp32c3 && idf.py menuconfig (optional)
+
+# Stack size HTTP server (JSON parsing necesita espacio)
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+
+# UART monitor via USB Serial/JTAG (printf → USB CDC en C3)
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# WiFi
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n

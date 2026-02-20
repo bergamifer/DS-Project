@@ -75,3 +75,28 @@ dkms.conf
 # Executables
 
 # End of https://www.toptal.com/developers/gitignore/api/c,c++
+
+### STM32 / WeAct build artifacts ###
+firmware/build/
+*.bin
+*.d356
+*.lck
+
+### ESP32-IDF build ###
+firmware_esp32c3/build/
+firmware_esp32c3/managed_components/
+firmware_esp32c3/sdkconfig
+firmware_esp32c3/.venv/
+
+### macOS ###
+.DS_Store
+**/.DS_Store
+
+### Docs external content ###
+docs/WeActStudio.EpaperModule/
+docs/libros/
+
+### Python venv ###
+webserver/venv/
+__pycache__/
+*.pyc

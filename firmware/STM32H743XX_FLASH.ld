@@ -196,7 +196,14 @@ SECTIONS
     . = ALIGN(8);
   } >DTCMRAM
 
-
+  /* DMA buffers section - must be in D2 SRAM for DMA1/DMA2 access */
+  .dma_buffer (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.dma_buffer)
+    *(.dma_buffer*)
+    . = ALIGN(4);
+  } >RAM_D2
 
   /* Remove information from the standard libraries */
   /DISCARD/ :

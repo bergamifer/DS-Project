@@ -485,7 +485,12 @@ void PCM1802_SetHPFBypass(PCM1802_Handle *handle, uint8_t bypass)
 
 ## 13. Verificación de Hardware - DS Beamforming PCB
 
-### 13.1 Estado de Verificación: ✅ APROBADO
+### 13.1 Estado de Verificación: OBSOLETO (DS9 — tiene errores de pines SAI)
+
+> **ADVERTENCIA (2026-02-12):** Esta seccion fue verificada contra DS9 netlist, pero DS9
+> tiene errores en el mapeo SAI4_B: PC0/PC1 no tienen funcion SAI4_B SCK/FS en LQFP100.
+> En DS10, el ADC usa **SAI3_B** (PD8=SCK, PD9=SD, PD10=FS, AF6).
+> Ver `ds9_pin_audit.md` para detalles completos.
 
 Verificado contra netlist `DS.net` - Enero 2026
 
