@@ -92,16 +92,61 @@ void NMI_Handler(void)
 
 /**
   * @brief This function handles Hard fault interrupt.
+  * Uses naked + assembly to capture the correct stack frame,
+  * then dumps fault registers via direct UART4 polling (no HAL).
   */
-void HardFault_Handler(void)
+__attribute__((naked)) void HardFault_Handler(void)
 {
-  /* USER CODE BEGIN HardFault_IRQn 0 */
+  __asm volatile(
+    "tst lr, #4       \n"  /* Check EXC_RETURN bit 2 */
+    "ite eq            \n"
+    "mrseq r0, msp     \n"  /* Was using MSP */
+    "mrsne r0, psp     \n"  /* Was using PSP */
+    "b HardFault_Dump  \n"
+  );
+}
 
-  /* USER CODE END HardFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
-    /* USER CODE END W1_HardFault_IRQn 0 */
+/* Direct UART4 polling output — no HAL, no SysTick dependency */
+static void fault_putchar(char c) {
+  while (!(UART4->ISR & USART_ISR_TXE_TXFNF)) {}
+  UART4->TDR = (uint8_t)c;
+}
+static void fault_print(const char *s) {
+  while (*s) fault_putchar(*s++);
+}
+static void fault_hex32(uint32_t val) {
+  const char h[] = "0123456789ABCDEF";
+  fault_putchar('0'); fault_putchar('x');
+  for (int i = 28; i >= 0; i -= 4)
+    fault_putchar(h[(val >> i) & 0xF]);
+}
+
+void HardFault_Dump(uint32_t *stack)
+{
+  __disable_irq();
+
+  /* Stacked registers: R0 R1 R2 R3 R12 LR PC xPSR */
+  uint32_t pc  = stack[6];
+  uint32_t lr  = stack[5];
+  uint32_t r0  = stack[0];
+
+  fault_print("\r\n!!! HARDFAULT !!!\r\n");
+  fault_print("PC ="); fault_hex32(pc);  fault_print("\r\n");
+  fault_print("LR ="); fault_hex32(lr);  fault_print("\r\n");
+  fault_print("R0 ="); fault_hex32(r0);  fault_print("\r\n");
+  fault_print("HFSR="); fault_hex32(SCB->HFSR); fault_print("\r\n");
+  fault_print("CFSR="); fault_hex32(SCB->CFSR); fault_print("\r\n");
+  fault_print("BFAR="); fault_hex32(SCB->BFAR); fault_print("\r\n");
+  fault_print("MMFAR="); fault_hex32(SCB->MMFAR); fault_print("\r\n");
+  fault_print("SP ="); fault_hex32((uint32_t)stack); fault_print("\r\n");
+
+  /* Blink D6 rapidly */
+  volatile uint32_t d;
+  while (1) {
+    GPIOC->BSRR = GPIO_PIN_4;
+    for (d = 0; d < 1000000UL; d++) { __NOP(); }
+    GPIOC->BSRR = (uint32_t)GPIO_PIN_4 << 16U;
+    for (d = 0; d < 1000000UL; d++) { __NOP(); }
   }
 }
 

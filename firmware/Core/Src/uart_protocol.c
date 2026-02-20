@@ -64,6 +64,10 @@ void UART_Protocol_Init(UART_HandleTypeDef *h_esp, UART_HandleTypeDef *h_dbg)
     rx_frame_count = 0;
     rx_error_count = 0;
 
+    /* Clear any overrun / error flags set during boot before arming RX */
+    __HAL_UART_CLEAR_OREFLAG(huart_esp);
+    __HAL_UART_CLEAR_FLAG(huart_esp, UART_FLAG_NE | UART_FLAG_FE | UART_FLAG_PE);
+
     /* Arm first byte reception */
     HAL_UART_Receive_IT(huart_esp, &rx_byte, 1);
 
@@ -194,6 +198,7 @@ static void process_byte(uint8_t byte)
             memcpy(&current_config, rx_payload, sizeof(ds_config_t));
             rx_frame_count++;
             new_config_flag = 1;
+            HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_0);  // D11: valid frame received
             send_ack();
         } else {
             rx_error_count++;

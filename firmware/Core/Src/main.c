@@ -246,6 +246,29 @@ int main(void)
   MX_SAI3_Init();
   /* USER CODE BEGIN 2 */
 
+  // === LED diagnostics init: D6=PC4 (boot), D7=PC5 (TX), D11=PB0 (RX) ===
+  // GPIOC and GPIOB clocks already enabled in MX_GPIO_Init.
+  {
+    GPIO_InitTypeDef gpio_led = {0};
+    gpio_led.Mode  = GPIO_MODE_OUTPUT_PP;
+    gpio_led.Pull  = GPIO_NOPULL;
+    gpio_led.Speed = GPIO_SPEED_FREQ_LOW;
+    // D6 (PC4) + D7 (PC5) on GPIOC
+    HAL_GPIO_WritePin(LED1_PORT, LED1_PIN | LED2_PIN, GPIO_PIN_RESET);
+    gpio_led.Pin = LED1_PIN | LED2_PIN;
+    HAL_GPIO_Init(LED1_PORT, &gpio_led);
+    // D11 (PB0) on GPIOB
+    HAL_GPIO_WritePin(LED3_PORT, LED3_PIN, GPIO_PIN_RESET);
+    gpio_led.Pin = LED3_PIN;
+    HAL_GPIO_Init(LED3_PORT, &gpio_led);
+    // Brief D6 flash: confirms we reached this point in init
+    // Use software busy-wait — HAL_Delay() depends on SysTick which can be starved
+    // by priority-0 SAI/I2C ISRs enabled in MspInit. ~200ms @ 480MHz.
+    HAL_GPIO_WritePin(LED1_PORT, LED1_PIN, GPIO_PIN_SET);
+    for (volatile uint32_t i = 0; i < 24000000UL; i++) { __NOP(); }
+    HAL_GPIO_WritePin(LED1_PORT, LED1_PIN, GPIO_PIN_RESET);
+  }
+
   // PE3 is SAI1_SD_B — shared with DAC1_RST, resolved in init sequence
 
   // Startup message
@@ -271,12 +294,10 @@ int main(void)
   // Pre-fill TX buffers with silence (zeros)
   UART_Print("DBG: memset audio_buffer...\r\n");
   memset(audio_buffer, 0, sizeof(audio_buffer));
-  UART_Print("DBG: cache clean audio_buffer...\r\n");
-  SCB_CleanDCache_by_Addr((uint32_t*)audio_buffer, sizeof(audio_buffer));
+  __DSB();  /* D-cache not enabled — DSB ensures DMA sees writes */
   UART_Print("DBG: memset audio_buffer_1b...\r\n");
   memset(audio_buffer_1b, 0, sizeof(audio_buffer_1b));
-  UART_Print("DBG: cache clean audio_buffer_1b...\r\n");
-  SCB_CleanDCache_by_Addr((uint32_t*)audio_buffer_1b, sizeof(audio_buffer_1b));
+  __DSB();
   UART_Print("TX buffers pre-filled (silence)\r\n");
 
   // Start SAI1_B (slave) BEFORE SAI1_A (master) - slave must be ready when master clocks
@@ -358,9 +379,9 @@ int main(void)
   // === SAI2 (DAC2 + DAC3) DMA start ===
   // Pre-fill SAI2 buffers with silence
   memset(audio_buffer_2a, 0, sizeof(audio_buffer_2a));
-  SCB_CleanDCache_by_Addr((uint32_t*)audio_buffer_2a, sizeof(audio_buffer_2a));
+  __DSB();
   memset(audio_buffer_2b, 0, sizeof(audio_buffer_2b));
-  SCB_CleanDCache_by_Addr((uint32_t*)audio_buffer_2b, sizeof(audio_buffer_2b));
+  __DSB();
 
   // Start SAI2_B (slave) BEFORE SAI2_A (master) - slave must be ready when master clocks
   status = HAL_SAI_Transmit_DMA(&hsai_BlockB2, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
@@ -382,7 +403,7 @@ int main(void)
   }
 
   // === SAI3_B RX DMA start (ADC input) ===
-  SCB_InvalidateDCache_by_Addr((uint32_t*)audio_buffer_3b_rx, sizeof(audio_buffer_3b_rx));
+  __DSB();
   status = HAL_SAI_Receive_DMA(&hsai_BlockB3, (uint8_t*)audio_buffer_3b_rx, ADC_BUFFER_SIZE * 2);
   if (status == HAL_OK) {
     UART_Print("SAI3_B RX DMA Started OK (ADC master)\r\n");
@@ -417,6 +438,7 @@ int main(void)
 
   // === ESP32 UART protocol init ===
   UART_Protocol_Init(&huart4, &huart7);
+  HAL_GPIO_WritePin(LED1_PORT, LED1_PIN, GPIO_PIN_SET);  // D6 ON: full init complete
 
   // Reset counters + flags after e-paper init (underruns during init are expected)
   need_fill_first_half = 0;
@@ -457,10 +479,13 @@ int main(void)
   UART_Print("DWT cycle counter enabled (latency measurement)\r\n");
 
   // Variables for main loop
-  uint32_t last_tick = HAL_GetTick();
   uint32_t last_half = 0;
   uint32_t last_full = 0;
   uint32_t test_start = HAL_GetTick();
+  // DWT-based 1s heartbeat — works even if SysTick is frozen
+  uint32_t last_hb_dwt = DWT->CYCCNT;
+
+  UART_Print("[STM32] main loop started — SAI+DMA running\r\n");
 
   /* USER CODE END 2 */
 
@@ -480,8 +505,7 @@ int main(void)
       __DSB();
       uint32_t t0 = DWT->CYCCNT;
       Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0);
-      SCB_CleanDCache_by_Addr((uint32_t*)&audio_buffer[0],
-                              AUDIO_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
       uint32_t dt = DWT->CYCCNT - t0;
       HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);  // PB5 LOW (fill done)
       if (dt < fill_min_cycles) fill_min_cycles = dt;
@@ -494,8 +518,7 @@ int main(void)
       __DSB();
       uint32_t t0 = DWT->CYCCNT;
       Fill_Audio_Beamform(&audio_buffer[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 0);
-      SCB_CleanDCache_by_Addr((uint32_t*)&audio_buffer[AUDIO_BUFFER_SIZE],
-                              AUDIO_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
       uint32_t dt = DWT->CYCCNT - t0;
       HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);  // PB5 LOW (fill done)
       if (dt < fill_min_cycles) fill_min_cycles = dt;
@@ -509,15 +532,13 @@ int main(void)
       need_fill_1b_first_half = 0;
       __DSB();
       Fill_Audio_Beamform(&audio_buffer_1b[0], AUDIO_BUFFER_SAMPLES, 8);
-      SCB_CleanDCache_by_Addr((uint32_t*)&audio_buffer_1b[0],
-                              AUDIO_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
     }
     if (need_fill_1b_second_half) {
       need_fill_1b_second_half = 0;
       __DSB();
       Fill_Audio_Beamform(&audio_buffer_1b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 8);
-      SCB_CleanDCache_by_Addr((uint32_t*)&audio_buffer_1b[AUDIO_BUFFER_SIZE],
-                              AUDIO_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
     }
 
     // SAI2_A: channels 16-23
@@ -525,15 +546,13 @@ int main(void)
       need_fill_2a_first_half = 0;
       __DSB();
       Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
-      SCB_CleanDCache_by_Addr((uint32_t*)&audio_buffer_2a[0],
-                              AUDIO_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
     }
     if (need_fill_2a_second_half) {
       need_fill_2a_second_half = 0;
       __DSB();
       Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
-      SCB_CleanDCache_by_Addr((uint32_t*)&audio_buffer_2a[AUDIO_BUFFER_SIZE],
-                              AUDIO_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
     }
 
     // SAI2_B: channels 24-31
@@ -541,30 +560,26 @@ int main(void)
       need_fill_2b_first_half = 0;
       __DSB();
       Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
-      SCB_CleanDCache_by_Addr((uint32_t*)&audio_buffer_2b[0],
-                              AUDIO_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
     }
     if (need_fill_2b_second_half) {
       need_fill_2b_second_half = 0;
       __DSB();
       Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
-      SCB_CleanDCache_by_Addr((uint32_t*)&audio_buffer_2b[AUDIO_BUFFER_SIZE],
-                              AUDIO_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
     }
 
     // ===== SAI3_B RX → feed delay lines (MUST run before TX fills) =====
     if (rx_3b_first_half_ready) {
       rx_3b_first_half_ready = 0;
       __DSB();
-      SCB_InvalidateDCache_by_Addr((uint32_t*)&audio_buffer_3b_rx[0],
-                                    ADC_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
       Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
     }
     if (rx_3b_second_half_ready) {
       rx_3b_second_half_ready = 0;
       __DSB();
-      SCB_InvalidateDCache_by_Addr((uint32_t*)&audio_buffer_3b_rx[ADC_BUFFER_SIZE],
-                                    ADC_BUFFER_SIZE * sizeof(int32_t));
+      __DSB();
       Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
     }
 
@@ -583,9 +598,9 @@ int main(void)
       UART_Print("Config applied to beamformer\r\n");
     }
 
-    // Print status every second
-    if (HAL_GetTick() - last_tick >= 1000) {
-      last_tick = HAL_GetTick();
+    // Print status every second — DWT-based (480M cycles = 1s, SysTick-independent)
+    if ((DWT->CYCCNT - last_hb_dwt) >= 480000000UL) {
+      last_hb_dwt = DWT->CYCCNT;
 
       // LED now toggled in Half callback at 50Hz for DMA sync visual
 

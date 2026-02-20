@@ -133,11 +133,6 @@ static void uart_init(void)
 
     printf("[ESP32] UART1 listo: TX=GPIO%d, RX=GPIO%d, %d baud\n",
            STM32_UART_TX, STM32_UART_RX, STM32_UART_BAUD);
-
-    // Test: enviar "HELLO\n" al STM32 para verificar TX funciona
-    const char *hello = "HELLO_FROM_ESP32\r\n";
-    uart_write_bytes(STM32_UART_NUM, hello, strlen(hello));
-    printf("[ESP32] Enviado '%s' al STM32 via UART1 TX (GPIO%d)\n", "HELLO_FROM_ESP32", STM32_UART_TX);
 }
 
 // Tarea que lee continuamente del STM32 y forwardea al terminal con prefijo [STM32]
@@ -151,59 +146,6 @@ static void stm32_monitor_task(void *arg)
 
     printf("[ESP32] Monitor STM32 iniciado (UART%d RX=GPIO%d, %d baud)\n",
            STM32_UART_NUM, STM32_UART_RX, STM32_UART_BAUD);
-
-    // === TEST GPIO CRUDO: deshabilitar UART, leer GPIO0 como input ===
-    // Contar transiciones durante 2 segundos
-    uart_driver_delete(STM32_UART_NUM);
-    gpio_config_t io_test = {
-        .pin_bit_mask = (1ULL << STM32_UART_RX),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    };
-    gpio_config(&io_test);
-
-    printf("[ESP32] GPIO TEST: leyendo GPIO%d crudo por 3 segundos...\n", STM32_UART_RX);
-    printf("[ESP32] GPIO TEST: si STM32 transmite, deberiamos ver transiciones\n");
-
-    int last_level = gpio_get_level(STM32_UART_RX);
-    uint32_t transitions = 0;
-    uint32_t samples = 0;
-    uint32_t highs = 0;
-    uint32_t start = xTaskGetTickCount();
-    while ((xTaskGetTickCount() - start) < (3000 / portTICK_PERIOD_MS)) {
-        int level = gpio_get_level(STM32_UART_RX);
-        if (level != last_level) {
-            transitions++;
-            last_level = level;
-        }
-        if (level) highs++;
-        samples++;
-    }
-    printf("[ESP32] GPIO TEST resultado: %lu transiciones en 3s, %lu muestras, %lu%% HIGH\n",
-           transitions, samples, (highs * 100) / samples);
-    if (transitions == 0) {
-        printf("[ESP32] GPIO TEST: 0 transiciones = NO HAY DATOS en GPIO%d!\n", STM32_UART_RX);
-        printf("[ESP32] GPIO TEST: Verificar cableado PA0 <-> GPIO1 (STM32 TX)\n");
-    } else {
-        printf("[ESP32] GPIO TEST: %lu transiciones = HAY DATOS! Problema es del UART driver\n", transitions);
-    }
-
-    // Re-inicializar UART para operación normal
-    uart_config_t cfg = {
-        .baud_rate  = STM32_UART_BAUD,
-        .data_bits  = UART_DATA_8_BITS,
-        .parity     = UART_PARITY_DISABLE,
-        .stop_bits  = UART_STOP_BITS_1,
-        .flow_ctrl  = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_DEFAULT,
-    };
-    uart_param_config(STM32_UART_NUM, &cfg);
-    uart_set_pin(STM32_UART_NUM, STM32_UART_TX, STM32_UART_RX,
-                 UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    uart_driver_install(STM32_UART_NUM, UART_BUF_SIZE * 2, UART_BUF_SIZE * 2, 0, NULL, 0);
-
-    printf("[ESP32] UART re-inicializado, continuando monitor normal...\n");
 
     while (1) {
         int len = uart_read_bytes(STM32_UART_NUM, raw, sizeof(raw),
@@ -574,6 +516,14 @@ void app_main(void)
 
     // UART1 → STM32
     uart_init();
+
+    // Dar tiempo al STM32 para completar su secuencia de init (~2-3s):
+    // PLL 480MHz, SAI init, PCM1690 MCLK bit-bang, I2C scan.
+    // Sin este delay, el ESP32 puede generar ruido en TX (GPIO0→PA1)
+    // antes de que el STM32 haya armado HAL_UART_Receive_IT(), causando
+    // ORE (overrun error) que silencia el link en cold boot.
+    printf("[ESP32] Esperando boot STM32 (3s)...\n");
+    vTaskDelay(3000 / portTICK_PERIOD_MS);
 
     // Tarea de monitoreo: lee UART1 RX y forwardea con prefijo [STM32]
     xTaskCreate(stm32_monitor_task, "stm32_mon", 4096, NULL, 5, NULL);
