@@ -78,6 +78,7 @@ dkms.conf
 
 ### STM32 / WeAct build artifacts ###
 firmware/build/
+firmware/build_*/
 *.bin
 *.d356
 *.lck
