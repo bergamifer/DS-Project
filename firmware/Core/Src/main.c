@@ -246,11 +246,10 @@ int main(void)
   MX_SAI3_Init();
   /* USER CODE BEGIN 2 */
 
-  // PE3 is now SAI1_SD_B — no LED on WeAct in DS10 config
-  // On DS10 board, use PC4/PC5/PB0/PB1 LEDs instead
+  // PE3 is SAI1_SD_B — shared with DAC1_RST, resolved in init sequence
 
   // Startup message
-  UART_Print("\r\n=== WeAct Beamforming Audio (DS10 config) ===\r\n");
+  UART_Print("\r\n=== DS9 Beamforming Audio ===\r\n");
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("SAI1_A+B: TDM8 ch0-15, SAI2_A+B: TDM8 ch16-31, SAI3_B: RX 2ch\r\n");
   UART_Print("Mode: Beamforming (ADC L -> delay lines -> 32ch DAC)\r\n\r\n");

@@ -1,6 +1,6 @@
 /**
  * @file epaper.h
- * @brief SSD1681 E-Paper Driver for WeAct 1.54" Display (200x200)
+ * @brief SSD1681 E-Paper Driver for DS9 1.54" Display (200x200)
  * @note Uses SPI2 on STM32H743
  */
 

@@ -5,7 +5,7 @@
  * PLL1: System clock 480 MHz
  * PLL3: Audio clock 12.288 MHz (256 x 48 kHz)
  *
- * HSE = 25 MHz (WeAct board crystal)
+ * HSE = 25 MHz (DS9 board crystal)
  */
 
 #include "main.h"

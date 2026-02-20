@@ -431,7 +431,7 @@ void HAL_SAI_MspInit(SAI_HandleTypeDef* hsai)
     SAI2_client ++;
 
     /**SAI2_B GPIO Configuration (synced to SAI2_A - only SD needed)
-    PE11    ------> SAI2_SD_B (AF10) — DS10 correct pin
+    PE11    ------> SAI2_SD_B (AF10) — DS9 pin (shared with DAC0_AMUTEI, reconfigured after DAC init)
     */
     __HAL_RCC_GPIOE_CLK_ENABLE();
     GPIO_InitStruct.Pin = GPIO_PIN_11;

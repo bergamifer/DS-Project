@@ -1,6 +1,6 @@
 /**
  * @file epaper.c
- * @brief SSD1681 E-Paper Driver Implementation for WeAct 1.54" (200x200)
+ * @brief SSD1681 E-Paper Driver Implementation for DS9 1.54" (200x200)
  */
 
 #include "epaper.h"
