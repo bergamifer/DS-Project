@@ -4,7 +4,11 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(python3:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh issue create:*)",
+      "Bash(grep:*)",
+      "Bash(git rm:*)"
     ]
   }
 }
