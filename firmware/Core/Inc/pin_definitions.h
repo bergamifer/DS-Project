@@ -102,15 +102,26 @@
 #define PCM1690_DAC3_ADDR_7BIT  0x4D    // 0x9A >> 1
 
 /* ============================================================================
- * I2C3 - EEPROM Bus (CAT24C256 - U6)
+ * I2C4 - EEPROM Bus (CAT24C256 - U6)
  * Pull-ups: 5.1kΩ (optimal: 4.7kΩ for 400kHz)
+ *
+ * NOTE: DS9 schematic labels this as "I2C3" but on STM32H743 LQFP100,
+ * PB6/PB7 AF4 = I2C1 (already used for DACs on PB8/PB9).
+ * PB6/PB7 AF6 = I2C4 — this is the correct peripheral.
  * ============================================================================ */
 
-#define I2C3_SCL_PIN            GPIO_PIN_6      // PB6
-#define I2C3_SCL_PORT           GPIOB
-#define I2C3_SDA_PIN            GPIO_PIN_7      // PB7
-#define I2C3_SDA_PORT           GPIOB
-#define I2C3_AF                 GPIO_AF4_I2C3
+#define EEPROM_I2C_SCL_PIN      GPIO_PIN_6      // PB6
+#define EEPROM_I2C_SCL_PORT     GPIOB
+#define EEPROM_I2C_SDA_PIN      GPIO_PIN_7      // PB7
+#define EEPROM_I2C_SDA_PORT     GPIOB
+#define EEPROM_I2C_AF           GPIO_AF6_I2C4
+
+/* Legacy names (schematic says I2C3, hardware is I2C4) */
+#define I2C3_SCL_PIN            EEPROM_I2C_SCL_PIN
+#define I2C3_SCL_PORT           EEPROM_I2C_SCL_PORT
+#define I2C3_SDA_PIN            EEPROM_I2C_SDA_PIN
+#define I2C3_SDA_PORT           EEPROM_I2C_SDA_PORT
+#define I2C3_AF                 EEPROM_I2C_AF
 
 // EEPROM CAT24C256 (U6) - 32KB
 #define EEPROM_ADDR             0xA0    // 8-bit address (A0-A2 = GND)

@@ -65,6 +65,7 @@ Core/Src/syscalls.c \
 Core/Src/epaper.c \
 Core/Src/pcm1690.c \
 Core/Src/uart_protocol.c \
+Core/Src/eeprom_config.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_spi.c \

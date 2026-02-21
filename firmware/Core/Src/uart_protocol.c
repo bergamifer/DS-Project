@@ -238,7 +238,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == huart_esp->Instance) {
         rx_byte_count++;
-        HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_5);  // PB5 toggle = RX activity
+        HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);  // PB1 (D10) toggle = RX activity
         process_byte(rx_byte);
         /* Re-arm for next byte */
         HAL_UART_Receive_IT(huart_esp, &rx_byte, 1);

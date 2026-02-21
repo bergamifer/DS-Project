@@ -27,6 +27,7 @@
 #include "uart_protocol.h"
 #include "pcm1690.h"
 #include "pin_definitions.h"
+#include "eeprom_config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -125,6 +126,9 @@ static const PCM1690_Pins dac_pins[4] = {
 static const uint8_t dac_addrs[4] = {
     PCM1690_ADDR_DAC0, PCM1690_ADDR_DAC1, PCM1690_ADDR_DAC2, PCM1690_ADDR_DAC3
 };
+
+// EEPROM deferred save flag (set when config changes, save in low-priority window)
+static volatile uint8_t eeprom_save_pending = 0;
 
 // ===== ISR → Main loop deferred processing flags =====
 // ISR sets flag, main loop processes buffer and clears flag
@@ -297,6 +301,33 @@ int main(void)
   memset(beam_config.gains, 255, sizeof(beam_config.gains));  // 0xFF = unity gain
   beam_config.mutes = 0;
   UART_Print("Beamforming initialized (delay lines zeroed, gains=max)\r\n");
+
+  // === EEPROM init + load saved config ===
+  {
+    UART_Print("EEPROM: Initializing I2C4 AF6 (PB6/PB7)...\r\n");
+    HAL_StatusTypeDef i2c_eep_st = EEPROM_Init();
+    sprintf(uart_buf, "EEPROM: I2C4 init=%d, available=%u\r\n", (int)i2c_eep_st, EEPROM_IsAvailable());
+    UART_Print(uart_buf);
+
+    if (EEPROM_IsAvailable()) {
+      eeprom_status_t eep_status = EEPROM_LoadConfig(&beam_config, sizeof(beam_config));
+      if (eep_status == EEPROM_OK) {
+        UART_Print("EEPROM: Config loaded OK\r\n");
+        sprintf(uart_buf, "  master_gain=%u mute=%u mutes=0x%08lX\r\n",
+                beam_config.master_gain, beam_config.mute_global, beam_config.mutes);
+        UART_Print(uart_buf);
+      } else if (eep_status == EEPROM_ERR_MAGIC) {
+        UART_Print("EEPROM: No saved config (first boot) — using defaults\r\n");
+      } else if (eep_status == EEPROM_ERR_CRC) {
+        UART_Print("EEPROM: CRC error — using defaults\r\n");
+      } else {
+        sprintf(uart_buf, "EEPROM: Load error %d — using defaults\r\n", (int)eep_status);
+        UART_Print(uart_buf);
+      }
+    } else {
+      UART_Print("EEPROM: Not detected on I2C3 — using defaults\r\n");
+    }
+  }
 
   // Pre-fill TX buffers with silence (zeros)
   UART_Print("DBG: memset audio_buffer...\r\n");
@@ -514,7 +545,7 @@ int main(void)
       Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0);
       __DSB();
       uint32_t dt = DWT->CYCCNT - t0;
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);  // PB5 LOW (fill done)
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);  // PB1 (D10) LOW (fill done)
       if (dt < fill_min_cycles) fill_min_cycles = dt;
       if (dt > fill_max_cycles) fill_max_cycles = dt;
       fill_sum_cycles += dt;
@@ -527,7 +558,7 @@ int main(void)
       Fill_Audio_Beamform(&audio_buffer[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 0);
       __DSB();
       uint32_t dt = DWT->CYCCNT - t0;
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);  // PB5 LOW (fill done)
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);  // PB1 (D10) LOW (fill done)
       if (dt < fill_min_cycles) fill_min_cycles = dt;
       if (dt > fill_max_cycles) fill_max_cycles = dt;
       fill_sum_cycles += dt;
@@ -603,6 +634,24 @@ int main(void)
       beam_config.mutes = (uint32_t)cfg->mutes;  // lower 16 bits
       UART_Protocol_PrintConfig();
       UART_Print("Config applied to beamformer\r\n");
+
+      // Defer EEPROM save — will execute when no audio fills are pending
+      if (EEPROM_IsAvailable()) {
+        eeprom_save_pending = 1;
+      }
+    }
+
+    // ===== Deferred EEPROM save (blocks ~12ms, causes underruns — acceptable) =====
+    if (eeprom_save_pending) {
+      eeprom_save_pending = 0;
+      UART_Print("EEPROM: Saving config...\r\n");
+      eeprom_status_t eep_st = EEPROM_SaveConfig(&beam_config, sizeof(beam_config));
+      if (eep_st == EEPROM_OK) {
+        UART_Print("EEPROM: Config saved OK\r\n");
+      } else {
+        sprintf(uart_buf, "EEPROM: Save FAILED (err=%d)\r\n", (int)eep_st);
+        UART_Print(uart_buf);
+      }
     }
 
     // Print status every second — DWT-based (480M cycles = 1s, SysTick-independent)
@@ -1699,7 +1748,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
 void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
   if (hsai->Instance == SAI1_Block_A) {
     uint32_t now = DWT->CYCCNT;
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);  // PB5 HIGH (scope trigger)
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);  // PB1 (D10) HIGH (scope trigger)
 
     half_complete_count++;
 
@@ -1748,7 +1797,7 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
 void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
   if (hsai->Instance == SAI1_Block_A) {
     uint32_t now = DWT->CYCCNT;
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);  // PB5 HIGH (scope trigger)
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);  // PB1 (D10) HIGH (scope trigger)
 
     full_complete_count++;
 
