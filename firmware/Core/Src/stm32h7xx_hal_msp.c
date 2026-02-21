@@ -594,5 +594,10 @@ void HAL_SAI_MspDeInit(SAI_HandleTypeDef* hsai)
 }
 
 /* USER CODE BEGIN 1 */
-
+void HAL_ADC_MspInit(ADC_HandleTypeDef* hadc)
+{
+  if (hadc->Instance == ADC3) {
+    __HAL_RCC_ADC3_CLK_ENABLE();
+  }
+}
 /* USER CODE END 1 */

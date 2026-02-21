@@ -88,6 +88,8 @@ SPI_HandleTypeDef hspi2;
 UART_HandleTypeDef huart7;
 UART_HandleTypeDef huart4;
 
+ADC_HandleTypeDef hadc3;
+
 /* USER CODE BEGIN PV */
 
 /* ===== DMA Double Buffer (ping-pong) =====
@@ -189,7 +191,9 @@ static void MX_SPI2_Init(void);
 static void MX_UART4_Init(void);
 static void MX_SAI2_Init(void);
 static void MX_SAI3_Init(void);
+static void MX_ADC3_Init(void);
 /* USER CODE BEGIN PFP */
+static int32_t Read_CPU_Temperature(void);
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset);
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void UART_Print(const char *str);
@@ -276,6 +280,9 @@ int main(void)
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("SAI1_A+B: TDM8 ch0-15, SAI2_A+B: TDM8 ch16-31, SAI3_B: RX 2ch\r\n");
   UART_Print("Mode: Beamforming (ADC L -> delay lines -> 32ch DAC)\r\n\r\n");
+
+  // === ADC3 temperature sensor ===
+  MX_ADC3_Init();
 
   // === Beamforming init ===
   // Zero delay lines
@@ -631,6 +638,14 @@ int main(void)
         sprintf(uart_buf, "     Jitter: period min=%lu avg=%lu max=%lu cyc (range=%lu = %lu us)\r\n",
                 jitter_min_cycles, jitter_avg, jitter_max_cycles,
                 jitter_range, jitter_range / CPU_FREQ_MHZ);
+        UART_Print(uart_buf);
+      }
+
+      // CPU temperature
+      int32_t temp = Read_CPU_Temperature();
+      if (temp != -999) {
+        int32_t t_abs = temp >= 0 ? temp : -temp;
+        sprintf(uart_buf, "     Temp: %ld.%ld C\r\n", temp / 10, t_abs % 10);
         UART_Print(uart_buf);
       }
 
@@ -1199,6 +1214,67 @@ static void MX_SAI3_Init(void)
   {
     Error_Handler();
   }
+}
+
+static void MX_ADC3_Init(void)
+{
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  // ADC3 kernel clock: per_ck (HSI 64MHz default), DIV8 = 8MHz
+  RCC_PeriphCLKInitTypeDef adc_clk = {0};
+  adc_clk.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  adc_clk.AdcClockSelection = RCC_ADCCLKSOURCE_CLKP;
+  if (HAL_RCCEx_PeriphCLKConfig(&adc_clk) != HAL_OK) {
+    UART_Print("ADC clock config FAILED\r\n");
+    return;
+  }
+
+  hadc3.Instance = ADC3;
+  hadc3.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV8;
+  hadc3.Init.Resolution = ADC_RESOLUTION_16B;
+  hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc3.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc3.Init.LowPowerAutoWait = DISABLE;
+  hadc3.Init.ContinuousConvMode = DISABLE;
+  hadc3.Init.NbrOfConversion = 1;
+  hadc3.Init.DiscontinuousConvMode = DISABLE;
+  hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc3.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DR;
+  hadc3.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
+  if (HAL_ADC_Init(&hadc3) != HAL_OK) {
+    UART_Print("ADC3 init FAILED\r\n");
+    return;
+  }
+
+  HAL_ADCEx_Calibration_Start(&hadc3, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
+
+  sConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_810CYCLES_5;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK) {
+    UART_Print("ADC3 channel config FAILED\r\n");
+  }
+}
+
+static int32_t Read_CPU_Temperature(void)
+{
+  HAL_ADC_Start(&hadc3);
+  if (HAL_ADC_PollForConversion(&hadc3, 10) != HAL_OK) {
+    return -999;
+  }
+  uint32_t raw = HAL_ADC_GetValue(&hadc3);
+  HAL_ADC_Stop(&hadc3);
+
+  // Factory calibration: TS_CAL1 @30C, TS_CAL2 @110C (16-bit, VREF=3.3V)
+  uint16_t ts_cal1 = *((uint16_t *)0x1FF1E820);
+  uint16_t ts_cal2 = *((uint16_t *)0x1FF1E840);
+
+  // Linear interpolation, x10 for 0.1C precision (no float)
+  int32_t temp_x10 = 300 + (int32_t)(raw - ts_cal1) * 800 / (int32_t)(ts_cal2 - ts_cal1);
+  return temp_x10;
 }
 
 /**
