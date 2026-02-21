@@ -8,7 +8,10 @@
       "Bash(gh pr view:*)",
       "Bash(gh issue create:*)",
       "Bash(grep:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(make:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)"
     ]
   }
 }

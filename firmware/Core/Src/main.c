@@ -23,7 +23,6 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include <stdio.h>
-#include "epaper.h"
 #include "uart_protocol.h"
 #include "pcm1690.h"
 #include "pin_definitions.h"
@@ -83,8 +82,6 @@ DMA_HandleTypeDef hdma_sai1_b;
 DMA_HandleTypeDef hdma_sai2_a;
 DMA_HandleTypeDef hdma_sai2_b;
 DMA_HandleTypeDef hdma_sai3_b;
-
-SPI_HandleTypeDef hspi2;
 
 UART_HandleTypeDef huart7;
 UART_HandleTypeDef huart4;
@@ -173,14 +170,9 @@ static volatile uint32_t fill_sample_count = 0;
 // UART TX buffer
 static char uart_buf[128];
 
-// E-Paper display buffer (5000 bytes for 200x200)
-static uint8_t epd_buffer[EPD_BUFFER_SIZE] __attribute__((section(".dma_buffer"), aligned(32)));
-
-// Test cycle counter (for e-paper update every 60s)
+// Test cycle counter (for 60s status reports)
 static uint32_t test_cycle = 0;
 
-// E-Paper availability flag (0 = not connected/failed, 1 = ready)
-static uint8_t epd_available = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -191,7 +183,6 @@ static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_UART7_Init(void);
 static void MX_SAI1_Init(void);
-static void MX_SPI2_Init(void);
 static void MX_UART4_Init(void);
 static void MX_SAI2_Init(void);
 static void MX_SAI3_Init(void);
@@ -202,9 +193,6 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void UART_Print(const char *str);
 static void Print_DMA_Config(void);
-static void EPD_GPIO_Init(void);
-static void EPD_ShowTestResults(uint32_t half_cnt, uint32_t full_cnt, uint32_t err_cnt,
-                                uint32_t time_s, uint8_t passed, uint32_t underruns);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -249,7 +237,6 @@ int main(void)
   MX_UART4_Init();   /* UART4 (PA0/PA1) first — debug output on DS9 */
   MX_UART7_Init();
   MX_SAI1_Init();
-  MX_SPI2_Init();
   MX_SAI2_Init();
   MX_SAI3_Init();
   /* USER CODE BEGIN 2 */
@@ -451,34 +438,11 @@ int main(void)
     UART_Print(uart_buf);
   }
 
-  // === E-Paper init (NON-FATAL - audio already running) ===
-  EPD_GPIO_Init();
-  sprintf(uart_buf, "BUSY pin: %d (0=ready/not connected, 1=busy)\r\n",
-          HAL_GPIO_ReadPin(EPD_BUSY_PORT, EPD_BUSY_PIN));
-  UART_Print(uart_buf);
-
-  UART_Print("Initializing E-Paper display...\r\n");
-  EPD_Status epd_status = EPD_Init(&hspi2);
-  if (epd_status == EPD_OK) {
-    epd_available = 1;
-    UART_Print("E-Paper init OK!\r\n");
-    EPD_FillBuffer(epd_buffer, EPD_WHITE);
-    EPD_DrawString(epd_buffer, 20, 30, "DMA AUDIO TEST", 16, EPD_BLACK);
-    EPD_DrawString(epd_buffer, 30, 60, "TDM8 48KHZ", 16, EPD_BLACK);
-    EPD_DrawRect(epd_buffer, 5, 5, 190, 190, EPD_BLACK);
-    EPD_Display(epd_buffer);
-    UART_Print("E-Paper startup screen displayed\r\n");
-  } else {
-    epd_available = 0;
-    sprintf(uart_buf, "E-Paper skipped (status: %d) - audio running without it\r\n", epd_status);
-    UART_Print(uart_buf);
-  }
-
   // === ESP32 UART protocol init ===
   UART_Protocol_Init(&huart4, &huart7);
   HAL_GPIO_WritePin(LED1_PORT, LED1_PIN, GPIO_PIN_SET);  // D6 ON: full init complete
 
-  // Reset counters + flags after e-paper init (underruns during init are expected)
+  // Reset counters + flags (underruns during init are expected)
   need_fill_first_half = 0;
   need_fill_second_half = 0;
   need_fill_1b_first_half = 0;
@@ -500,8 +464,7 @@ int main(void)
   DWT->CYCCNT = 0;
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
-  // Reset jitter tracking AFTER DWT enable (callbacks during e-paper init
-  // may have stored stale CYCCNT values if debugger had DWT already running)
+  // Reset jitter tracking AFTER DWT enable
   __disable_irq();
   last_half_isr_cycles = 0;
   last_full_isr_cycles = 0;
@@ -796,12 +759,6 @@ int main(void)
         }
         UART_Print("==============================================\r\n\r\n");
 
-        // Update E-Paper display with results (only if available)
-        if (epd_available) {
-          EPD_ShowTestResults(snap_half, snap_full, snap_err,
-                              total_time, test_passed, snap_undr);
-        }
-
         // Reset counters + flags + latency stats for next cycle
         // Atomic reset: disable IRQ so ISR can't write between our resets
         __disable_irq();
@@ -887,7 +844,7 @@ void SystemClock_Config(void)
 
   /** Bus clocks: SYSCLK=480MHz, HCLK=240MHz, APBx=120MHz
    *  HCLK /2 = 240MHz (max for VOS0)
-   *  APB1-4 /2 = 120MHz each (I2C1, SPI2, UART7 derive from APB)
+   *  APB1-4 /2 = 120MHz each (I2C1, UART7 derive from APB)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
@@ -1405,160 +1362,7 @@ static void MX_GPIO_Init(void)
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
-/**
-  * @brief SPI2 Initialization Function
-  * @note  Used for E-Paper display (PB13=SCK, PB15=MOSI)
-  * @param None
-  * @retval None
-  */
-static void MX_SPI2_Init(void)
-{
-  /* Enable SPI2 clock */
-  __HAL_RCC_SPI2_CLK_ENABLE();
-
-  /* Configure SPI2 GPIO pins FIRST: PB13=SCK, PB15=MOSI */
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-  GPIO_InitStruct.Pin = GPIO_PIN_13 | GPIO_PIN_15;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF5_SPI2;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /* Configure SPI2 - TX only (e-paper has no MISO) */
-  hspi2.Instance = SPI2;
-  hspi2.Init.Mode = SPI_MODE_MASTER;
-  hspi2.Init.Direction = SPI_DIRECTION_2LINES_TXONLY;
-  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi2.Init.NSS = SPI_NSS_SOFT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
-  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi2.Init.CRCPolynomial = 7;
-  hspi2.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
-  hspi2.Init.NSSPolarity = SPI_NSS_POLARITY_LOW;
-  hspi2.Init.FifoThreshold = SPI_FIFO_THRESHOLD_01DATA;
-  hspi2.Init.TxCRCInitializationPattern = SPI_CRC_INITIALIZATION_ALL_ZERO_PATTERN;
-  hspi2.Init.RxCRCInitializationPattern = SPI_CRC_INITIALIZATION_ALL_ZERO_PATTERN;
-  hspi2.Init.MasterSSIdleness = SPI_MASTER_SS_IDLENESS_00CYCLE;
-  hspi2.Init.MasterInterDataIdleness = SPI_MASTER_INTERDATA_IDLENESS_00CYCLE;
-  hspi2.Init.MasterReceiverAutoSusp = SPI_MASTER_RX_AUTOSUSP_DISABLE;
-  hspi2.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_DISABLE;
-  hspi2.Init.IOSwap = SPI_IO_SWAP_DISABLE;
-
-  if (HAL_SPI_Init(&hspi2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-
 /* USER CODE BEGIN 4 */
-
-/**
- * @brief Initialize E-Paper control GPIO pins
- * PB12=CS, PD4=DC, PD5=RST, PD6=BUSY
- * (PD8/PD9/PD10 freed for SAI2_B)
- */
-static void EPD_GPIO_Init(void) {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-  /* CS pin - PB12 */
-  GPIO_InitStruct.Pin = EPD_CS_PIN;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(EPD_CS_PORT, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(EPD_CS_PORT, EPD_CS_PIN, GPIO_PIN_SET);  /* CS high (inactive) */
-
-  /* DC pin - PD4 */
-  GPIO_InitStruct.Pin = EPD_DC_PIN;
-  HAL_GPIO_Init(EPD_DC_PORT, &GPIO_InitStruct);
-
-  /* RST pin - PD5 */
-  GPIO_InitStruct.Pin = EPD_RST_PIN;
-  HAL_GPIO_Init(EPD_RST_PORT, &GPIO_InitStruct);
-  HAL_GPIO_WritePin(EPD_RST_PORT, EPD_RST_PIN, GPIO_PIN_SET);  /* RST high (not reset) */
-
-  /* BUSY pin - PD6 (input with pull-down: LOW when no e-paper connected) */
-  GPIO_InitStruct.Pin = EPD_BUSY_PIN;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(EPD_BUSY_PORT, &GPIO_InitStruct);
-}
-
-/**
- * @brief Display test results on E-Paper screen
- */
-static void EPD_ShowTestResults(uint32_t half_cnt, uint32_t full_cnt, uint32_t err_cnt,
-                                uint32_t time_s, uint8_t passed, uint32_t underruns) {
-  char line[32];
-
-  /* Clear buffer to white */
-  EPD_FillBuffer(epd_buffer, EPD_WHITE);
-
-  /* Draw border */
-  EPD_DrawRect(epd_buffer, 5, 5, 190, 190, EPD_BLACK);
-  EPD_DrawRect(epd_buffer, 6, 6, 188, 188, EPD_BLACK);
-
-  /* Title */
-  EPD_DrawString(epd_buffer, 20, 12, "DMA AUDIO TEST", 16, EPD_BLACK);
-
-  /* Horizontal line under title */
-  EPD_DrawLine(epd_buffer, 10, 32, 190, 32, EPD_BLACK);
-
-  /* Half callbacks */
-  EPD_DrawString(epd_buffer, 15, 42, "Half:", 8, EPD_BLACK);
-  sprintf(line, "%lu", half_cnt);
-  EPD_DrawString(epd_buffer, 85, 42, line, 8, EPD_BLACK);
-
-  /* Full callbacks */
-  EPD_DrawString(epd_buffer, 15, 55, "Full:", 8, EPD_BLACK);
-  sprintf(line, "%lu", full_cnt);
-  EPD_DrawString(epd_buffer, 85, 55, line, 8, EPD_BLACK);
-
-  /* Errors */
-  EPD_DrawString(epd_buffer, 15, 68, "Errors:", 8, EPD_BLACK);
-  sprintf(line, "%lu", err_cnt);
-  EPD_DrawString(epd_buffer, 85, 68, line, 8, EPD_BLACK);
-
-  /* Underruns */
-  EPD_DrawString(epd_buffer, 15, 81, "Underrun:", 8, EPD_BLACK);
-  sprintf(line, "%lu", underruns);
-  EPD_DrawString(epd_buffer, 85, 81, line, 8, EPD_BLACK);
-
-  /* Rate calculation (integer - nano.specs has no %f) */
-  EPD_DrawString(epd_buffer, 15, 94, "Rate:", 8, EPD_BLACK);
-  sprintf(line, "%lu/s", half_cnt / 60);
-  EPD_DrawString(epd_buffer, 85, 94, line, 8, EPD_BLACK);
-
-  /* Pipeline info */
-  EPD_DrawString(epd_buffer, 15, 107, "Pipeline:", 8, EPD_BLACK);
-  EPD_DrawString(epd_buffer, 85, 107, "Deferred+Cache", 8, EPD_BLACK);
-
-  /* Horizontal line */
-  EPD_DrawLine(epd_buffer, 10, 122, 190, 122, EPD_BLACK);
-
-  /* Result */
-  if (passed) {
-    EPD_DrawString(epd_buffer, 30, 132, ">>> PASSED <<<", 8, EPD_BLACK);
-  } else {
-    EPD_DrawString(epd_buffer, 30, 132, ">>> FAILED <<<", 8, EPD_BLACK);
-  }
-
-  /* Total time */
-  sprintf(line, "Time: %lu s", time_s);
-  EPD_DrawString(epd_buffer, 55, 150, line, 8, EPD_BLACK);
-
-  /* Test cycle indicator */
-  sprintf(line, "Cycle #%lu", test_cycle);
-  EPD_DrawString(epd_buffer, 60, 168, line, 8, EPD_BLACK);
-
-  /* Send to display */
-  EPD_Display(epd_buffer);
-}
 
 /**
  * @brief Print string via UART (blocking)
