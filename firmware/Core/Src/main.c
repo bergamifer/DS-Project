@@ -87,6 +87,7 @@ UART_HandleTypeDef huart7;
 UART_HandleTypeDef huart4;
 
 ADC_HandleTypeDef hadc3;
+TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
 
@@ -126,6 +127,16 @@ static const uint8_t dac_addrs[4] = {
 
 // EEPROM deferred save flag (set when config changes, save in low-priority window)
 static volatile uint8_t eeprom_save_pending = 0;
+
+// LED dimmer state machine (TIM3: CH3=D11/PB0, CH4=D10/PB1)
+// Phase 0: D11 fades 0→max in 3s, D10 off
+// Phase 1: D10 fades 0→max in 3s, D11 off
+#define DIMMER_STEPS     300UL
+#define DIMMER_STEP_CYC  (480000000UL / 100UL)  // 10ms @ 480MHz
+#define DIMMER_ARR       999UL
+static uint8_t  dimmer_phase    = 0;
+static uint32_t dimmer_step     = 0;
+static uint32_t last_dimmer_dwt = 0;
 
 // ===== ISR → Main loop deferred processing flags =====
 // ISR sets flag, main loop processes buffer and clears flag
@@ -187,6 +198,7 @@ static void MX_UART4_Init(void);
 static void MX_SAI2_Init(void);
 static void MX_SAI3_Init(void);
 static void MX_ADC3_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 static int32_t Read_CPU_Temperature(void);
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset);
@@ -252,10 +264,7 @@ int main(void)
     HAL_GPIO_WritePin(LED1_PORT, LED1_PIN | LED2_PIN, GPIO_PIN_RESET);
     gpio_led.Pin = LED1_PIN | LED2_PIN;
     HAL_GPIO_Init(LED1_PORT, &gpio_led);
-    // D11 (PB0) on GPIOB
-    HAL_GPIO_WritePin(LED3_PORT, LED3_PIN, GPIO_PIN_RESET);
-    gpio_led.Pin = LED3_PIN;
-    HAL_GPIO_Init(LED3_PORT, &gpio_led);
+    // D11 (PB0) and D10 (PB1) owned by TIM3 PWM — not configured as GPIO output
     // Brief D6 flash: confirms we reached this point in init
     // Use software busy-wait — HAL_Delay() depends on SysTick which can be starved
     // by priority-0 SAI/I2C ISRs enabled in MspInit. ~200ms @ 480MHz.
@@ -274,6 +283,9 @@ int main(void)
 
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();
+
+  // === TIM3 PWM — LED dimmer (D11=PB0/CH3, D10=PB1/CH4) ===
+  MX_TIM3_Init();
 
   // === Beamforming init ===
   // Zero delay lines
@@ -508,7 +520,6 @@ int main(void)
       Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0);
       __DSB();
       uint32_t dt = DWT->CYCCNT - t0;
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);  // PB1 (D10) LOW (fill done)
       if (dt < fill_min_cycles) fill_min_cycles = dt;
       if (dt > fill_max_cycles) fill_max_cycles = dt;
       fill_sum_cycles += dt;
@@ -521,7 +532,6 @@ int main(void)
       Fill_Audio_Beamform(&audio_buffer[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 0);
       __DSB();
       uint32_t dt = DWT->CYCCNT - t0;
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);  // PB1 (D10) LOW (fill done)
       if (dt < fill_min_cycles) fill_min_cycles = dt;
       if (dt > fill_max_cycles) fill_max_cycles = dt;
       fill_sum_cycles += dt;
@@ -604,6 +614,24 @@ int main(void)
       }
     }
 
+    // ===== LED dimmer — TIM3 PWM step update (10ms per step, 300 steps = 3s) =====
+    if (last_dimmer_dwt != 0 && (DWT->CYCCNT - last_dimmer_dwt) >= DIMMER_STEP_CYC) {
+      last_dimmer_dwt += DIMMER_STEP_CYC;
+      uint32_t ccr = (dimmer_step * DIMMER_ARR) / (DIMMER_STEPS - 1);
+      if (dimmer_phase == 0) {
+        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, ccr);  // D11 rising
+        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, 0);    // D10 off
+      } else {
+        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);    // D11 off
+        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, ccr);  // D10 rising
+      }
+      dimmer_step++;
+      if (dimmer_step >= DIMMER_STEPS) {
+        dimmer_step = 0;
+        dimmer_phase ^= 1;
+      }
+    }
+
     // ===== Deferred EEPROM save (blocks ~12ms, causes underruns — acceptable) =====
     if (eeprom_save_pending) {
       eeprom_save_pending = 0;
@@ -652,6 +680,9 @@ int main(void)
                 jitter_range, jitter_range / CPU_FREQ_MHZ);
         UART_Print(uart_buf);
       }
+
+      // LED dimmer: initialize DWT reference on first heartbeat
+      if (last_dimmer_dwt == 0) last_dimmer_dwt = DWT->CYCCNT;
 
       // CPU temperature
       int32_t temp = Read_CPU_Temperature();
@@ -1283,6 +1314,38 @@ static int32_t Read_CPU_Temperature(void)
   return temp_x10;
 }
 
+static void MX_TIM3_Init(void)
+{
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  // TIM3 clock = APB1 × 2 = 240MHz
+  // Prescaler 239 → counter @ 1MHz, ARR 999 → PWM @ 1kHz, 1000 steps resolution
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 239;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = DIMMER_ARR;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK) {
+    UART_Print("TIM3 PWM init FAILED\r\n");
+    return;
+  }
+
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK ||
+      HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_4) != HAL_OK) {
+    UART_Print("TIM3 CH3/CH4 config FAILED\r\n");
+    return;
+  }
+
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);  // D11 PB0
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  // D10 PB1
+  UART_Print("TIM3 PWM started — LED dimmer active (1kHz, 300 steps, 3s cycle)\r\n");
+}
+
 /**
   * Enable DMA controller clock
   */
@@ -1552,7 +1615,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
 void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
   if (hsai->Instance == SAI1_Block_A) {
     uint32_t now = DWT->CYCCNT;
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);  // PB1 (D10) HIGH (scope trigger)
+
 
     half_complete_count++;
 
@@ -1601,7 +1664,7 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
 void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
   if (hsai->Instance == SAI1_Block_A) {
     uint32_t now = DWT->CYCCNT;
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);  // PB1 (D10) HIGH (scope trigger)
+
 
     full_complete_count++;
 
