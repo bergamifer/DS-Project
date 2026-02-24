@@ -82,7 +82,6 @@ DMA_HandleTypeDef hdma_sai1_b;
 DMA_HandleTypeDef hdma_sai2_a;
 DMA_HandleTypeDef hdma_sai2_b;
 DMA_HandleTypeDef hdma_sai3_b;
-
 UART_HandleTypeDef huart7;
 UART_HandleTypeDef huart4;
 
@@ -113,6 +112,24 @@ static uint32_t delay_write_pos = 0;  // Current write index into delay lines
 
 // Active beamforming config (copied from ESP32 ds_config_t on update)
 static beam_config_t beam_config;
+
+/* ===== Test Tone: 1kHz sine @ 48kHz sample rate =====
+ * 48 samples per period (48000/1000 = 48), amplitude = -6dBFS (0x400000 peak)
+ * 480 samples per half-buffer = exactly 10 periods → no phase error across calls
+ * SET test_tone_enabled = 0 to restore normal beamforming mode
+ */
+static const int32_t sine_table_1khz[48] = {
+         0,   547466,  1085575,  1605080,  2097152,  2553318,
+   2965812,  3327563,  3632372,  3875034,  4051387,  4158422,
+   4194304,  4158422,  4051387,  3875034,  3632372,  3327563,
+   2965812,  2553318,  2097152,  1605080,  1085575,   547466,
+         0,  -547466, -1085575, -1605080, -2097152, -2553318,
+  -2965812, -3327563, -3632372, -3875034, -4051387, -4158422,
+  -4194304, -4158422, -4051387, -3875034, -3632372, -3327563,
+  -2965812, -2553318, -2097152, -1605080, -1085575,  -547466
+};
+static volatile uint8_t test_tone_enabled = 1; /* SET TO 0 FOR BEAMFORMING MODE */
+static uint32_t test_tone_phase = 0;
 
 // PCM1690 DAC pin configs (DS9 v2.0 — from pin_definitions.h)
 static const PCM1690_Pins dac_pins[4] = {
@@ -278,8 +295,10 @@ int main(void)
   // Startup message
   UART_Print("\r\n=== DS9 Beamforming Audio ===\r\n");
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
-  UART_Print("SAI1_A+B: TDM8 ch0-15, SAI2_A+B: TDM8 ch16-31, SAI3_B: RX 2ch\r\n");
-  UART_Print("Mode: Beamforming (ADC L -> delay lines -> 32ch DAC)\r\n\r\n");
+  UART_Print("*** U4-ONLY: SAI1_A Master TX TDM8 → DAC1 U4 (0x9C) ***\r\n");
+  UART_Print("Pins: PE2=MCLK PE4=FS PE5=SCK PE6=SD (AF6)\r\n");
+  UART_Print("Format: TDM_I2S (0x06) + STARTFRAME + FS_LOW pulse + BEFOREFIRSTBIT + DS=24\r\n");
+  UART_Print("Test tone: 1kHz -6dBFS on all 8 channels\r\n\r\n");
 
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();
@@ -328,127 +347,74 @@ int main(void)
     }
   }
 
-  // Pre-fill TX buffers with silence (zeros)
-  UART_Print("DBG: memset audio_buffer...\r\n");
+  // === SAI1_A → DAC1 (U4) via DMA1 (I2S standard 2ch) ===
+  UART_Print("\r\n=== U4-ONLY: SAI1_A Master TX TDM8 (PE2/PE4/PE5/PE6 AF6) ===\r\n");
+  UART_Print("Format: TDM_I2S (0x06) + STARTFRAME + FS_LOW pulse + BEFOREFIRSTBIT + DS=24\r\n");
+
+  // Pre-fill SAI1_A buffer with silence
   memset(audio_buffer, 0, sizeof(audio_buffer));
-  __DSB();  /* D-cache not enabled — DSB ensures DMA sees writes */
-  UART_Print("DBG: memset audio_buffer_1b...\r\n");
-  memset(audio_buffer_1b, 0, sizeof(audio_buffer_1b));
   __DSB();
-  UART_Print("TX buffers pre-filled (silence)\r\n");
 
-  // Start SAI1_B (slave) BEFORE SAI1_A (master) - slave must be ready when master clocks
+  // === STEP 1: Start SAI1_A DMA (also starts MCLK for PCM1690 POR) ===
   HAL_StatusTypeDef status;
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI1_B DMA Started OK (slave, waiting for master)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI1_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockB1));
-    UART_Print(uart_buf);
-  }
-
   status = HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_buffer, AUDIO_BUFFER_SIZE * 2);
   if (status == HAL_OK) {
-    UART_Print("SAI1_A DMA Started OK (master)\r\n");
-    Print_DMA_Config();
+    UART_Print("SAI1_A DMA started (MCLK + I2S 2ch)\r\n");
   } else {
     sprintf(uart_buf, "SAI1_A DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
             status, HAL_SAI_GetError(&hsai_BlockA1));
     UART_Print(uart_buf);
   }
 
-  // === PCM1690 DAC initialization via I2C ===
-  // MCLK is now running on PE2 (SAI1_A master started above).
-  // PCM1690 needs SCKI after RST release to complete POR (3846 cycles).
+  // === STEP 2: PCM1690 DAC1 (U4) init via I2C ===
   {
-    // Configure RST/AMUTEI GPIOs as output push-pull (drive LOW initially)
     GPIO_InitTypeDef gpio_dac = {0};
     gpio_dac.Mode  = GPIO_MODE_OUTPUT_PP;
     gpio_dac.Pull  = GPIO_NOPULL;
     gpio_dac.Speed = GPIO_SPEED_FREQ_LOW;
 
-    // GPIOE: PE10(RST0), PE3(RST1), PE11(AMUTEI0), PE1(AMUTEI1)
-    HAL_GPIO_WritePin(GPIOE, DAC0_RST_PIN | DAC1_RST_PIN | DAC0_AMUTEI_PIN | DAC1_AMUTEI_PIN, GPIO_PIN_RESET);
-    gpio_dac.Pin = DAC0_RST_PIN | DAC1_RST_PIN | DAC0_AMUTEI_PIN | DAC1_AMUTEI_PIN;
+    HAL_GPIO_WritePin(GPIOE, DAC1_RST_PIN | DAC1_AMUTEI_PIN, GPIO_PIN_RESET);
+    gpio_dac.Pin = DAC1_RST_PIN | DAC1_AMUTEI_PIN;
     HAL_GPIO_Init(GPIOE, &gpio_dac);
 
-    // GPIOC: PC10(RST2), PC11(AMUTEI2)
-    HAL_GPIO_WritePin(GPIOC, DAC2_RST_PIN | DAC2_AMUTEI_PIN, GPIO_PIN_RESET);
-    gpio_dac.Pin = DAC2_RST_PIN | DAC2_AMUTEI_PIN;
-    HAL_GPIO_Init(GPIOC, &gpio_dac);
+    PCM1690_Status ds = PCM1690_Init(&hi2c1, PCM1690_ADDR_DAC1, &dac_pins[1]);
+    sprintf(uart_buf, "  DAC1 U4 (0x%02X): %s\r\n", PCM1690_ADDR_DAC1,
+            ds == PCM1690_OK ? "OK" : "FAIL");
+    UART_Print(uart_buf);
 
-    // GPIOB: PB15(RST3), PB14(AMUTEI3)
-    HAL_GPIO_WritePin(GPIOB, DAC3_RST_PIN | DAC3_AMUTEI_PIN, GPIO_PIN_RESET);
-    gpio_dac.Pin = DAC3_RST_PIN | DAC3_AMUTEI_PIN;
-    HAL_GPIO_Init(GPIOB, &gpio_dac);
-
-    UART_Print("\r\nInitializing PCM1690 DACs via I2C (MCLK running)...\r\n");
-    const char *dac_names[4] = { "DAC0 U3", "DAC1 U4", "DAC2 U2", "DAC3 U8" };
-    uint8_t dacs_ok = 0;
-    for (int i = 0; i < 4; i++) {
-      PCM1690_Status ds = PCM1690_Init(&hi2c1, dac_addrs[i], &dac_pins[i]);
-      sprintf(uart_buf, "  %s (0x%02X): %s\r\n", dac_names[i], dac_addrs[i],
-              ds == PCM1690_OK ? "OK" : "FAIL");
-      UART_Print(uart_buf);
-      if (ds == PCM1690_OK) dacs_ok++;
+    // Readback PCM1690 registers for verification
+    if (ds == PCM1690_OK) {
+      uint8_t regval;
+      const uint8_t regs[] = {64, 65, 66, 68, 70, 72, 73, 74, 75, 76, 77, 78, 79};
+      const char *names[] = {"SYSTEM", "FORMAT", "OPER", "MUTE", "DEEMPH",
+                              "ATT1", "ATT2", "ATT3", "ATT4", "ATT5", "ATT6", "ATT7", "ATT8"};
+      UART_Print("  PCM1690 register readback:\r\n");
+      for (uint32_t r = 0; r < 13; r++) {
+        if (PCM1690_ReadReg(&hi2c1, PCM1690_ADDR_DAC1, regs[r], &regval) == PCM1690_OK) {
+          sprintf(uart_buf, "    Reg%u (%s) = 0x%02X\r\n", regs[r], names[r], regval);
+        } else {
+          sprintf(uart_buf, "    Reg%u (%s) = READ FAIL\r\n", regs[r], names[r]);
+        }
+        UART_Print(uart_buf);
+      }
     }
-    sprintf(uart_buf, "PCM1690: %d/4 initialized\r\n", dacs_ok);
-    UART_Print(uart_buf);
-
-    // Handle pin conflicts: reconfigure shared pins for SAI after DAC init
-    // PE3 (DAC1_RST) → SAI1_SD_B (AF6) — RST already released, no longer needed
-    gpio_dac.Pin       = GPIO_PIN_3;
-    gpio_dac.Mode      = GPIO_MODE_AF_PP;
-    gpio_dac.Pull      = GPIO_NOPULL;
-    gpio_dac.Speed     = GPIO_SPEED_FREQ_HIGH;
-    gpio_dac.Alternate = GPIO_AF6_SAI1;
-    HAL_GPIO_Init(GPIOE, &gpio_dac);
-
-    // PE11 (DAC0_AMUTEI) → SAI2_SD_B (AF10) — DAC0 unmuted via soft-mute register
-    gpio_dac.Pin       = GPIO_PIN_11;
-    gpio_dac.Alternate = GPIO_AF10_SAI2;
-    HAL_GPIO_Init(GPIOE, &gpio_dac);
-
-    UART_Print("PE3→SAI1_SD_B, PE11→SAI2_SD_B (pin conflicts resolved)\r\n");
   }
 
-  // === SAI2 (DAC2 + DAC3) DMA start ===
-  // Pre-fill SAI2 buffers with silence
-  memset(audio_buffer_2a, 0, sizeof(audio_buffer_2a));
-  __DSB();
-  memset(audio_buffer_2b, 0, sizeof(audio_buffer_2b));
-  __DSB();
-
-  // Start SAI2_B (slave) BEFORE SAI2_A (master) - slave must be ready when master clocks
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockB2, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI2_B DMA Started OK (slave, waiting for master)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI2_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockB2));
+  // === STEP 3: Verify SAI1_A is running ===
+  HAL_Delay(50);
+  {
+    uint32_t cr1 = SAI1_Block_A->CR1;
+    uint32_t sr = SAI1_Block_A->SR;
+    sprintf(uart_buf, "SAI1_A: SAIEN=%lu SR=0x%08lX\r\n",
+            (cr1 >> 16) & 1, sr);
+    UART_Print(uart_buf);
+    sprintf(uart_buf, "  flags: OVRUDR=%lu WCKCFG=%lu FREQ=%lu CNRDY=%lu\r\n",
+            (sr >> 0) & 1, (sr >> 2) & 1, (sr >> 3) & 1, (sr >> 4) & 1);
     UART_Print(uart_buf);
   }
 
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockA2, (uint8_t*)audio_buffer_2a, AUDIO_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI2_A DMA Started OK (master)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI2_A DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockA2));
-    UART_Print(uart_buf);
-  }
-
-  // === SAI3_B RX DMA start (ADC input) ===
-  __DSB();
-  status = HAL_SAI_Receive_DMA(&hsai_BlockB3, (uint8_t*)audio_buffer_3b_rx, ADC_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI3_B RX DMA Started OK (ADC master)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI3_B RX DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockB3));
-    UART_Print(uart_buf);
-  }
+  // SAI1_B/SAI2/SAI3 DISABLED for U4-only I2S test
+  UART_Print("SAI1_B/SAI2/SAI3 DISABLED (U4-only I2S test)\r\n");
 
   // === ESP32 UART protocol init ===
   UART_Protocol_Init(&huart4, &huart7);
@@ -552,47 +518,7 @@ int main(void)
       __DSB();
     }
 
-    // SAI2_A: channels 16-23
-    if (need_fill_2a_first_half) {
-      need_fill_2a_first_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
-      __DSB();
-    }
-    if (need_fill_2a_second_half) {
-      need_fill_2a_second_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
-      __DSB();
-    }
-
-    // SAI2_B: channels 24-31
-    if (need_fill_2b_first_half) {
-      need_fill_2b_first_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
-      __DSB();
-    }
-    if (need_fill_2b_second_half) {
-      need_fill_2b_second_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
-      __DSB();
-    }
-
-    // ===== SAI3_B RX → feed delay lines (MUST run before TX fills) =====
-    if (rx_3b_first_half_ready) {
-      rx_3b_first_half_ready = 0;
-      __DSB();
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
-    }
-    if (rx_3b_second_half_ready) {
-      rx_3b_second_half_ready = 0;
-      __DSB();
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
-    }
+    // SAI1_B/SAI2/SAI3 fills DISABLED for U4-only I2S test
 
     // ===== Check for new ESP32 config → apply to beam_config =====
     if (UART_Protocol_HasNewConfig()) {
@@ -689,6 +615,18 @@ int main(void)
       if (temp != -999) {
         int32_t t_abs = temp >= 0 ? temp : -temp;
         sprintf(uart_buf, "     Temp: %ld.%ld C\r\n", temp / 10, t_abs % 10);
+        UART_Print(uart_buf);
+      }
+
+      // Buffer dump: frame 2 (indices 16-23) to avoid sine(0)=0 and sine(1) edge cases
+      {
+        sprintf(uart_buf, "     Slots0-3: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
+                (uint32_t)audio_buffer[16], (uint32_t)audio_buffer[17],
+                (uint32_t)audio_buffer[18], (uint32_t)audio_buffer[19]);
+        UART_Print(uart_buf);
+        sprintf(uart_buf, "     Slots4-7: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
+                (uint32_t)audio_buffer[20], (uint32_t)audio_buffer[21],
+                (uint32_t)audio_buffer[22], (uint32_t)audio_buffer[23]);
         UART_Print(uart_buf);
       }
 
@@ -907,12 +845,12 @@ void PeriphCommonClock_Config(void)
   PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_SAI1|RCC_PERIPHCLK_SAI2|RCC_PERIPHCLK_UART7;
   PeriphClkInitStruct.PLL3.PLL3M = 5;
   PeriphClkInitStruct.PLL3.PLL3N = 68;
-  PeriphClkInitStruct.PLL3.PLL3P = 28;
+  PeriphClkInitStruct.PLL3.PLL3P = 14;  // 24.576 MHz MCLK (512×fS) for PCM1690 single-rate TDM
   PeriphClkInitStruct.PLL3.PLL3Q = 3;
   PeriphClkInitStruct.PLL3.PLL3R = 2;
   PeriphClkInitStruct.PLL3.PLL3RGE = RCC_PLL3VCIRANGE_2;
   PeriphClkInitStruct.PLL3.PLL3VCOSEL = RCC_PLL3VCOWIDE;
-  PeriphClkInitStruct.PLL3.PLL3FRACN = 6660;  // For exact 12.288 MHz MCLK (was 6329)
+  PeriphClkInitStruct.PLL3.PLL3FRACN = 6660;  // VCO=344.0625MHz, /14 = 24.576 MHz MCLK (512×fS)
   PeriphClkInitStruct.Sai1ClockSelection = RCC_SAI1CLKSOURCE_PLL3;
   PeriphClkInitStruct.Sai23ClockSelection = RCC_SAI23CLKSOURCE_PLL3;
   PeriphClkInitStruct.Usart234578ClockSelection = RCC_USART234578CLKSOURCE_PLL3;
@@ -988,13 +926,13 @@ static void MX_SAI1_Init(void)
   hsai_BlockA1.Instance = SAI1_Block_A;
   hsai_BlockA1.Init.Protocol = SAI_FREE_PROTOCOL;
   hsai_BlockA1.Init.AudioMode = SAI_MODEMASTER_TX;
-  hsai_BlockA1.Init.DataSize = SAI_DATASIZE_24;
+  hsai_BlockA1.Init.DataSize = SAI_DATASIZE_24;  // 24-bit: SAI uses bits[31:8] of DMA word
   hsai_BlockA1.Init.FirstBit = SAI_FIRSTBIT_MSB;
   hsai_BlockA1.Init.ClockStrobing = SAI_CLOCKSTROBING_FALLINGEDGE;
   hsai_BlockA1.Init.Synchro = SAI_ASYNCHRONOUS;
   hsai_BlockA1.Init.OutputDrive = SAI_OUTPUTDRIVE_DISABLE;
   hsai_BlockA1.Init.NoDivider = SAI_MCK_OVERSAMPLING_DISABLE;
-  hsai_BlockA1.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_DISABLE;
+  hsai_BlockA1.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_ENABLE;  // MCLK=2×BCK → 512×fS for single-rate TDM
   hsai_BlockA1.Init.FIFOThreshold = SAI_FIFOTHRESHOLD_EMPTY;
   hsai_BlockA1.Init.AudioFrequency = SAI_AUDIO_FREQUENCY_48K;
   hsai_BlockA1.Init.SynchroExt = SAI_SYNCEXT_DISABLE;
@@ -1004,15 +942,15 @@ static void MX_SAI1_Init(void)
   hsai_BlockA1.Init.PdmInit.Activation = DISABLE;
   hsai_BlockA1.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockA1.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
-  hsai_BlockA1.FrameInit.FrameLength = 256;           // TDM8: 8 slots × 32 bits
-  hsai_BlockA1.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockA1.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai_BlockA1.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockA1.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockA1.FrameInit.FrameLength = 256;            // TDM8: 8 slots × 32 bits
+  hsai_BlockA1.FrameInit.ActiveFrameLength = 1;        // Short pulse: 1 BCK at frame start
+  hsai_BlockA1.FrameInit.FSDefinition = SAI_FS_STARTFRAME; // Pulse marks frame start (not L/R split)
+  hsai_BlockA1.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;   // Negative pulse: falling edge = I2S frame start
+  hsai_BlockA1.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT; // I2S timing: data 1 BCK after FS
   hsai_BlockA1.SlotInit.FirstBitOffset = 0;
   hsai_BlockA1.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
-  hsai_BlockA1.SlotInit.SlotNumber = 8;                // TDM8: 8 slots (was 2)
-  hsai_BlockA1.SlotInit.SlotActive = 0x000000FF;       // All 8 slots active (was 0x03)
+  hsai_BlockA1.SlotInit.SlotNumber = 8;                // TDM8: 8 slots
+  hsai_BlockA1.SlotInit.SlotActive = 0x000000FF;       // All 8 slots active
   if (HAL_SAI_Init(&hsai_BlockA1) != HAL_OK)
   {
     Error_Handler();
@@ -1023,7 +961,7 @@ static void MX_SAI1_Init(void)
   hsai_BlockB1.Instance = SAI1_Block_B;
   hsai_BlockB1.Init.Protocol = SAI_FREE_PROTOCOL;
   hsai_BlockB1.Init.AudioMode = SAI_MODESLAVE_TX;
-  hsai_BlockB1.Init.DataSize = SAI_DATASIZE_24;
+  hsai_BlockB1.Init.DataSize = SAI_DATASIZE_24;  // match master
   hsai_BlockB1.Init.FirstBit = SAI_FIRSTBIT_MSB;
   hsai_BlockB1.Init.ClockStrobing = SAI_CLOCKSTROBING_FALLINGEDGE;
   hsai_BlockB1.Init.Synchro = SAI_SYNCHRONOUS;
@@ -1037,10 +975,10 @@ static void MX_SAI1_Init(void)
   hsai_BlockB1.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockB1.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
   hsai_BlockB1.FrameInit.FrameLength = 256;
-  hsai_BlockB1.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockB1.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai_BlockB1.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockB1.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockB1.FrameInit.ActiveFrameLength = 1;        // Match master: short pulse
+  hsai_BlockB1.FrameInit.FSDefinition = SAI_FS_STARTFRAME;
+  hsai_BlockB1.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;   // Match master: negative pulse
+  hsai_BlockB1.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT;
   hsai_BlockB1.SlotInit.FirstBitOffset = 0;
   hsai_BlockB1.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
   hsai_BlockB1.SlotInit.SlotNumber = 8;
@@ -1155,7 +1093,7 @@ static void MX_SAI2_Init(void)
   hsai_BlockA2.Init.Synchro = SAI_ASYNCHRONOUS;
   hsai_BlockA2.Init.OutputDrive = SAI_OUTPUTDRIVE_DISABLE;
   hsai_BlockA2.Init.NoDivider = SAI_MCK_OVERSAMPLING_DISABLE;
-  hsai_BlockA2.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_DISABLE;
+  hsai_BlockA2.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_ENABLE;  // MCLK=2×BCK → 512×fS for single-rate TDM
   hsai_BlockA2.Init.FIFOThreshold = SAI_FIFOTHRESHOLD_EMPTY;
   hsai_BlockA2.Init.AudioFrequency = SAI_AUDIO_FREQUENCY_48K;
   hsai_BlockA2.Init.SynchroExt = SAI_SYNCEXT_DISABLE;
@@ -1166,10 +1104,10 @@ static void MX_SAI2_Init(void)
   hsai_BlockA2.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockA2.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
   hsai_BlockA2.FrameInit.FrameLength = 256;
-  hsai_BlockA2.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockA2.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai_BlockA2.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockA2.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockA2.FrameInit.ActiveFrameLength = 1;        // Short pulse: 1 BCK at frame start
+  hsai_BlockA2.FrameInit.FSDefinition = SAI_FS_STARTFRAME;
+  hsai_BlockA2.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;   // Negative pulse
+  hsai_BlockA2.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT; // I2S timing: data 1 BCK after FS
   hsai_BlockA2.SlotInit.FirstBitOffset = 0;
   hsai_BlockA2.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
   hsai_BlockA2.SlotInit.SlotNumber = 8;
@@ -1197,10 +1135,10 @@ static void MX_SAI2_Init(void)
   hsai_BlockB2.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockB2.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
   hsai_BlockB2.FrameInit.FrameLength = 256;
-  hsai_BlockB2.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockB2.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai_BlockB2.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockB2.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockB2.FrameInit.ActiveFrameLength = 1;        // Match master: short pulse
+  hsai_BlockB2.FrameInit.FSDefinition = SAI_FS_STARTFRAME;
+  hsai_BlockB2.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;   // Match master: negative pulse
+  hsai_BlockB2.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT;
   hsai_BlockB2.SlotInit.FirstBitOffset = 0;
   hsai_BlockB2.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
   hsai_BlockB2.SlotInit.SlotNumber = 8;
@@ -1572,6 +1510,21 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
  * per-channel delay offset, applies gain and mute. Single beam (L only) for now.
  */
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset) {
+  /* Test tone mode: 1kHz sine on all 8 channels, bypasses beamforming */
+  if (test_tone_enabled) {
+    uint32_t phase = test_tone_phase % 48;
+    for (uint32_t i = 0; i < samples; i++) {
+      int32_t s = sine_table_1khz[phase];
+      if (++phase >= 48) phase = 0;
+      int32_t out = s << 8;
+      for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+        buffer[i * AUDIO_CHANNELS + ch] = out;
+      }
+    }
+    test_tone_phase += samples;
+    return;
+  }
+
   uint32_t wp = delay_write_pos;
   uint8_t master = beam_config.mute_global ? 0 : beam_config.master_gain;
 

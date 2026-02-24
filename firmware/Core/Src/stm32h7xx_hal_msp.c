@@ -269,7 +269,6 @@ extern DMA_HandleTypeDef hdma_sai1_b;
 extern DMA_HandleTypeDef hdma_sai2_a;
 extern DMA_HandleTypeDef hdma_sai2_b;
 extern DMA_HandleTypeDef hdma_sai3_b;
-
 static uint32_t SAI1_client =0;
 static uint32_t SAI2_client =0;
 static uint32_t SAI3_client =0;
