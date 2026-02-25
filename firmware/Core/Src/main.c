@@ -295,10 +295,9 @@ int main(void)
   // Startup message
   UART_Print("\r\n=== DS9 Beamforming Audio ===\r\n");
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
-  UART_Print("*** U4-ONLY: SAI1_A Master TX TDM8 → DAC1 U4 (0x9C) ***\r\n");
-  UART_Print("Pins: PE2=MCLK PE4=FS PE5=SCK PE6=SD (AF6)\r\n");
-  UART_Print("Format: TDM_I2S (0x06) + STARTFRAME + FS_LOW pulse + BEFOREFIRSTBIT + DS=24\r\n");
-  UART_Print("Test tone: 1kHz -6dBFS on all 8 channels\r\n\r\n");
+  UART_Print("4x SAI TDM8: SAI1_A+B ch0-15, SAI2_A+B ch16-31 → 4x PCM1690 (32ch total)\r\n");
+  UART_Print("Format: TDM_I2S + STARTFRAME + FS_LOW + BEFOREFIRSTBIT + DS=24, MCLK=512xfS\r\n");
+  UART_Print("Test tone: 1kHz -6dBFS on all 32 channels\r\n\r\n");
 
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();
@@ -347,48 +346,79 @@ int main(void)
     }
   }
 
-  // === SAI1_A → DAC1 (U4) via DMA1 (I2S standard 2ch) ===
-  UART_Print("\r\n=== U4-ONLY: SAI1_A Master TX TDM8 (PE2/PE4/PE5/PE6 AF6) ===\r\n");
-  UART_Print("Format: TDM_I2S (0x06) + STARTFRAME + FS_LOW pulse + BEFOREFIRSTBIT + DS=24\r\n");
+  // === SAI TDM8 init: 4x DAC, 32 channels ===
+  UART_Print("\r\n=== SAI TDM8: 4x PCM1690, 32 channels ===\r\n");
+  UART_Print("Format: TDM_I2S (0x06) + STARTFRAME + FS_LOW + BEFOREFIRSTBIT + DS=24\r\n");
+  UART_Print("MCLK=24.576MHz (512xfS) → PCM1690 single-rate TDM on DIN1\r\n");
 
-  // Pre-fill SAI1_A buffer with silence
-  memset(audio_buffer, 0, sizeof(audio_buffer));
+  // Pre-fill ALL TX buffers with silence before starting DMA
+  memset(audio_buffer,    0, sizeof(audio_buffer));    // SAI1_A ch0-7
+  memset(audio_buffer_1b, 0, sizeof(audio_buffer_1b)); // SAI1_B ch8-15
+  memset(audio_buffer_2a, 0, sizeof(audio_buffer_2a)); // SAI2_A ch16-23
+  memset(audio_buffer_2b, 0, sizeof(audio_buffer_2b)); // SAI2_B ch24-31
   __DSB();
 
-  // === STEP 1: Start SAI1_A DMA (also starts MCLK for PCM1690 POR) ===
+  // === STEP 1: Start SAI1_A DMA (master — generates MCLK on PE2 for PCM1690 POR) ===
   HAL_StatusTypeDef status;
   status = HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_buffer, AUDIO_BUFFER_SIZE * 2);
   if (status == HAL_OK) {
-    UART_Print("SAI1_A DMA started (MCLK + I2S 2ch)\r\n");
+    UART_Print("SAI1_A DMA started (MCLK=24.576MHz on PE2)\r\n");
   } else {
     sprintf(uart_buf, "SAI1_A DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
             status, HAL_SAI_GetError(&hsai_BlockA1));
     UART_Print(uart_buf);
   }
 
-  // === STEP 2: PCM1690 DAC1 (U4) init via I2C ===
+  // === STEP 2: Init all 4 PCM1690 DACs via I2C (MCLK now running → POR completes) ===
+  // NOTE: PE3 (DAC1_RST) and PE11 (DAC0_AMUTEI) are shared with SAI pins.
+  // MSP configured them as AF during HAL_SAI_Init — we override as GPIO here,
+  // then reconfigure back to AF after DAC init (STEP 3).
   {
     GPIO_InitTypeDef gpio_dac = {0};
     gpio_dac.Mode  = GPIO_MODE_OUTPUT_PP;
     gpio_dac.Pull  = GPIO_NOPULL;
     gpio_dac.Speed = GPIO_SPEED_FREQ_LOW;
 
+    // DAC0 U3 (0x98): PE10=RST, PE11=AMUTEI — PE11 shared with SAI2_SD_B
+    HAL_GPIO_WritePin(GPIOE, DAC0_RST_PIN | DAC0_AMUTEI_PIN, GPIO_PIN_RESET);
+    gpio_dac.Pin = DAC0_RST_PIN | DAC0_AMUTEI_PIN;
+    HAL_GPIO_Init(GPIOE, &gpio_dac);
+
+    // DAC1 U4 (0x9C): PE3=RST, PE1=AMUTEI — PE3 shared with SAI1_SD_B
     HAL_GPIO_WritePin(GPIOE, DAC1_RST_PIN | DAC1_AMUTEI_PIN, GPIO_PIN_RESET);
     gpio_dac.Pin = DAC1_RST_PIN | DAC1_AMUTEI_PIN;
     HAL_GPIO_Init(GPIOE, &gpio_dac);
 
-    PCM1690_Status ds = PCM1690_Init(&hi2c1, PCM1690_ADDR_DAC1, &dac_pins[1]);
-    sprintf(uart_buf, "  DAC1 U4 (0x%02X): %s\r\n", PCM1690_ADDR_DAC1,
-            ds == PCM1690_OK ? "OK" : "FAIL");
+    // DAC2 U2 (0x9A): PC10=RST, PC11=AMUTEI — no pin conflicts
+    HAL_GPIO_WritePin(GPIOC, DAC2_RST_PIN | DAC2_AMUTEI_PIN, GPIO_PIN_RESET);
+    gpio_dac.Pin = DAC2_RST_PIN | DAC2_AMUTEI_PIN;
+    HAL_GPIO_Init(GPIOC, &gpio_dac);
+
+    // DAC3 U8 (0x9E): PB15=RST, PB14=AMUTEI — no pin conflicts
+    HAL_GPIO_WritePin(GPIOB, DAC3_RST_PIN | DAC3_AMUTEI_PIN, GPIO_PIN_RESET);
+    gpio_dac.Pin = DAC3_RST_PIN | DAC3_AMUTEI_PIN;
+    HAL_GPIO_Init(GPIOB, &gpio_dac);
+
+    UART_Print("Initializing 4x PCM1690 DACs via I2C1...\r\n");
+    const char *dac_names[4] = {"DAC0 U3", "DAC1 U4", "DAC2 U2", "DAC3 U8"};
+    uint8_t dacs_ok = 0;
+    for (int i = 0; i < 4; i++) {
+      PCM1690_Status ds = PCM1690_Init(&hi2c1, dac_addrs[i], &dac_pins[i]);
+      sprintf(uart_buf, "  %s (0x%02X): %s\r\n", dac_names[i], dac_addrs[i],
+              ds == PCM1690_OK ? "OK" : "FAIL");
+      UART_Print(uart_buf);
+      if (ds == PCM1690_OK) dacs_ok++;
+    }
+    sprintf(uart_buf, "PCM1690: %d/4 initialized\r\n", dacs_ok);
     UART_Print(uart_buf);
 
-    // Readback PCM1690 registers for verification
-    if (ds == PCM1690_OK) {
+    // Register readback for DAC1 U4 (verified working DAC)
+    {
       uint8_t regval;
       const uint8_t regs[] = {64, 65, 66, 68, 70, 72, 73, 74, 75, 76, 77, 78, 79};
       const char *names[] = {"SYSTEM", "FORMAT", "OPER", "MUTE", "DEEMPH",
                               "ATT1", "ATT2", "ATT3", "ATT4", "ATT5", "ATT6", "ATT7", "ATT8"};
-      UART_Print("  PCM1690 register readback:\r\n");
+      UART_Print("  DAC1 U4 register readback:\r\n");
       for (uint32_t r = 0; r < 13; r++) {
         if (PCM1690_ReadReg(&hi2c1, PCM1690_ADDR_DAC1, regs[r], &regval) == PCM1690_OK) {
           sprintf(uart_buf, "    Reg%u (%s) = 0x%02X\r\n", regs[r], names[r], regval);
@@ -400,21 +430,72 @@ int main(void)
     }
   }
 
-  // === STEP 3: Verify SAI1_A is running ===
-  HAL_Delay(50);
+  // === STEP 3: Resolve pin conflicts — reconfigure shared pins back to SAI AF ===
+  // Must happen AFTER PCM1690 init (RST/AMUTEI no longer needed as GPIO)
+  // and BEFORE starting SAI1_B / SAI2_B DMA.
   {
-    uint32_t cr1 = SAI1_Block_A->CR1;
-    uint32_t sr = SAI1_Block_A->SR;
-    sprintf(uart_buf, "SAI1_A: SAIEN=%lu SR=0x%08lX\r\n",
-            (cr1 >> 16) & 1, sr);
-    UART_Print(uart_buf);
-    sprintf(uart_buf, "  flags: OVRUDR=%lu WCKCFG=%lu FREQ=%lu CNRDY=%lu\r\n",
-            (sr >> 0) & 1, (sr >> 2) & 1, (sr >> 3) & 1, (sr >> 4) & 1);
+    GPIO_InitTypeDef gpio_sai = {0};
+    gpio_sai.Mode  = GPIO_MODE_AF_PP;
+    gpio_sai.Pull  = GPIO_NOPULL;
+    gpio_sai.Speed = GPIO_SPEED_FREQ_HIGH;
+
+    // PE3 (DAC1_RST) → SAI1_SD_B (AF6)
+    gpio_sai.Pin       = DAC1_RST_PIN;  // PE3
+    gpio_sai.Alternate = GPIO_AF6_SAI1;
+    HAL_GPIO_Init(DAC1_RST_PORT, &gpio_sai);  // GPIOE
+
+    // PE11 (DAC0_AMUTEI) → SAI2_SD_B (AF10)
+    gpio_sai.Pin       = DAC0_AMUTEI_PIN;  // PE11
+    gpio_sai.Alternate = GPIO_AF10_SAI2;
+    HAL_GPIO_Init(DAC0_AMUTEI_PORT, &gpio_sai);  // GPIOE
+
+    UART_Print("PE3→SAI1_SD_B (AF6), PE11→SAI2_SD_B (AF10): pin conflicts resolved\r\n");
+  }
+
+  // === STEP 4: Start remaining SAI DMAs ===
+  // SAI2_B (slave) must start BEFORE SAI2_A (master)
+  status = HAL_SAI_Transmit_DMA(&hsai_BlockB2, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
+  if (status == HAL_OK) {
+    UART_Print("SAI2_B DMA started (slave, ch24-31 → DAC3 U8)\r\n");
+  } else {
+    sprintf(uart_buf, "SAI2_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
+            status, HAL_SAI_GetError(&hsai_BlockB2));
     UART_Print(uart_buf);
   }
 
-  // SAI1_B/SAI2/SAI3 DISABLED for U4-only I2S test
-  UART_Print("SAI1_B/SAI2/SAI3 DISABLED (U4-only I2S test)\r\n");
+  status = HAL_SAI_Transmit_DMA(&hsai_BlockA2, (uint8_t*)audio_buffer_2a, AUDIO_BUFFER_SIZE * 2);
+  if (status == HAL_OK) {
+    UART_Print("SAI2_A DMA started (master, ch16-23 → DAC2 U2, MCLK on PD13)\r\n");
+  } else {
+    sprintf(uart_buf, "SAI2_A DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
+            status, HAL_SAI_GetError(&hsai_BlockA2));
+    UART_Print(uart_buf);
+  }
+
+  // SAI1_B (slave): SAI1_A master already running — slave syncs on next FS pulse
+  status = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
+  if (status == HAL_OK) {
+    UART_Print("SAI1_B DMA started (slave, ch8-15 → DAC1 U4 via PE3)\r\n");
+  } else {
+    sprintf(uart_buf, "SAI1_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
+            status, HAL_SAI_GetError(&hsai_BlockB1));
+    UART_Print(uart_buf);
+  }
+
+  // === STEP 5: Verify SAI1_A and SAI2_A are running ===
+  HAL_Delay(50);
+  {
+    uint32_t cr1 = SAI1_Block_A->CR1;
+    uint32_t sr  = SAI1_Block_A->SR;
+    sprintf(uart_buf, "SAI1_A: SAIEN=%lu SR=0x%08lX (OVRUDR=%lu WCKCFG=%lu)\r\n",
+            (cr1 >> 16) & 1, sr, (sr >> 0) & 1, (sr >> 2) & 1);
+    UART_Print(uart_buf);
+    cr1 = SAI2_Block_A->CR1;
+    sr  = SAI2_Block_A->SR;
+    sprintf(uart_buf, "SAI2_A: SAIEN=%lu SR=0x%08lX (OVRUDR=%lu WCKCFG=%lu)\r\n",
+            (cr1 >> 16) & 1, sr, (sr >> 0) & 1, (sr >> 2) & 1);
+    UART_Print(uart_buf);
+  }
 
   // === ESP32 UART protocol init ===
   UART_Protocol_Init(&huart4, &huart7);
@@ -518,7 +599,33 @@ int main(void)
       __DSB();
     }
 
-    // SAI1_B/SAI2/SAI3 fills DISABLED for U4-only I2S test
+    // SAI2_A: channels 16-23
+    if (need_fill_2a_first_half) {
+      need_fill_2a_first_half = 0;
+      __DSB();
+      Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
+      __DSB();
+    }
+    if (need_fill_2a_second_half) {
+      need_fill_2a_second_half = 0;
+      __DSB();
+      Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
+      __DSB();
+    }
+
+    // SAI2_B: channels 24-31
+    if (need_fill_2b_first_half) {
+      need_fill_2b_first_half = 0;
+      __DSB();
+      Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
+      __DSB();
+    }
+    if (need_fill_2b_second_half) {
+      need_fill_2b_second_half = 0;
+      __DSB();
+      Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
+      __DSB();
+    }
 
     // ===== Check for new ESP32 config → apply to beam_config =====
     if (UART_Protocol_HasNewConfig()) {
@@ -630,13 +737,15 @@ int main(void)
         UART_Print(uart_buf);
       }
 
-      // Check SAI status
-      HAL_SAI_StateTypeDef sai_state = HAL_SAI_GetState(&hsai_BlockA1);
-      if (sai_state != HAL_SAI_STATE_BUSY_TX) {
-        sprintf(uart_buf, "WARNING: SAI State = %d (expected BUSY_TX=2)\r\n", sai_state);
+      // Check SAI status (both masters)
+      HAL_SAI_StateTypeDef sai1_state = HAL_SAI_GetState(&hsai_BlockA1);
+      HAL_SAI_StateTypeDef sai2_state = HAL_SAI_GetState(&hsai_BlockA2);
+      if (sai1_state != HAL_SAI_STATE_BUSY_TX) {
+        sprintf(uart_buf, "WARNING: SAI1_A State = %d (expected BUSY_TX=2)\r\n", sai1_state);
         UART_Print(uart_buf);
-        sprintf(uart_buf, "SAI Error: 0x%08lX, Last: 0x%08lX\r\n",
-                HAL_SAI_GetError(&hsai_BlockA1), last_sai_error);
+      }
+      if (sai2_state != HAL_SAI_STATE_BUSY_TX) {
+        sprintf(uart_buf, "WARNING: SAI2_A State = %d (expected BUSY_TX=2)\r\n", sai2_state);
         UART_Print(uart_buf);
       }
 
