@@ -430,55 +430,24 @@ int main(void)
     }
   }
 
-  // === STEP 3: Resolve pin conflicts — reconfigure shared pins back to SAI AF ===
-  // Must happen AFTER PCM1690 init (RST/AMUTEI no longer needed as GPIO)
-  // and BEFORE starting SAI1_B / SAI2_B DMA.
-  {
-    GPIO_InitTypeDef gpio_sai = {0};
-    gpio_sai.Mode  = GPIO_MODE_AF_PP;
-    gpio_sai.Pull  = GPIO_NOPULL;
-    gpio_sai.Speed = GPIO_SPEED_FREQ_HIGH;
+  // === STEP 3: SAI1_B and SAI2_B intentionally NOT started (DS9 PCB pin conflicts) ===
+  // PE3 (SAI1_SD_B) is wired to DAC1_RST on DS9 PCB. Driving audio data on PE3
+  // would toggle DAC1 RST at BCK speed → U4 resets continuously → no audio.
+  // PE11 (SAI2_SD_B) is wired to DAC0_AMUTEI on DS9 PCB. Same problem: SAI data
+  // would mute/unmute DAC0 at BCK speed.
+  // After PCM1690_Init, both PE3 and PE11 are GPIO output HIGH:
+  //   PE3  HIGH = DAC1 RST released (U4 runs normally) ✅
+  //   PE11 HIGH = DAC0 AMUTEI HIGH (DAC0 unmuted)      ✅
+  // Enable SAI1_B / SAI2_B only after bodging the PCB to route these pins to DAC DIN inputs.
+  UART_Print("SAI1_B SKIP (PE3=DAC1_RST conflict), SAI2_B SKIP (PE11=DAC0_AMUTEI conflict)\r\n");
 
-    // PE3 (DAC1_RST) → SAI1_SD_B (AF6)
-    gpio_sai.Pin       = DAC1_RST_PIN;  // PE3
-    gpio_sai.Alternate = GPIO_AF6_SAI1;
-    HAL_GPIO_Init(DAC1_RST_PORT, &gpio_sai);  // GPIOE
-
-    // PE11 (DAC0_AMUTEI) → SAI2_SD_B (AF10)
-    gpio_sai.Pin       = DAC0_AMUTEI_PIN;  // PE11
-    gpio_sai.Alternate = GPIO_AF10_SAI2;
-    HAL_GPIO_Init(DAC0_AMUTEI_PORT, &gpio_sai);  // GPIOE
-
-    UART_Print("PE3→SAI1_SD_B (AF6), PE11→SAI2_SD_B (AF10): pin conflicts resolved\r\n");
-  }
-
-  // === STEP 4: Start remaining SAI DMAs ===
-  // SAI2_B (slave) must start BEFORE SAI2_A (master)
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockB2, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI2_B DMA started (slave, ch24-31 → DAC3 U8)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI2_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockB2));
-    UART_Print(uart_buf);
-  }
-
+  // === STEP 4: Start SAI2_A DMA (PD11=SD, PD12=SCK, PD13=FS — no pin conflicts) ===
   status = HAL_SAI_Transmit_DMA(&hsai_BlockA2, (uint8_t*)audio_buffer_2a, AUDIO_BUFFER_SIZE * 2);
   if (status == HAL_OK) {
-    UART_Print("SAI2_A DMA started (master, ch16-23 → DAC2 U2, MCLK on PD13)\r\n");
+    UART_Print("SAI2_A DMA started (master, ch16-23 → DAC2 U2 via PD11)\r\n");
   } else {
     sprintf(uart_buf, "SAI2_A DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
             status, HAL_SAI_GetError(&hsai_BlockA2));
-    UART_Print(uart_buf);
-  }
-
-  // SAI1_B (slave): SAI1_A master already running — slave syncs on next FS pulse
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI1_B DMA started (slave, ch8-15 → DAC1 U4 via PE3)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI1_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockB1));
     UART_Print(uart_buf);
   }
 
@@ -585,7 +554,8 @@ int main(void)
       fill_sample_count++;
     }
 
-    // SAI1_B: channels 8-15
+    // SAI1_B: channels 8-15 — DMA NOT started (PE3=DAC1_RST conflict on DS9 PCB)
+    // Fills below are dead code until SAI1_B DMA is enabled after PCB bodge.
     if (need_fill_1b_first_half) {
       need_fill_1b_first_half = 0;
       __DSB();
@@ -613,7 +583,8 @@ int main(void)
       __DSB();
     }
 
-    // SAI2_B: channels 24-31
+    // SAI2_B: channels 24-31 — DMA NOT started (PE11=DAC0_AMUTEI conflict on DS9 PCB)
+    // Fills below are dead code until SAI2_B DMA is enabled after PCB bodge.
     if (need_fill_2b_first_half) {
       need_fill_2b_first_half = 0;
       __DSB();
