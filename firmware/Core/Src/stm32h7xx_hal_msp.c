@@ -471,7 +471,7 @@ void HAL_SAI_MspInit(SAI_HandleTypeDef* hsai)
     }
     SAI3_client ++;
 
-    /**SAI3_B GPIO Configuration (ADC input - Master RX)
+    /**SAI3_B GPIO Configuration (DAC3 U8 output - Master TX TDM8)
     PD8     ------> SAI3_SCK_B (AF6)
     PD9     ------> SAI3_SD_B  (AF6)
     PD10    ------> SAI3_FS_B  (AF6)
@@ -484,10 +484,10 @@ void HAL_SAI_MspInit(SAI_HandleTypeDef* hsai)
     GPIO_InitStruct.Alternate = GPIO_AF6_SAI3;
     HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-      /* Peripheral DMA init - RX direction! */
+      /* Peripheral DMA init - TX direction (Memory → SAI → DAC3) */
     hdma_sai3_b.Instance = DMA1_Stream4;
     hdma_sai3_b.Init.Request = DMA_REQUEST_SAI3_B;
-    hdma_sai3_b.Init.Direction = DMA_PERIPH_TO_MEMORY;
+    hdma_sai3_b.Init.Direction = DMA_MEMORY_TO_PERIPH;
     hdma_sai3_b.Init.PeriphInc = DMA_PINC_DISABLE;
     hdma_sai3_b.Init.MemInc = DMA_MINC_ENABLE;
     hdma_sai3_b.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;

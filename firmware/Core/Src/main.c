@@ -430,16 +430,30 @@ int main(void)
     }
   }
 
-  // === STEP 3: SAI1_B and SAI2_B intentionally NOT started (DS9 PCB pin conflicts) ===
-  // PE3 (SAI1_SD_B) is wired to DAC1_RST on DS9 PCB. Driving audio data on PE3
-  // would toggle DAC1 RST at BCK speed → U4 resets continuously → no audio.
-  // PE11 (SAI2_SD_B) is wired to DAC0_AMUTEI on DS9 PCB. Same problem: SAI data
-  // would mute/unmute DAC0 at BCK speed.
-  // After PCM1690_Init, both PE3 and PE11 are GPIO output HIGH:
-  //   PE3  HIGH = DAC1 RST released (U4 runs normally) ✅
-  //   PE11 HIGH = DAC0 AMUTEI HIGH (DAC0 unmuted)      ✅
-  // Enable SAI1_B / SAI2_B only after bodging the PCB to route these pins to DAC DIN inputs.
-  UART_Print("SAI1_B SKIP (PE3=DAC1_RST conflict), SAI2_B SKIP (PE11=DAC0_AMUTEI conflict)\r\n");
+  // === STEP 3: Reconfigure PE3 as SAI1_SD_B (AF6) and start SAI1_B DMA ===
+  // PE3 was GPIO (DAC1_RST) during PCM1690 init. Now bodged to DAC0 DIN → safe to use as SAI.
+  // DAC1 U4 RST must be tied to VCC externally (bodge wire) since PE3 is now SAI data.
+  {
+    GPIO_InitTypeDef gpio_sai = {0};
+    gpio_sai.Pin       = GPIO_PIN_3;
+    gpio_sai.Mode      = GPIO_MODE_AF_PP;
+    gpio_sai.Pull      = GPIO_NOPULL;
+    gpio_sai.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;
+    gpio_sai.Alternate = GPIO_AF6_SAI1;
+    HAL_GPIO_Init(GPIOE, &gpio_sai);
+  }
+  // SAI1_B is Slave TX sync — syncs to SAI1_A on next FS edge
+  status = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
+  if (status == HAL_OK) {
+    UART_Print("SAI1_B DMA started (slave TX sync, ch8-15 → DAC0 U3 via PE3)\r\n");
+  } else {
+    sprintf(uart_buf, "SAI1_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
+            status, HAL_SAI_GetError(&hsai_BlockB1));
+    UART_Print(uart_buf);
+  }
+
+  // PE11 (SAI2_SD_B) still NOT started — DAC0_AMUTEI conflict, no bodge yet
+  UART_Print("SAI2_B SKIP (PE11=DAC0_AMUTEI conflict)\r\n");
 
   // === STEP 4: Start SAI2_A DMA (PD11=SD, PD12=SCK, PD13=FS — no pin conflicts) ===
   status = HAL_SAI_Transmit_DMA(&hsai_BlockA2, (uint8_t*)audio_buffer_2a, AUDIO_BUFFER_SIZE * 2);
@@ -451,7 +465,21 @@ int main(void)
     UART_Print(uart_buf);
   }
 
-  // === STEP 5: Verify SAI1_A and SAI2_A are running ===
+  // === SAI3_B: Master TX TDM8 → DAC3 U8 (PD8/PD9/PD10 AF6, no MCLK pin) ===
+  // Pre-fill SAI3_B buffer with silence (reuses audio_buffer_2b for ch24-31)
+  memset(audio_buffer_2b, 0, sizeof(audio_buffer_2b));
+  __DSB();
+
+  status = HAL_SAI_Transmit_DMA(&hsai_BlockB3, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
+  if (status == HAL_OK) {
+    UART_Print("SAI3_B DMA started (master TX, ch24-31 → DAC3 U8 via PD9)\r\n");
+  } else {
+    sprintf(uart_buf, "SAI3_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
+            status, HAL_SAI_GetError(&hsai_BlockB3));
+    UART_Print(uart_buf);
+  }
+
+  // === STEP 5: Verify SAI masters are running ===
   HAL_Delay(50);
   {
     uint32_t cr1 = SAI1_Block_A->CR1;
@@ -462,6 +490,11 @@ int main(void)
     cr1 = SAI2_Block_A->CR1;
     sr  = SAI2_Block_A->SR;
     sprintf(uart_buf, "SAI2_A: SAIEN=%lu SR=0x%08lX (OVRUDR=%lu WCKCFG=%lu)\r\n",
+            (cr1 >> 16) & 1, sr, (sr >> 0) & 1, (sr >> 2) & 1);
+    UART_Print(uart_buf);
+    cr1 = SAI3_Block_B->CR1;
+    sr  = SAI3_Block_B->SR;
+    sprintf(uart_buf, "SAI3_B: SAIEN=%lu SR=0x%08lX (OVRUDR=%lu WCKCFG=%lu)\r\n",
             (cr1 >> 16) & 1, sr, (sr >> 0) & 1, (sr >> 2) & 1);
     UART_Print(uart_buf);
   }
@@ -554,8 +587,7 @@ int main(void)
       fill_sample_count++;
     }
 
-    // SAI1_B: channels 8-15 — DMA NOT started (PE3=DAC1_RST conflict on DS9 PCB)
-    // Fills below are dead code until SAI1_B DMA is enabled after PCB bodge.
+    // SAI1_B: channels 8-15 → DAC0 U3 via PE3 (bodged from DAC1_RST)
     if (need_fill_1b_first_half) {
       need_fill_1b_first_half = 0;
       __DSB();
@@ -583,8 +615,7 @@ int main(void)
       __DSB();
     }
 
-    // SAI2_B: channels 24-31 — DMA NOT started (PE11=DAC0_AMUTEI conflict on DS9 PCB)
-    // Fills below are dead code until SAI2_B DMA is enabled after PCB bodge.
+    // SAI3_B (was SAI2_B): channels 24-31 → DAC3 U8 via PD9 (bodged from PE11 conflict)
     if (need_fill_2b_first_half) {
       need_fill_2b_first_half = 0;
       __DSB();
@@ -1230,23 +1261,24 @@ static void MX_SAI2_Init(void)
 }
 
 /**
-  * @brief SAI3 Initialization Function (ADC input)
-  * @note  SAI3_B: Master RX, I2S stereo (2 channels), PD8(SCK)/PD9(SD)/PD10(FS)
+  * @brief SAI3 Initialization Function (DAC3 U8 output)
+  * @note  SAI3_B: Master TX TDM8 (8 channels), PD8(SCK)/PD9(SD)/PD10(FS) AF6
   *        Uses PLL3 via Sai23ClockSelection (shared with SAI2)
+  *        No MCLK pin on SAI3_B — DAC3 gets SCKI from shared PE2 bus (SAI1_A MCLK)
   */
 static void MX_SAI3_Init(void)
 {
-  /* SAI3_B: Master RX - ADC input (2 channels) */
+  /* SAI3_B: Master TX TDM8 → DAC3 U8 (0x9E) */
   hsai_BlockB3.Instance = SAI3_Block_B;
   hsai_BlockB3.Init.Protocol = SAI_FREE_PROTOCOL;
-  hsai_BlockB3.Init.AudioMode = SAI_MODEMASTER_RX;
+  hsai_BlockB3.Init.AudioMode = SAI_MODEMASTER_TX;
   hsai_BlockB3.Init.DataSize = SAI_DATASIZE_24;
   hsai_BlockB3.Init.FirstBit = SAI_FIRSTBIT_MSB;
   hsai_BlockB3.Init.ClockStrobing = SAI_CLOCKSTROBING_FALLINGEDGE;
   hsai_BlockB3.Init.Synchro = SAI_ASYNCHRONOUS;
   hsai_BlockB3.Init.OutputDrive = SAI_OUTPUTDRIVE_DISABLE;
   hsai_BlockB3.Init.NoDivider = SAI_MCK_OVERSAMPLING_DISABLE;
-  hsai_BlockB3.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_DISABLE;
+  hsai_BlockB3.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_DISABLE;  // No MCLK pin on SAI3_B
   hsai_BlockB3.Init.FIFOThreshold = SAI_FIFOTHRESHOLD_EMPTY;
   hsai_BlockB3.Init.AudioFrequency = SAI_AUDIO_FREQUENCY_48K;
   hsai_BlockB3.Init.SynchroExt = SAI_SYNCEXT_DISABLE;
@@ -1256,15 +1288,15 @@ static void MX_SAI3_Init(void)
   hsai_BlockB3.Init.PdmInit.Activation = DISABLE;
   hsai_BlockB3.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockB3.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
-  hsai_BlockB3.FrameInit.FrameLength = 64;              // 2 slots x 32 bits
-  hsai_BlockB3.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockB3.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai_BlockB3.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockB3.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockB3.FrameInit.FrameLength = 256;              // 8 slots x 32 bits = TDM8
+  hsai_BlockB3.FrameInit.ActiveFrameLength = 1;          // Short pulse: 1 BCK at frame start
+  hsai_BlockB3.FrameInit.FSDefinition = SAI_FS_STARTFRAME;
+  hsai_BlockB3.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW; // Negative pulse (PCM1690 TDM_I2S)
+  hsai_BlockB3.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT; // I2S timing
   hsai_BlockB3.SlotInit.FirstBitOffset = 0;
   hsai_BlockB3.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
-  hsai_BlockB3.SlotInit.SlotNumber = 2;
-  hsai_BlockB3.SlotInit.SlotActive = 0x00000003;
+  hsai_BlockB3.SlotInit.SlotNumber = 8;
+  hsai_BlockB3.SlotInit.SlotActive = 0x000000FF;         // All 8 slots active
   if (HAL_SAI_Init(&hsai_BlockB3) != HAL_OK)
   {
     Error_Handler();
@@ -1688,6 +1720,12 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
     need_fill_2b_first_half = 1;
     __DSB();
   }
+  else if (hsai->Instance == SAI3_Block_B) {
+    // SAI3_B TX (ch24-31 → DAC3 U8) — reuses 2b fill flags + audio_buffer_2b
+    if (need_fill_2b_first_half) underrun_count++;
+    need_fill_2b_first_half = 1;
+    __DSB();
+  }
 }
 
 /**
@@ -1736,29 +1774,17 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
     need_fill_2b_second_half = 1;
     __DSB();
   }
-}
-
-/**
- * @brief SAI RX Half Complete callback
- * DMA filled first half of RX buffer → CPU can process it
- */
-void HAL_SAI_RxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
-  if (hsai->Instance == SAI3_Block_B) {
-    rx_3b_first_half_ready = 1;
+  else if (hsai->Instance == SAI3_Block_B) {
+    if (need_fill_2b_second_half) underrun_count++;
+    need_fill_2b_second_half = 1;
     __DSB();
   }
 }
 
-/**
- * @brief SAI RX Full Complete callback
- * DMA filled second half of RX buffer → CPU can process it
+/* SAI RX callbacks removed — SAI3_B is now TX for DAC3 U8.
+ * ADC input (PCM1802) not available on DS9 PCB (PB11/PC0/PC1 have no SAI AF).
+ * When ADC is needed, use software loopback or bodge to SAI RX pins.
  */
-void HAL_SAI_RxCpltCallback(SAI_HandleTypeDef *hsai) {
-  if (hsai->Instance == SAI3_Block_B) {
-    rx_3b_second_half_ready = 1;
-    __DSB();
-  }
-}
 
 /**
  * @brief SAI Error callback
