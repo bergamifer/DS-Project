@@ -13,11 +13,15 @@
 **ESTADO:** En producción en JLCPCB (Enero 2026)
 
 **Problema:**
-- Todos los LEDs STM32 (D1, D6, D7, D10, D11) se fabricarán como rojo (C84256) en lugar de los colores especificados
-- La BOM tiene todos los designadores asignados a la misma parte número C84256 en una sola línea
-- Se pidió revisión a JLCPCB pero es probable que se fabrique con esta configuración
+- Todos los LEDs STM32 (D1, D6, D7, D10, D11) se fabricarán como rojo (C84256) en lugar de los colores especificados. Solucionado
+- La BOM tiene todos los designadores asignados a la misma parte número C84256 en una sola línea. Solucionado
+- Se pidió revisión a JLCPCB pero es probable que se fabrique con esta configuración. Solucionado
+
+**Solucion:**
+- Ya se resolvió antes de enviar a fabricar el tema de los LEDs asi que está comntemplado para versiones furutas
 
 **LEDs afectados:**
+- Ya solucionado
 | LED | Designador | Pin STM32 | Color Diseño | Color Fabricado | JLCPCB Part Actual |
 |-----|------------|-----------|--------------|-----------------|-------------------|
 | LED1 | D6 | PC4 | Amarillo | **Rojo** | C84256 (incorrecto) |
@@ -26,9 +30,10 @@
 | LED4 | D10 | PB1 | Blanco | **Rojo** | C84256 (incorrecto) |
 
 **Resistencias relacionadas:**
-También tendrán valores incorrectos en la fabricación (diseñados para corrientes específicas por color)
+También tendrán valores incorrectos en la fabricación (diseñados para corrientes específicas por color). Solucionado
 
 **Acción recomendada para v2:**
+. Solucionado
 - Separar cada LED en línea individual en BOM con su parte número correspondiente
 - D6 → C2296 (Amarillo, 240Ω)
 - D7 → C84256 (Rojo, 150Ω)
@@ -39,35 +44,13 @@ También tendrán valores incorrectos en la fabricación (diseñados para corrie
 
 ## 🔴 Actualización Importante - Correcciones desde DS.d356 (Netlist)
 
-**Cambios en DS9 (Enero 2026) - Verificado contra netlist de fabricación:**
-
-### Designadores de Componentes Corregidos:
-| Anterior | Actual | Componente |
-|----------|--------|------------|
-| DAC3 = U7 | **U8** | PCM1690 (DAC3) |
-| EEPROM = U10 | **U6** | CAT24C256 |
-| Reg 5V = U8 | **U9** | AMS1117-5.0 |
-| Reg 3.3V = U9 | **U10** | AMS1117-3.3 |
-| - | **U7** | ESP32-C3-Mini |
-
-### USB Type-C Agregado:
-- **PA11/PA12** son USB D-/D+, NO LEDs
-- LEDs reales: **PC4, PC5, PB0, PB1**
-
-### PCM1802 Control Extendido (8 pines GPIO):
-- Pin 9 (FSYNC) ahora controlable via **PA4**
-- FMT0/FMT1 controlables via **PC7/PC6**
-- MODE0/MODE1 controlables via **PD14/PD15**
-
----
-
 ## Cambios principales vs v1.0
 
 | Aspecto | v1.0 (Dev Board) | v2.0 (LQFP100 Direct) |
 |---------|------------------|------------------------|
 | **Canales DAC** | 16 (2x PCM1690) | **32 (4x PCM1690)** |
 | **Canales ADC** | 2 (1x PCM1802) | 2 (1x PCM1802) |
-| **SAI utilizados** | SAI1, SAI4 | **SAI1, SAI2, SAI4** |
+| **SAI utilizados** | SAI1, SAI4 | **SAI1, SAI2, SAI3** |
 | **I2C buses** | 1 (I2C1) | **2 (I2C1, I2C3)** |
 | **MCLK source** | PLL interno | **Cristal externo 12.288 MHz** |
 | **Calibracion** | RAM volatil | **EEPROM I2C persistente** |
@@ -153,9 +136,9 @@ También tendrán valores incorrectos en la fabricación (diseñados para corrie
 | PD5 | 86 | - | **LIBRE** | - | Disponible |
 | PD6 | 87 | - | **LIBRE** | - | Disponible |
 | PD7 | 88 | - | **LIBRE** | - | Disponible |
-| PD8 | 55 | DAC3_SAI_SD | SAI2 SD Out | SAI2_B | Audio data -> PCM1690 U8 |
-| PD9 | 56 | DAC3_SAI_SCK | SAI2 SCK Out | SAI2_B | Bit clock -> U8 |
-| PD10 | 57 | DAC3_SAI_FS | SAI2 FS Out | SAI2_B | Frame sync -> U8 |
+| PD8 | 55 | ADC_SAI_SCK | SAI3 SCK | SAI3_B AF6 | **ADC BCK** — PCB conecta a U8 pero AF real es SAI3_B |
+| PD9 | 56 | ADC_SAI_SD | SAI3 SD In | SAI3_B AF6 | **ADC DOUT** — firmware usa como RX del PCM1802 |
+| PD10 | 57 | ADC_SAI_FS | SAI3 FS | SAI3_B AF6 | **ADC LRCK** — ⚠️ PCB error: esquemático los asignó a DAC3 |
 | PD11 | 58 | DAC2_SAI_SD | SAI2 SD Out | SAI2_A | Audio data -> PCM1690 U2 |
 | PD12 | 59 | DAC2_SAI_SCK | SAI2 SCK Out | SAI2_A | Bit clock -> U2 |
 | PD13 | 60 | DAC2_SAI_FS | SAI2 FS Out | SAI2_A | Frame sync -> U2 |
@@ -214,7 +197,7 @@ También tendrán valores incorrectos en la fabricación (diseñados para corrie
       2ch IN   |  | |      |     |      |      |      |
                |  | |      |     v      v      v      v
         <------+  +-+      |   SAI1_A SAI1_B SAI2_A SAI2_B
-         SAI4_B            |
+         SAI3_B            |
 ```
 
 ### Mapeo SAI -> DAC
@@ -224,8 +207,9 @@ También tendrán valores incorrectos en la fabricación (diseñados para corrie
 | SAI1_A | PE7/PE8/PE9 | DAC0 (U3) | ch 0-7 |
 | SAI1_B | PE4/PE5/PE6 | DAC1 (U4) | ch 8-15 |
 | SAI2_A | PD13/PD12/PD11 | DAC2 (U2) | ch 16-23 |
-| SAI2_B | PD10/PD9/PD8 | DAC3 (U8) | ch 24-31 |
-| SAI4_B | PC0/PC1/PB11 | ADC (U1) | input 2ch |
+| SAI2_B | PE11 (SD solo, sync) | DAC3 (U8) | ch 24-31 |
+| SAI3_B | PD8(SCK)/PD9(SD)/PD10(FS) AF6 | ADC (U1) | input 2ch |
+| ~~SAI4_B~~ | ~~PC0/PC1/PB11~~ | ~~ADC~~ | **ERROR PCB**: SAI4_B no accesible en LQFP100 |
 
 ---
 
@@ -286,40 +270,7 @@ También tendrán valores incorrectos en la fabricación (diseñados para corrie
 ---
 
 ## Test Points v2.0
-
-### Actuales (verificados en DS.d356)
-
-| TP | Pin STM32 | Senal | Proposito |
-|----|-----------|-------|-----------|
-| TP1 | PE13 | GPIO | Debug general |
-| TP2 | PE14 | GPIO | Debug general |
-| TP3 | PA8 | GPIO | Debug general |
-| TP5 | - | +12V | Verificar alimentacion principal |
-
-### Test Points de Power Supply
-
-| TP | Net | Proposito |
-|----|-----|-----------|
-| TP_12V | +12V | Verificar alimentacion principal |
-| TP_5V | +5V | Verificar regulador U9 |
-| TP_3V3 | +3.3V | Verificar regulador U10 |
-| TP_GND | GND | Referencia para osciloscopio |
-
-### Para que sirven los Test Points
-
-1. **Debugging en produccion**: Conectar osciloscopio/multimetro sin soldar
-2. **Verificacion de clock**: Confirmar MCLK = 12.288 MHz exactos
-3. **Verificacion de sync**: Confirmar SAI_FS = 48 kHz
-4. **Diagnostico de alimentacion**: Medir ripple en 3.3V/5V/12V
-5. **Referencia de medicion**: GND para punta de osciloscopio
-
-### Como implementar Test Points en KiCad
-
-1. Agregar simbolo `TestPoint` de libreria `Connector`
-2. Conectar a la net que queres monitorear
-3. Usar footprint `TestPoint:TestPoint_Pad_D2.5mm`
-4. En el PCB, ubicar cerca de la senal pero accesible
-
+- Se eliminan los test points
 ---
 
 ## Conectividad y Expansión
@@ -747,9 +698,10 @@ void Audio_PowerUp_Sequence(void)
 - [x] DAC0 (U3) BCK: PE8 (SAI1_A SCK)
 - [x] DAC1 (U4) BCK: PE5 (SAI1_B SCK)
 - [x] DAC2 (U2) BCK: PD12 (SAI2_A SCK)
-- [x] DAC3 (U8) BCK: PD9 (SAI2_B SCK)
-- [x] ADC (U1): PC1 (SAI4_SCK_B)
-- [x] **Todos los BCK conectados correctamente - Audio funcional**
+- [x] DAC3 (U8): PE11 (SAI2_B SD, sync slave — solo necesita SD)
+- [x] ADC (U1): PD8/PD9/PD10 (SAI3_B SCK/SD/FS AF6) — firmware confirmado
+- [x] ⚠️ PD8/9/10 físicamente cableados a U8 en PCB, pero AF6=SAI3_B → firmware los usa como ADC RX
+- [x] ⚠️ PC0/PC1/PB11 (SAI4_B intent) no funcional en LQFP100 — corregido en DS10
 
 #### Supervisor de Voltaje
 - [x] MAX809TEUR+T: SOT-23 (3 pines)
@@ -841,7 +793,7 @@ void Audio_PowerUp_Sequence(void)
 
 ### Firmware - PLAN DE DESARROLLO
 - [ ] UART4 (PA0/PA1) para debug y logs
-- [ ] Inicialización de SAI1, SAI2, SAI4
+- [x] Inicialización de SAI1, SAI2, SAI3 (SAI4_B no funcional en LQFP100)
 - [ ] I2C1: Configurar 4 DACs con direcciones correctas
 - [ ] I2C3: EEPROM read/write con protección WP
 - [ ] Power sequencing: Reset secuencial de DACs

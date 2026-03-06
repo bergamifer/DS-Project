@@ -1102,6 +1102,15 @@
 					(hide yes)
 				)
 			)
+			(property "Sim.Pins" "1=K 2=A"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
 			(property "ki_keywords" "LED diode light-emitting-diode"
 				(at 0 0 0)
 				(effects
@@ -1234,21 +1243,19 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "R"
-				(at 0.762 0.508 0)
+				(at 0 0 90)
 				(effects
 					(font
-						(size 1.27 1.27)
+						(size 1.016 1.016)
 					)
-					(justify left)
 				)
 			)
 			(property "Value" "R_Small"
-				(at 0.762 -1.016 0)
+				(at 1.778 0 90)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left)
 				)
 			)
 			(property "Footprint" ""
@@ -3170,19 +3177,19 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "R_Small_5"
+		(symbol "Switch:SW_Push"
 			(pin_numbers
 				(hide yes)
 			)
 			(pin_names
-				(offset 0.254)
+				(offset 1.016)
 				(hide yes)
 			)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
-			(property "Reference" "R"
-				(at 0.762 0.508 0)
+			(property "Reference" "SW"
+				(at 1.27 2.54 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -3190,17 +3197,16 @@
 					(justify left)
 				)
 			)
-			(property "Value" "R_Small"
-				(at 0.762 -1.016 0)
+			(property "Value" "SW_Push"
+				(at 0 -1.524 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left)
 				)
 			)
 			(property "Footprint" ""
-				(at 0 0 0)
+				(at 0 5.08 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -3209,6 +3215,15 @@
 				)
 			)
 			(property "Datasheet" "~"
+				(at 0 5.08 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Push button switch, generic, two pins"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3217,7 +3232,7 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Resistor, small symbol"
+			(property "ki_keywords" "switch normally-open pushbutton push-button"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3226,42 +3241,57 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "R resistor"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_fp_filters" "R_*"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "R_Small_5_0_1"
-				(rectangle
-					(start -0.762 1.778)
-					(end 0.762 -1.778)
+			(symbol "SW_Push_0_1"
+				(circle
+					(center -2.032 0)
+					(radius 0.508)
 					(stroke
-						(width 0.2032)
+						(width 0)
 						(type default)
 					)
 					(fill
 						(type none)
 					)
 				)
-			)
-			(symbol "R_Small_5_1_1"
+				(polyline
+					(pts
+						(xy 0 1.27) (xy 0 3.048)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 1.27) (xy -2.54 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
 				(pin passive line
-					(at 0 2.54 270)
-					(length 0.762)
-					(name "~"
+					(at -5.08 0 0)
+					(length 2.54)
+					(name "1"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -3277,136 +3307,9 @@
 					)
 				)
 				(pin passive line
-					(at 0 -2.54 90)
-					(length 0.762)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
-		(symbol "R_Small_9"
-			(pin_numbers
-				(hide yes)
-			)
-			(pin_names
-				(offset 0.254)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "R"
-				(at 0.762 0.508 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left)
-				)
-			)
-			(property "Value" "R_Small"
-				(at 0.762 -1.016 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" "~"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Resistor, small symbol"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "R resistor"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_fp_filters" "R_*"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "R_Small_9_0_1"
-				(rectangle
-					(start -0.762 1.778)
-					(end 0.762 -1.778)
-					(stroke
-						(width 0.2032)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "R_Small_9_1_1"
-				(pin passive line
-					(at 0 2.54 270)
-					(length 0.762)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -2.54 90)
-					(length 0.762)
-					(name "~"
+					(at 5.08 0 180)
+					(length 2.54)
+					(name "2"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -3426,8 +3329,12 @@
 		)
 		(symbol "power:+3.3V"
 			(power)
+			(pin_numbers
+				(hide yes)
+			)
 			(pin_names
 				(offset 0)
+				(hide yes)
 			)
 			(exclude_from_sim no)
 			(in_bom yes)
@@ -3476,7 +3383,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3527,8 +3434,7 @@
 				(pin power_in line
 					(at 0 0 90)
 					(length 0)
-					(hide yes)
-					(name "+3V3"
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -3548,8 +3454,12 @@
 		)
 		(symbol "power:+5V"
 			(power)
+			(pin_numbers
+				(hide yes)
+			)
 			(pin_names
 				(offset 0)
+				(hide yes)
 			)
 			(exclude_from_sim no)
 			(in_bom yes)
@@ -3598,7 +3508,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3649,8 +3559,7 @@
 				(pin power_in line
 					(at 0 0 90)
 					(length 0)
-					(hide yes)
-					(name "+5V"
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -3782,6 +3691,18 @@
 		)
 	)
 	(rectangle
+		(start 195.453 57.531)
+		(end 220.472 84.455)
+		(stroke
+			(width 0)
+			(type dot)
+		)
+		(fill
+			(type none)
+		)
+		(uuid 01487c14-a091-4afe-8924-9df36aa3d28e)
+	)
+	(rectangle
 		(start 221.996 110.998)
 		(end 282.321 139.573)
 		(stroke
@@ -3806,6 +3727,18 @@
 		(uuid 71307a79-61d8-43e4-b516-44624c465bb6)
 	)
 	(rectangle
+		(start 195.58 14.478)
+		(end 220.599 55.88)
+		(stroke
+			(width 0)
+			(type dot)
+		)
+		(fill
+			(type none)
+		)
+		(uuid e48d820d-8c16-47ef-9dd9-6e415a3a69f9)
+	)
+	(rectangle
 		(start 221.996 80.645)
 		(end 282.321 109.22)
 		(stroke
@@ -3816,6 +3749,37 @@
 			(type none)
 		)
 		(uuid f0a47ceb-9252-49e5-b262-f44170738c0f)
+	)
+	(text "No hace falta boot jumper en \nGPIO9 si programas por USB"
+		(exclude_from_sim no)
+		(at 195.072 89.408 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "0876f9d6-46ce-4c84-ac86-c5dee1617b97")
+	)
+	(text "Reset ESP32"
+		(exclude_from_sim no)
+		(at 213.106 82.296 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+		(uuid "0d2d5a83-9eaf-45d0-8e9e-b18608dd9578")
+	)
+	(text "Reset ESP32"
+		(exclude_from_sim no)
+		(at 212.852 54.102 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+		(uuid "21326161-e7c6-40ec-92d5-72c562009e98")
 	)
 	(text "ESD Protection"
 		(exclude_from_sim no)
@@ -3848,10 +3812,10 @@
 		(uuid "cc9dc27a-5dbb-4f84-8210-9179fe24ae41")
 	)
 	(junction
-		(at 161.29 100.33)
+		(at 207.01 34.29)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "2366e4fd-189a-4ac2-9f21-825976db81e6")
+		(uuid "04b68774-7c52-41da-8187-916f48e381ca")
 	)
 	(junction
 		(at 259.08 55.88)
@@ -3872,10 +3836,22 @@
 		(uuid "45f2f0f1-e577-43d0-96c2-90ee684967ad")
 	)
 	(junction
+		(at 207.01 44.45)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "57686bdc-b77c-4256-956f-f07b886b072b")
+	)
+	(junction
 		(at 77.47 92.71)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "7fb8ab45-cf5b-4cb9-97e3-e6103d197406")
+	)
+	(junction
+		(at 209.55 34.29)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "92403e0b-5b4b-486f-95f9-5f70b00d03fb")
 	)
 	(junction
 		(at 250.19 43.18)
@@ -3900,6 +3876,10 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "e7bb24ec-955c-4643-b12b-d176245c63e9")
+	)
+	(no_connect
+		(at 147.32 100.33)
+		(uuid "033ff344-331e-4512-9dc9-178e191ac69f")
 	)
 	(no_connect
 		(at 147.32 82.55)
@@ -3936,16 +3916,6 @@
 			(type default)
 		)
 		(uuid "07dc18dc-4c0d-45f0-b0b0-6bd861dd35a4")
-	)
-	(wire
-		(pts
-			(xy 152.4 92.71) (xy 152.4 87.63)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "082afc16-399f-45eb-93f5-597a19df2d10")
 	)
 	(wire
 		(pts
@@ -4019,7 +3989,7 @@
 	)
 	(wire
 		(pts
-			(xy 147.32 87.63) (xy 149.86 87.63)
+			(xy 147.32 87.63) (xy 153.67 87.63)
 		)
 		(stroke
 			(width 0)
@@ -4039,6 +4009,16 @@
 	)
 	(wire
 		(pts
+			(xy 213.36 34.29) (xy 209.55 34.29)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "37e5527e-9c23-4b90-9a97-99244c85eaad")
+	)
+	(wire
+		(pts
 			(xy 147.32 102.87) (xy 151.13 102.87)
 		)
 		(stroke
@@ -4049,7 +4029,17 @@
 	)
 	(wire
 		(pts
-			(xy 147.32 90.17) (xy 151.13 90.17)
+			(xy 213.36 36.83) (xy 213.36 34.29)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3d18aae2-5ada-48b0-8243-23a201972e2d")
+	)
+	(wire
+		(pts
+			(xy 147.32 90.17) (xy 153.67 90.17)
 		)
 		(stroke
 			(width 0)
@@ -4066,16 +4056,6 @@
 			(type default)
 		)
 		(uuid "42dd3d61-f441-49f8-b820-c5a18566bf74")
-	)
-	(wire
-		(pts
-			(xy 161.29 95.25) (xy 161.29 100.33)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "42deb6b8-487c-4f1c-8996-bf6316d832a7")
 	)
 	(wire
 		(pts
@@ -4119,16 +4099,6 @@
 	)
 	(wire
 		(pts
-			(xy 147.32 100.33) (xy 161.29 100.33)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "668c3962-161c-4a22-85c1-66e38464a2f3")
-	)
-	(wire
-		(pts
 			(xy 256.54 30.48) (xy 250.19 30.48)
 		)
 		(stroke
@@ -4136,16 +4106,6 @@
 			(type default)
 		)
 		(uuid "68c5cadb-ebf3-43ce-a3e0-d5f1fab52842")
-	)
-	(wire
-		(pts
-			(xy 151.13 90.17) (xy 151.13 85.09)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "6a457a1a-36d0-45a2-bb57-a2c5e4358f5f")
 	)
 	(wire
 		(pts
@@ -4159,16 +4119,6 @@
 	)
 	(wire
 		(pts
-			(xy 153.67 95.25) (xy 153.67 90.17)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "6d338ca3-139f-45d9-bbb0-2d45dc530ecf")
-	)
-	(wire
-		(pts
 			(xy 259.08 48.26) (xy 250.19 48.26)
 		)
 		(stroke
@@ -4176,6 +4126,16 @@
 			(type default)
 		)
 		(uuid "6d4e6a04-972c-4712-a687-568b0eb7a2b5")
+	)
+	(wire
+		(pts
+			(xy 207.01 34.29) (xy 209.55 34.29)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "723c8172-364f-43a3-9f76-57e3a9fd3e2d")
 	)
 	(wire
 		(pts
@@ -4199,6 +4159,26 @@
 	)
 	(wire
 		(pts
+			(xy 213.36 44.45) (xy 213.36 41.91)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7c73f3fe-6cc4-4bd2-b0e1-4bde4ef37d7c")
+	)
+	(wire
+		(pts
+			(xy 203.2 74.93) (xy 203.2 71.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8e7500c0-aef8-4173-ab2e-709dc2ab0992")
+	)
+	(wire
+		(pts
 			(xy 255.27 38.1) (xy 259.08 38.1)
 		)
 		(stroke
@@ -4209,13 +4189,13 @@
 	)
 	(wire
 		(pts
-			(xy 153.67 90.17) (xy 156.21 90.17)
+			(xy 207.01 44.45) (xy 213.36 44.45)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "ab1090d9-3a86-43cc-b628-af470b93226a")
+		(uuid "a6c98f6b-7215-4396-81cc-376dec6a514a")
 	)
 	(wire
 		(pts
@@ -4249,7 +4229,7 @@
 	)
 	(wire
 		(pts
-			(xy 147.32 92.71) (xy 152.4 92.71)
+			(xy 147.32 92.71) (xy 153.67 92.71)
 		)
 		(stroke
 			(width 0)
@@ -4259,23 +4239,13 @@
 	)
 	(wire
 		(pts
-			(xy 166.37 100.33) (xy 168.91 100.33)
+			(xy 208.28 74.93) (xy 210.82 74.93)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "b83c1014-6a51-4df2-a0fd-15e780fa5ab2")
-	)
-	(wire
-		(pts
-			(xy 151.13 85.09) (xy 156.21 85.09)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "bfc17a66-500e-4e72-88d5-f13b600b358b")
 	)
 	(wire
 		(pts
@@ -4289,23 +4259,23 @@
 	)
 	(wire
 		(pts
-			(xy 152.4 87.63) (xy 156.21 87.63)
+			(xy 209.55 34.29) (xy 209.55 33.02)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "c5996735-ef26-49ef-9a18-b650d0b268e9")
+		(uuid "cefbead3-6cb3-4c72-8e97-2cdb857aef37")
 	)
 	(wire
 		(pts
-			(xy 149.86 87.63) (xy 149.86 82.55)
+			(xy 203.2 34.29) (xy 207.01 34.29)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "d22b2ea5-dc21-4c50-9e4f-48611ba7fd60")
+		(uuid "d5de4a7d-0d5b-4c15-935f-4b01bd69a3e4")
 	)
 	(wire
 		(pts
@@ -4316,16 +4286,6 @@
 			(type default)
 		)
 		(uuid "e046d15d-d864-4f3b-a74f-0c9985da6a2e")
-	)
-	(wire
-		(pts
-			(xy 149.86 82.55) (xy 156.21 82.55)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "e74e0dd8-18e1-4be7-a752-51dd64e6a081")
 	)
 	(wire
 		(pts
@@ -9450,7 +9410,27 @@
 			"AABjAAAAUgAAAFkAAAB3AAAAOA=="
 		)
 	)
-	(label "GPIO18/USB_D-"
+	(label "D-"
+		(at 250.19 43.18 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "1392c15e-4260-4d8c-9d23-e57c3c1413e7")
+	)
+	(label "GPIO8"
+		(at 203.2 34.29 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "220c80c2-86f0-4718-9e5d-d1ad558e994d")
+	)
+	(label "USB_D-"
 		(at 251.46 95.25 0)
 		(effects
 			(font
@@ -9470,7 +9450,7 @@
 		)
 		(uuid "5fe91f34-e5ac-4bce-9d72-29c97f5cff8c")
 	)
-	(label "GPIO19/USB_D+"
+	(label "USB_D+"
 		(at 147.32 69.85 0)
 		(effects
 			(font
@@ -9480,7 +9460,17 @@
 		)
 		(uuid "694d9e2e-a403-47fe-bc7e-1d5b03ababe0")
 	)
-	(label "GPIO19/USB_D+"
+	(label "D+"
+		(at 250.19 48.26 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b5d6f3d4-ec52-4346-a45c-8d22b317fd06")
+	)
+	(label "USB_D+"
 		(at 251.46 92.71 0)
 		(effects
 			(font
@@ -9490,7 +9480,17 @@
 		)
 		(uuid "b6a4e83b-c003-4fa3-8ecc-b4765975ca62")
 	)
-	(label "GPIO18/USB_D-"
+	(label "GPIO8"
+		(at 147.32 97.79 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "bdd6fdaf-d528-41f4-99af-06a04a96fd79")
+	)
+	(label "USB_D-"
 		(at 147.32 72.39 0)
 		(effects
 			(font
@@ -9499,6 +9499,16 @@
 			(justify left bottom)
 		)
 		(uuid "bf45430d-a724-44df-9411-075fcf10ca0a")
+	)
+	(label "GPIO9"
+		(at 203.2 74.93 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "c888c576-5d22-4ccb-88fc-de745da22f9a")
 	)
 	(label "VBUS"
 		(at 273.05 93.98 90)
@@ -9653,7 +9663,6 @@
 		(uuid "dad212f7-a1a7-41df-ac3f-721ba5def5d9")
 	)
 	(symbol
-		(lib_name "R_Small_5")
 		(lib_id "Device:R_Small")
 		(at 252.73 38.1 270)
 		(unit 1)
@@ -9696,12 +9705,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 252.73 38.1 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "708-RMCF0603FT5K10"
@@ -9765,70 +9775,6 @@
 		)
 	)
 	(symbol
-		(lib_id "power:+3.3V")
-		(at 152.4 97.79 270)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "03e71882-6027-429d-9eda-50e39e782274")
-		(property "Reference" "#PWR0128"
-			(at 148.59 97.79 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Value" "+3V3"
-			(at 157.48 97.79 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 152.4 97.79 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" ""
-			(at 152.4 97.79 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 152.4 97.79 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "b3ab8785-d808-452a-a78b-ef19fd591513")
-		)
-		(instances
-			(project "DS7"
-				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/51deadb4-9fb8-471c-a902-4285ed5e398b"
-					(reference "#PWR0128")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Diode:1N5819")
 		(at 260.35 27.94 180)
 		(unit 1)
@@ -9863,7 +9809,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707605708554240"
+		(property "Datasheet" "http://www.vishay.com/docs/88525/1n5817.pdf"
 			(at 260.35 27.94 0)
 			(effects
 				(font
@@ -9872,7 +9818,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "1A 40V 600mV@1A 9A 9A Independent SOD-123 Schottky Diodes ROHS"
+		(property "Description" "40V 1A Schottky Barrier Rectifier Diode, DO-41"
 			(at 260.35 27.94 0)
 			(effects
 				(font
@@ -9985,12 +9931,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
 			(at 119.38 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -10032,7 +9979,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 269.24 45.72 0)
 			(effects
 				(font
@@ -10041,7 +9988,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707297419231232"
 			(at 269.24 45.72 0)
 			(effects
 				(font
@@ -10050,7 +9997,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Multilayer Ceramic Capacitors MLCC - SMD/SMT 25V 22pF C0G 0603 5%"
+		(property "Description" "22pF 50V C0G ±5% 0402 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"
 			(at 284.48 49.022 0)
 			(effects
 				(font
@@ -10068,7 +10015,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.028"
+		(property "Price" "0.0013"
 			(at 269.24 45.72 90)
 			(effects
 				(font
@@ -10086,7 +10033,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CL10C220JB81PNC"
+		(property "Manufacturer_Part_Number" "0402CG220J500NT"
 			(at 269.24 45.72 90)
 			(effects
 				(font
@@ -10095,7 +10042,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1653"
+		(property "LCSC" "C1555"
 			(at 269.24 45.72 90)
 			(effects
 				(font
@@ -10187,15 +10134,15 @@
 	)
 	(symbol
 		(lib_id "power:+3.3V")
-		(at 166.37 95.25 270)
+		(at 203.2 66.04 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
+		(in_bom no)
+		(on_board no)
+		(dnp yes)
 		(uuid "1c995b9a-46e4-402b-b773-f5d040b88b69")
 		(property "Reference" "#PWR0103"
-			(at 162.56 95.25 0)
+			(at 203.2 69.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10204,7 +10151,7 @@
 			)
 		)
 		(property "Value" "+3V3"
-			(at 171.45 95.25 90)
+			(at 203.2 60.96 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10212,7 +10159,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 166.37 95.25 0)
+			(at 203.2 66.04 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10221,7 +10168,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 166.37 95.25 0)
+			(at 203.2 66.04 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10229,12 +10176,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
-			(at 166.37 95.25 0)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 203.2 66.04 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -10317,15 +10265,15 @@
 	)
 	(symbol
 		(lib_id "Jumper:Jumper_2_Small_Open")
-		(at 163.83 100.33 0)
+		(at 205.74 74.93 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
+		(in_bom no)
+		(on_board no)
+		(dnp yes)
 		(uuid "2b17eebc-c772-4eac-942c-f08a08797449")
 		(property "Reference" "JP1"
-			(at 163.576 102.362 0)
+			(at 205.486 76.962 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10333,7 +10281,7 @@
 			)
 		)
 		(property "Value" "BOOT_ESP32"
-			(at 171.704 98.806 0)
+			(at 213.614 73.406 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10341,7 +10289,7 @@
 			)
 		)
 		(property "Footprint" "Button_Switch_THT:SW_DIP_SPSTx01_Slide_9.78x4.72mm_W7.62mm_P2.54mm"
-			(at 163.83 100.33 0)
+			(at 205.74 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10350,7 +10298,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 163.83 100.33 0)
+			(at 205.74 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10359,7 +10307,7 @@
 			)
 		)
 		(property "Description" "Jumper, 2-pole, small symbol, open"
-			(at 163.83 100.33 0)
+			(at 205.74 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10367,8 +10315,8 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.34"
-			(at 163.83 100.33 0)
+		(property "Price" "0.1678"
+			(at 205.74 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10376,8 +10324,8 @@
 				(hide yes)
 			)
 		)
-		(property "Mouser part" "490-DS01-254-L-01BE"
-			(at 163.83 100.33 0)
+		(property "Mouser part" ""
+			(at 205.74 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10386,7 +10334,7 @@
 			)
 		)
 		(property "Version" ""
-			(at 163.83 100.33 0)
+			(at 205.74 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10394,8 +10342,8 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "DS01-254-L-01BE"
-			(at 163.83 100.33 0)
+		(property "Manufacturer_Part_Number" "SMQS-01R-TP"
+			(at 205.74 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10403,8 +10351,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3312384"
-			(at 163.83 100.33 0)
+		(property "LCSC" "C5299502"
+			(at 205.74 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10428,7 +10376,6 @@
 		)
 	)
 	(symbol
-		(lib_name "R_Small_5")
 		(lib_id "Device:R_Small")
 		(at 231.14 68.58 270)
 		(unit 1)
@@ -10471,12 +10418,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 231.14 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "603-RC0603FR-131ML"
@@ -10605,7 +10553,6 @@
 		)
 	)
 	(symbol
-		(lib_name "R_Small_5")
 		(lib_id "Device:R_Small")
 		(at 68.58 54.61 180)
 		(unit 1)
@@ -10630,7 +10577,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 68.58 54.61 0)
 			(effects
 				(font
@@ -10639,7 +10586,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8556212101498380288"
 			(at 68.58 54.61 0)
 			(effects
 				(font
@@ -10648,12 +10595,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "-55℃~+155℃ 10kΩ 50V 62.5mW Thick Film Resistor ±1% ±100ppm/℃ 0402 Chip Resistor - Surface Mount ROHS"
 			(at 68.58 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "603-RC0603JR-1310KL"
@@ -10665,7 +10613,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.006"
+		(property "Price" "0.0008"
 			(at 68.58 54.61 90)
 			(effects
 				(font
@@ -10683,7 +10631,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CRCW060310K0FKEA"
+		(property "Manufacturer_Part_Number" "0402WGF1002TCE"
 			(at 68.58 54.61 90)
 			(effects
 				(font
@@ -10692,7 +10640,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25804"
+		(property "LCSC" "C25744"
 			(at 68.58 54.61 90)
 			(effects
 				(font
@@ -10848,17 +10796,131 @@
 		)
 	)
 	(symbol
-		(lib_id "power:GNDD")
-		(at 168.91 100.33 0)
+		(lib_id "Device:C_Small")
+		(at 213.36 39.37 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
+		(uuid "53b15ebb-c073-4b56-be00-28f4e4e72a74")
+		(property "Reference" "C50"
+			(at 218.186 44.958 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "0.1u"
+			(at 218.694 43.18 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 213.36 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 213.36 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 213.36 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "581-KGM15BR71E104KT"
+			(at 198.374 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0013"
+			(at 213.36 39.37 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 213.36 39.37 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "CL05B104KO5NNNC"
+			(at 213.36 39.37 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C14663"
+			(at 213.36 39.37 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "23a21be4-3440-4519-bb82-e8edc52323fd")
+		)
+		(pin "2"
+			(uuid "2b1133e7-b9f1-4432-9ed0-34656af1bd99")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/51deadb4-9fb8-471c-a902-4285ed5e398b"
+					(reference "C50")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GNDD")
+		(at 210.82 74.93 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp yes)
 		(fields_autoplaced yes)
 		(uuid "556fb530-354d-46e8-8313-7680e02f6a9b")
 		(property "Reference" "#PWR0129"
-			(at 168.91 106.68 0)
+			(at 210.82 81.28 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10867,7 +10929,7 @@
 			)
 		)
 		(property "Value" "GNDD"
-			(at 168.91 104.14 0)
+			(at 210.82 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10875,7 +10937,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 168.91 100.33 0)
+			(at 210.82 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10884,7 +10946,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 168.91 100.33 0)
+			(at 210.82 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10893,7 +10955,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GNDD\" , digital ground"
-			(at 168.91 100.33 0)
+			(at 210.82 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10918,9 +10980,9 @@
 		(at 167.64 67.31 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
+		(in_bom no)
+		(on_board no)
+		(dnp yes)
 		(fields_autoplaced yes)
 		(uuid "6bd57816-f84d-41c8-b611-d48a14ac2ec3")
 		(property "Reference" "#PWR0131"
@@ -11006,7 +11068,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Espressif:ESP32-C3-MINI-1_HandSoldering"
+		(property "Footprint" "Espressif:ESP32-C3-MINI-1"
 			(at 119.38 115.57 0)
 			(effects
 				(font
@@ -11015,7 +11077,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://documentation.espressif.com/esp32-c3-mini-1_datasheet_en.pdf"
+		(property "Datasheet" "https://www.espressif.com/sites/default/files/documentation/esp32-c3-mini-1_datasheet_en.pdf"
 			(at 119.38 118.11 0)
 			(effects
 				(font
@@ -11024,7 +11086,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "-40℃~+85℃ -98dBm 20.5dBm 350mA 3V~3.6V 84mA On-board PCB Antenna SPI、UART、I2C、I2S、USB Transceiver SMD,16.6x13.2mm RF Modules ROHS"
+		(property "Description" "ESP32-C3-MINI-1 family is an ultra-low-power MCU-based SoC solution that supports 2.4 GHz Wi-Fi and Bluetooth®Low Energy (Bluetooth LE)."
 			(at 119.38 80.01 0)
 			(effects
 				(font
@@ -11248,16 +11310,16 @@
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x04")
-		(at 161.29 85.09 0)
+		(at 158.75 90.17 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
+		(in_bom no)
+		(on_board no)
+		(dnp yes)
 		(fields_autoplaced yes)
 		(uuid "7432d6a8-1571-42cf-8c02-6a7a3e0ec0cb")
 		(property "Reference" "J5"
-			(at 163.83 85.0899 0)
+			(at 161.29 90.1699 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11266,7 +11328,7 @@
 			)
 		)
 		(property "Value" "JTAG"
-			(at 163.83 87.6299 0)
+			(at 161.29 92.7099 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11275,7 +11337,7 @@
 			)
 		)
 		(property "Footprint" "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
-			(at 161.29 85.09 0)
+			(at 158.75 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11284,7 +11346,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 161.29 85.09 0)
+			(at 158.75 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11292,16 +11354,17 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
-			(at 161.29 85.09 0)
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 158.75 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" ""
-			(at 161.29 85.09 0)
+			(at 158.75 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11309,7 +11372,7 @@
 			)
 		)
 		(property "Price" "0.0238"
-			(at 161.29 85.09 0)
+			(at 158.75 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11318,7 +11381,7 @@
 			)
 		)
 		(property "Version" ""
-			(at 161.29 85.09 0)
+			(at 158.75 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11327,7 +11390,7 @@
 			)
 		)
 		(property "Manufacturer_Part_Number" "B4B-XH-A"
-			(at 161.29 85.09 0)
+			(at 158.75 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11390,7 +11453,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579706128193802240"
+		(property "Datasheet" "~"
 			(at 151.13 111.76 0)
 			(effects
 				(font
@@ -11399,7 +11462,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "-55℃~+155℃ 100mW 150Ω 75V Thick Film Resistor ±1% ±100ppm/℃ 0603 Chip Resistor - Surface Mount ROHS"
+		(property "Description" "Resistor, small symbol"
 			(at 151.13 111.76 0)
 			(effects
 				(font
@@ -11512,12 +11575,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
 			(at 250.19 123.19 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -11533,17 +11597,16 @@
 		)
 	)
 	(symbol
-		(lib_name "R_Small_5")
 		(lib_id "Device:R_Small")
-		(at 163.83 95.25 90)
+		(at 203.2 68.58 180)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
+		(in_bom no)
+		(on_board no)
+		(dnp yes)
 		(uuid "85e5cd08-912a-4969-9db7-398a592a123b")
 		(property "Reference" "R17"
-			(at 163.83 97.028 90)
+			(at 204.978 68.58 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11551,15 +11614,15 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 163.83 93.472 90)
+			(at 201.422 68.58 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 163.83 95.25 0)
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+			(at 203.2 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11567,8 +11630,8 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
-			(at 163.83 95.25 0)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8556212101498380288"
+			(at 203.2 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11576,16 +11639,17 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
-			(at 163.83 95.25 0)
+		(property "Description" "-55℃~+155℃ 10kΩ 50V 62.5mW Thick Film Resistor ±1% ±100ppm/℃ 0402 Chip Resistor - Surface Mount ROHS"
+			(at 203.2 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "603-RC0603JR-1310KL"
-			(at 174.752 91.186 90)
+			(at 199.136 57.658 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11593,8 +11657,8 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.006"
-			(at 163.83 95.25 90)
+		(property "Price" "0.0008"
+			(at 203.2 68.58 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11603,7 +11667,7 @@
 			)
 		)
 		(property "Version" ""
-			(at 163.83 95.25 90)
+			(at 203.2 68.58 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11611,8 +11675,8 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CRCW060310K0FKEA"
-			(at 163.83 95.25 90)
+		(property "Manufacturer_Part_Number" "0402WGF1002TCE"
+			(at 203.2 68.58 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11620,8 +11684,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25804"
-			(at 163.83 95.25 90)
+		(property "LCSC" "C25744"
+			(at 203.2 68.58 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11755,12 +11819,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 273.05 96.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "581-06036C475KAT2A"
@@ -11828,9 +11893,9 @@
 		(at 167.64 59.69 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
+		(in_bom no)
+		(on_board no)
+		(dnp yes)
 		(uuid "937d467d-af5f-421c-a187-199cf2022b60")
 		(property "Reference" "#PWR0130"
 			(at 167.64 63.5 0)
@@ -11867,12 +11932,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
 			(at 167.64 59.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -11888,7 +11954,6 @@
 		)
 	)
 	(symbol
-		(lib_name "R_Small_9")
 		(lib_id "Device:R_Small")
 		(at 262.89 50.8 0)
 		(unit 1)
@@ -11931,12 +11996,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 262.89 50.8 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "71-CRCW060333R0FKEAC"
@@ -12091,7 +12157,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 68.58 59.69 0)
 			(effects
 				(font
@@ -12100,7 +12166,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
 			(at 68.58 59.69 0)
 			(effects
 				(font
@@ -12109,12 +12175,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 68.58 59.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "581-KGM15BR71E104KT"
@@ -12126,7 +12193,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.026"
+		(property "Price" "0.0013"
 			(at 68.58 59.69 90)
 			(effects
 				(font
@@ -12144,7 +12211,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CL10B104KB8NNNC"
+		(property "Manufacturer_Part_Number" "CL05B104KO5NNNC"
 			(at 68.58 59.69 90)
 			(effects
 				(font
@@ -12172,6 +12239,137 @@
 			(project "DS7"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/51deadb4-9fb8-471c-a902-4285ed5e398b"
 					(reference "C40")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GNDD")
+		(at 207.01 44.45 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "a22a5b16-4e0f-4794-84ee-7e25793e6f75")
+		(property "Reference" "#PWR091"
+			(at 207.01 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GNDD"
+			(at 207.01 49.53 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 207.01 44.45 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 207.01 44.45 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GNDD\" , digital ground"
+			(at 207.01 44.45 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "aee39a0c-7002-44d3-8267-3395f8ce459a")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/51deadb4-9fb8-471c-a902-4285ed5e398b"
+					(reference "#PWR091")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+3.3V")
+		(at 209.55 27.94 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "a6805a7b-7009-4d68-b50c-8678c45fb61a")
+		(property "Reference" "#PWR090"
+			(at 209.55 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "+3V3"
+			(at 209.296 22.606 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 209.55 27.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 209.55 27.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 209.55 27.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "42c11eb9-a550-41e3-adc5-5f56e18817f8")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/51deadb4-9fb8-471c-a902-4285ed5e398b"
+					(reference "#PWR090")
 					(unit 1)
 				)
 			)
@@ -12239,15 +12437,6 @@
 			)
 		)
 		(property "Price" "0.067"
-			(at 234.95 45.72 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Alt_text" "USB_C_ESP32"
 			(at 234.95 45.72 0)
 			(effects
 				(font
@@ -12339,9 +12528,9 @@
 		(at 172.72 62.23 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
+		(in_bom no)
+		(on_board no)
+		(dnp yes)
 		(fields_autoplaced yes)
 		(uuid "b504c1b8-a65b-4a2c-a9d7-0f257c226710")
 		(property "Reference" "J6"
@@ -12360,6 +12549,7 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+				(hide yes)
 			)
 		)
 		(property "Footprint" "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
@@ -12380,12 +12570,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
 			(at 172.72 62.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" ""
@@ -12497,12 +12688,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
 			(at 245.11 128.27 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" ""
@@ -12605,12 +12797,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
 			(at 68.58 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -12620,6 +12813,113 @@
 			(project "DS7"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/51deadb4-9fb8-471c-a902-4285ed5e398b"
 					(reference "#PWR0121")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 207.01 39.37 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "b8373b46-cb2b-4bb5-b1a8-a05d25e4b439")
+		(property "Reference" "K4"
+			(at 203.2 39.3701 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SW_Push"
+			(at 203.2 38.1001 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "DS_local_library:SW_SPST_EVQP2_MiddlePushTravel_H2.5mm"
+			(at 201.93 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 201.93 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Push button switch, generic, two pins"
+			(at 207.01 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 207.01 39.37 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TS-1185-W-4P-H1.8-160"
+			(at 207.01 39.37 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.05"
+			(at 207.01 39.37 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C51927445"
+			(at 207.01 39.37 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "24ee8871-d7d0-4e3b-aca5-c15ff8d42840")
+		)
+		(pin "2"
+			(uuid "679e81e8-6ee1-4ea2-814d-e69958cc4444")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/51deadb4-9fb8-471c-a902-4285ed5e398b"
+					(reference "K4")
 					(unit 1)
 				)
 			)
@@ -12757,7 +13057,6 @@
 		)
 	)
 	(symbol
-		(lib_name "R_Small_9")
 		(lib_id "Device:R_Small")
 		(at 259.08 62.23 0)
 		(unit 1)
@@ -12800,12 +13099,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 259.08 62.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "71-CRCW060333R0FKEAC"
@@ -12913,12 +13213,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 77.47 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "187-CL10A106MA8NRWC "
@@ -13026,12 +13327,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Led white"
+		(property "Description" "Light emitting diode, small symbol"
 			(at 146.05 111.252 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "720-BPS2THVG2J8L55S"
@@ -13095,7 +13397,6 @@
 		)
 	)
 	(symbol
-		(lib_name "R_Small_5")
 		(lib_id "Device:R_Small")
 		(at 257.81 35.56 270)
 		(unit 1)
@@ -13138,12 +13439,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 257.81 35.56 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "708-RMCF0603FT5K10"
@@ -13233,7 +13535,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 82.55 90.17 0)
 			(effects
 				(font
@@ -13242,7 +13544,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
 			(at 82.55 90.17 0)
 			(effects
 				(font
@@ -13251,12 +13553,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 82.55 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "581-KGM15BR71E104KT"
@@ -13268,7 +13571,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.026"
+		(property "Price" "0.0013"
 			(at 82.55 90.17 90)
 			(effects
 				(font
@@ -13286,7 +13589,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CL10B104KB8NNNC"
+		(property "Manufacturer_Part_Number" "CL05B104KO5NNNC"
 			(at 82.55 90.17 90)
 			(effects
 				(font
@@ -13346,7 +13649,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 269.24 55.88 0)
 			(effects
 				(font
@@ -13355,7 +13658,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707297419231232"
 			(at 269.24 55.88 0)
 			(effects
 				(font
@@ -13364,7 +13667,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Multilayer Ceramic Capacitors MLCC - SMD/SMT 25V 22pF C0G 0603 5%"
+		(property "Description" "22pF 50V C0G ±5% 0402 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"
 			(at 269.24 55.88 0)
 			(effects
 				(font
@@ -13382,7 +13685,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.028"
+		(property "Price" "0.0013"
 			(at 269.24 55.88 90)
 			(effects
 				(font
@@ -13400,7 +13703,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CL10C220JB81PNC"
+		(property "Manufacturer_Part_Number" "0402CG220J500NT"
 			(at 269.24 55.88 90)
 			(effects
 				(font
@@ -13409,7 +13712,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1653"
+		(property "LCSC" "C1555"
 			(at 269.24 55.88 90)
 			(effects
 				(font
@@ -13565,9 +13868,8 @@
 		)
 	)
 	(symbol
-		(lib_name "R_Small_5")
 		(lib_id "Device:R_Small")
-		(at 149.86 97.79 90)
+		(at 209.55 30.48 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -13575,7 +13877,7 @@
 		(dnp no)
 		(uuid "eaa5b202-827f-4194-8c89-3f82f497a82c")
 		(property "Reference" "R33"
-			(at 149.86 99.568 90)
+			(at 207.772 30.48 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13583,15 +13885,15 @@
 			)
 		)
 		(property "Value" "10k"
-			(at 149.86 96.012 90)
+			(at 211.328 30.48 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 149.86 97.79 0)
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+			(at 209.55 30.48 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13599,8 +13901,8 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
-			(at 149.86 97.79 0)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8556212101498380288"
+			(at 209.55 30.48 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13608,16 +13910,17 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
-			(at 149.86 97.79 0)
+		(property "Description" "-55℃~+155℃ 10kΩ 50V 62.5mW Thick Film Resistor ±1% ±100ppm/℃ 0402 Chip Resistor - Surface Mount ROHS"
+			(at 209.55 30.48 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "603-RC0603JR-1310KL"
-			(at 160.782 93.726 90)
+			(at 213.614 41.402 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13625,8 +13928,8 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.006"
-			(at 149.86 97.79 90)
+		(property "Price" "0.0008"
+			(at 209.55 30.48 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13635,7 +13938,7 @@
 			)
 		)
 		(property "Version" ""
-			(at 149.86 97.79 90)
+			(at 209.55 30.48 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13643,8 +13946,8 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CRCW060310K0FKEA"
-			(at 149.86 97.79 90)
+		(property "Manufacturer_Part_Number" "0402WGF1002TCE"
+			(at 209.55 30.48 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13652,8 +13955,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C25804"
-			(at 149.86 97.79 90)
+		(property "LCSC" "C25744"
+			(at 209.55 30.48 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13791,7 +14094,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "-40℃~+125℃ 150nA 17V 2 3.5pF 5.25V 5A@8/20us 6V ESD IEC 61000-4-2 Unidirectional SOT-666-6 ESD and Surge Protection (TVS/ESD) ROHS"
+		(property "Description" "Very low capacitance ESD protection diode, 2 data-line, SOT-666"
 			(at 246.38 92.71 0)
 			(effects
 				(font
@@ -13818,7 +14121,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.4"
+		(property "Price" "0.1848"
 			(at 246.38 92.71 0)
 			(effects
 				(font
@@ -13898,12 +14201,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
 			(at 77.47 82.55 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"

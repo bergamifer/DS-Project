@@ -12661,6 +12661,376 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Device:R_Pack04"
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "RN"
+				(at -7.62 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "R_Pack04"
+				(at 5.08 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 6.985 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "4 resistor network, parallel topology"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "R network parallel topology isolated"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "DIP* SOIC* R*Array*Concave* R*Array*Convex* MSOP*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "R_Pack04_0_1"
+				(rectangle
+					(start -6.35 -2.413)
+					(end 3.81 2.413)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+				(rectangle
+					(start -5.715 1.905)
+					(end -4.445 -1.905)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -5.08 1.905) (xy -5.08 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -5.08 -2.54) (xy -5.08 -1.905)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -3.175 1.905)
+					(end -1.905 -1.905)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.54 1.905) (xy -2.54 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.54 -2.54) (xy -2.54 -1.905)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -0.635 1.905)
+					(end 0.635 -1.905)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.905) (xy 0 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 -2.54) (xy 0 -1.905)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start 1.905 1.905)
+					(end 3.175 -1.905)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 1.905) (xy 2.54 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 -2.54) (xy 2.54 -1.905)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "R_Pack04_1_1"
+				(pin passive line
+					(at -5.08 5.08 270)
+					(length 2.54)
+					(name "R1.2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 -5.08 90)
+					(length 2.54)
+					(name "R1.1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -2.54 5.08 270)
+					(length 2.54)
+					(name "R2.2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -2.54 -5.08 90)
+					(length 2.54)
+					(name "R2.1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 5.08 270)
+					(length 2.54)
+					(name "R3.2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -5.08 90)
+					(length 2.54)
+					(name "R3.1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 2.54 5.08 270)
+					(length 2.54)
+					(name "R4.2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 2.54 -5.08 90)
+					(length 2.54)
+					(name "R4.1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "Device:R_Small"
 			(pin_numbers
 				(hide yes)
@@ -12673,21 +13043,19 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "R"
-				(at 0.762 0.508 0)
+				(at 0 0 90)
 				(effects
 					(font
-						(size 1.27 1.27)
+						(size 1.016 1.016)
 					)
-					(justify left)
 				)
 			)
 			(property "Value" "R_Small"
-				(at 0.762 -1.016 0)
+				(at 1.778 0 90)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left)
 				)
 			)
 			(property "Footprint" ""
@@ -12790,8 +13158,12 @@
 		)
 		(symbol "power:+3.3V"
 			(power)
+			(pin_numbers
+				(hide yes)
+			)
 			(pin_names
 				(offset 0)
+				(hide yes)
 			)
 			(exclude_from_sim no)
 			(in_bom yes)
@@ -12840,7 +13212,7 @@
 					(hide yes)
 				)
 			)
-			(property "ki_keywords" "power-flag"
+			(property "ki_keywords" "global power"
 				(at 0 0 0)
 				(effects
 					(font
@@ -12891,8 +13263,7 @@
 				(pin power_in line
 					(at 0 0 90)
 					(length 0)
-					(hide yes)
-					(name "+3V3"
+					(name "~"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -13333,6 +13704,16 @@
 	)
 	(wire
 		(pts
+			(xy 129.54 138.43) (xy 173.99 138.43)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "16504ac9-07e3-46a0-85e0-080860dc477a")
+	)
+	(wire
+		(pts
 			(xy 185.42 118.11) (xy 185.42 123.19)
 		)
 		(stroke
@@ -13350,6 +13731,26 @@
 			(type default)
 		)
 		(uuid "24e6ea4a-828c-414b-9399-9ce149a552f8")
+	)
+	(wire
+		(pts
+			(xy 129.54 143.51) (xy 176.53 143.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "259a4273-8220-4e5b-9026-d3ea80961cbf")
+	)
+	(wire
+		(pts
+			(xy 171.45 123.19) (xy 171.45 140.97)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "26bc6bb6-d1fe-4924-87f4-f036fa6ab172")
 	)
 	(wire
 		(pts
@@ -13403,6 +13804,26 @@
 	)
 	(wire
 		(pts
+			(xy 129.54 140.97) (xy 171.45 140.97)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6e763d6a-d2c4-473a-a6ff-b665ce56f584")
+	)
+	(wire
+		(pts
+			(xy 129.54 135.89) (xy 143.51 135.89)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "79bffa42-b717-45f9-9503-44e0520fe515")
+	)
+	(wire
+		(pts
 			(xy 100.33 99.06) (xy 119.38 99.06)
 		)
 		(stroke
@@ -13440,6 +13861,16 @@
 			(type default)
 		)
 		(uuid "845164c5-93e5-4f52-ba9c-e426b7e4242b")
+	)
+	(wire
+		(pts
+			(xy 173.99 138.43) (xy 173.99 120.65)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "87260663-5346-4210-a785-bcf17dd60cd1")
 	)
 	(wire
 		(pts
@@ -13483,6 +13914,16 @@
 	)
 	(wire
 		(pts
+			(xy 176.53 113.03) (xy 171.45 113.03)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "952331ca-e98e-4a93-9093-5b6e2fd19fcb")
+	)
+	(wire
+		(pts
 			(xy 119.38 99.06) (xy 119.38 102.87)
 		)
 		(stroke
@@ -13503,6 +13944,16 @@
 	)
 	(wire
 		(pts
+			(xy 176.53 143.51) (xy 176.53 113.03)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a7e0a745-67cd-43a3-9ca6-4c5bcd006f56")
+	)
+	(wire
+		(pts
 			(xy 191.77 123.19) (xy 191.77 120.65)
 		)
 		(stroke
@@ -13513,6 +13964,16 @@
 	)
 	(wire
 		(pts
+			(xy 143.51 135.89) (xy 143.51 123.19)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bcf2392a-fad0-4acc-b08e-6a56fb68dd81")
+	)
+	(wire
+		(pts
 			(xy 106.68 113.03) (xy 113.03 113.03)
 		)
 		(stroke
@@ -13520,6 +13981,16 @@
 			(type default)
 		)
 		(uuid "beabfa7b-f344-4338-8a0c-254e55728116")
+	)
+	(wire
+		(pts
+			(xy 173.99 120.65) (xy 171.45 120.65)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c02c181a-988a-4aa5-be55-8cdb2898b7bd")
 	)
 	(wire
 		(pts
@@ -23102,47 +23573,36 @@
 	)
 	(global_label "SAI1_MCLK"
 		(shape input)
-		(at 171.45 113.03 0)
+		(at 119.38 143.51 180)
 		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "c256c64d-acd3-4e78-81a8-7aa3c4965686")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 184.5347 113.03 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-				(hide yes)
-			)
-		)
-	)
-	(hierarchical_label "SAI4_FS_B"
-		(shape input)
-		(at 143.51 123.19 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify right)
 		)
-		(uuid "01953e03-8755-4bdb-b27c-fd8bf40775c1")
+		(uuid "c256c64d-acd3-4e78-81a8-7aa3c4965686")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 106.2953 143.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
 	)
-	(hierarchical_label "SAI4_SCK_B"
+	(hierarchical_label "SAI4_FS_B"
 		(shape input)
-		(at 171.45 123.19 0)
+		(at 119.38 135.89 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left)
+			(justify right)
 		)
-		(uuid "1235f631-7ae5-477c-9d0d-ff5545efd91a")
+		(uuid "067c2ca8-3808-4bb7-968c-77cc76a928ea")
 	)
 	(hierarchical_label "BYPASS"
 		(shape input)
@@ -23157,12 +23617,12 @@
 	)
 	(hierarchical_label "SAI4_SD_B"
 		(shape input)
-		(at 171.45 120.65 0)
+		(at 119.38 138.43 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left)
+			(justify right)
 		)
 		(uuid "5939b6d5-ee6d-4cf2-a8a9-43fcdeaa4860")
 	)
@@ -23187,6 +23647,17 @@
 			(justify left)
 		)
 		(uuid "74274a9a-0f88-4540-a4e7-431e824e76be")
+	)
+	(hierarchical_label "SAI4_SCK_B"
+		(shape input)
+		(at 119.38 140.97 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "85d6fff2-b4fb-4e2e-b54e-aef7ae4d7ce0")
 	)
 	(hierarchical_label "Frame Sync"
 		(shape input)
@@ -23287,12 +23758,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
 			(at 191.77 115.57 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -23332,7 +23804,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 106.68 110.49 0)
 			(effects
 				(font
@@ -23341,7 +23813,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579705924167974912"
 			(at 106.68 110.49 0)
 			(effects
 				(font
@@ -23350,12 +23822,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 106.68 110.49 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" ""
@@ -23367,7 +23840,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" ""
+		(property "Price" "0.0007"
 			(at 106.68 110.49 90)
 			(effects
 				(font
@@ -23394,7 +23867,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C21190"
+		(property "LCSC" "C11702"
 			(at 106.68 110.49 90)
 			(effects
 				(font
@@ -23557,7 +24030,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 114.3 105.41 0)
 			(effects
 				(font
@@ -23566,7 +24039,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
 			(at 114.3 105.41 0)
 			(effects
 				(font
@@ -23575,12 +24048,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 114.3 105.41 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "581-KGM15BR71E104KT"
@@ -23592,7 +24066,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.026"
+		(property "Price" "0.0013"
 			(at 114.3 105.41 90)
 			(effects
 				(font
@@ -23610,7 +24084,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CL10B104KB8NNNC"
+		(property "Manufacturer_Part_Number" "CL05B104KO5NNNC"
 			(at 114.3 105.41 90)
 			(effects
 				(font
@@ -23705,6 +24179,107 @@
 			(project ""
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/129b3238-cb56-46ef-8d84-9e0026f2ffd4"
 					(reference "#PWR012")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x04")
+		(at 95.25 96.52 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp yes)
+		(fields_autoplaced yes)
+		(uuid "478a1f77-5427-4104-8288-b2fb567857df")
+		(property "Reference" "J28"
+			(at 95.25 85.09 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "AUDIO_IN"
+			(at 95.25 87.63 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
+			(at 95.25 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 95.25 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 95.25 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0238"
+			(at 95.25 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 95.25 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "B4B-XH-A"
+			(at 95.25 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "4"
+			(uuid "f92244df-5585-444d-b558-4be637df6ea6")
+		)
+		(pin "3"
+			(uuid "dc568d9a-65fe-4b33-9c4d-04b85b7e20a8")
+		)
+		(pin "1"
+			(uuid "439ca8e8-6c47-47bf-a6cf-557b582b573f")
+		)
+		(pin "2"
+			(uuid "ef75b191-df06-4049-974e-f17d683503a5")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/129b3238-cb56-46ef-8d84-9e0026f2ffd4"
+					(reference "J28")
 					(unit 1)
 				)
 			)
@@ -23885,7 +24460,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "2 I2S 4.5V~5.5V Audio Analog-to-Digital Converter SSOP-20 ADCs/DACs - Special Purpose RoHS"
 			(at 158.75 123.19 0)
 			(effects
 				(font
@@ -23903,7 +24478,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "4.11"
+		(property "Price" "3.8856"
 			(at 157.48 110.49 0)
 			(effects
 				(font
@@ -23921,7 +24496,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "PCM1802DBR"
+		(property "Manufacturer_Part_Number" "PCM1802DB"
 			(at 157.48 110.49 0)
 			(effects
 				(font
@@ -24003,6 +24578,119 @@
 			(project ""
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/129b3238-cb56-46ef-8d84-9e0026f2ffd4"
 					(reference "U1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_Pack04")
+		(at 124.46 140.97 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "6e16c86a-8da3-44b3-aebe-338b4fca5b09")
+		(property "Reference" "RN6"
+			(at 124.46 129.54 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "62"
+			(at 124.46 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_Array_Convex_4x0603"
+			(at 124.46 147.955 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://www.lcsc.com/datasheet/C695182.pdf"
+			(at 124.46 140.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "4 ±5% 62Ω 62.5mW ±200ppm/℃ 0603x4 Resistor Networks, Arrays RoHS"
+			(at 124.46 140.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C695182"
+			(at 124.46 140.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "YC164-JR-0762RL"
+			(at 124.46 140.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0024"
+			(at 124.46 140.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "6"
+			(uuid "70926e60-c848-446e-82a3-0b2c557aae64")
+		)
+		(pin "3"
+			(uuid "9381addf-9773-41fc-bc19-8a42b85f6802")
+		)
+		(pin "5"
+			(uuid "2e6140c4-5118-40de-9908-023cb6fbf9c0")
+		)
+		(pin "7"
+			(uuid "090d5f08-6f91-4f47-89be-fb296c5d69af")
+		)
+		(pin "2"
+			(uuid "80910288-bd61-480a-bb8c-9b018ee9aa75")
+		)
+		(pin "1"
+			(uuid "6c41fbea-8c74-4db2-a753-c903d756d549")
+		)
+		(pin "4"
+			(uuid "110e76e8-0cd7-439a-901f-ee2fd3b59d93")
+		)
+		(pin "8"
+			(uuid "6a3e8b3e-2ec9-440a-bc27-9a2edcd53dc4")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/129b3238-cb56-46ef-8d84-9e0026f2ffd4"
+					(reference "RN6")
 					(unit 1)
 				)
 			)
@@ -24121,115 +24809,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Connector_Generic:Conn_01x04")
-		(at 95.25 96.52 180)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "7422c03e-8beb-4c83-86af-eb48505035db")
-		(property "Reference" "J1"
-			(at 94.996 88.392 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "Audio_IN"
-			(at 92.202 95.758 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Connector_JST:JST_XH_S4B-XH-A-1_1x04_P2.50mm_Horizontal"
-			(at 95.25 96.52 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8590903795620519936"
-			(at 95.25 96.52 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 95.25 96.52 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Price" "0.0896"
-			(at 95.25 96.52 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Version" ""
-			(at 95.25 96.52 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Manufacturer_Part_Number" "S4B-XH-A-R(LF)(SN)"
-			(at 95.25 96.52 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C5361047"
-			(at 95.25 96.52 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "79090653-8f48-4efd-a35d-51c7758221a8")
-		)
-		(pin "2"
-			(uuid "355ae8ed-ca07-4bb7-ac38-565f457d45a3")
-		)
-		(pin "3"
-			(uuid "2f48b678-dd69-4860-a6a0-5a44eb1fdd75")
-		)
-		(pin "4"
-			(uuid "c7061490-7113-449b-989b-b4142331c26c")
-		)
-		(instances
-			(project ""
-				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/129b3238-cb56-46ef-8d84-9e0026f2ffd4"
-					(reference "J1")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Device:C_Small")
 		(at 199.39 118.11 180)
 		(unit 1)
@@ -24256,7 +24835,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 199.39 118.11 0)
 			(effects
 				(font
@@ -24265,7 +24844,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
 			(at 199.39 118.11 0)
 			(effects
 				(font
@@ -24274,12 +24853,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 199.39 118.11 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "581-KGM15BR71E104KT"
@@ -24291,7 +24871,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.026"
+		(property "Price" "0.0013"
 			(at 199.39 118.11 90)
 			(effects
 				(font
@@ -24309,7 +24889,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CL10B104KB8NNNC"
+		(property "Manufacturer_Part_Number" "CL05B104KO5NNNC"
 			(at 199.39 118.11 90)
 			(effects
 				(font
@@ -24369,7 +24949,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 132.08 113.03 0)
 			(effects
 				(font
@@ -24378,7 +24958,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
 			(at 132.08 113.03 0)
 			(effects
 				(font
@@ -24387,12 +24967,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 132.08 113.03 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "581-KGM15BR71E104KT"
@@ -24404,7 +24985,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.026"
+		(property "Price" "0.0013"
 			(at 132.08 113.03 90)
 			(effects
 				(font
@@ -24422,7 +25003,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CL10B104KB8NNNC"
+		(property "Manufacturer_Part_Number" "CL05B104KO5NNNC"
 			(at 132.08 113.03 90)
 			(effects
 				(font
@@ -24482,7 +25063,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 100.33 107.95 0)
 			(effects
 				(font
@@ -24491,7 +25072,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
 			(at 100.33 107.95 0)
 			(effects
 				(font
@@ -24500,12 +25081,13 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 100.33 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "Mouser part" "581-KGM15BR71E104KT"
@@ -24517,7 +25099,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.026"
+		(property "Price" "0.0013"
 			(at 100.33 107.95 90)
 			(effects
 				(font
@@ -24535,7 +25117,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "CL10B104KB8NNNC"
+		(property "Manufacturer_Part_Number" "CL05B104KO5NNNC"
 			(at 100.33 107.95 90)
 			(effects
 				(font
@@ -24604,7 +25186,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.vishay.com/docs/40178/tmcm.pdf"
+		(property "Datasheet" "~"
 			(at 191.77 118.11 0)
 			(effects
 				(font
@@ -24916,7 +25498,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.vishay.com/docs/40178/tmcm.pdf"
+		(property "Datasheet" "~"
 			(at 124.46 113.03 0)
 			(effects
 				(font

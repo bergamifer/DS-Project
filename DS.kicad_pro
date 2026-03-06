@@ -37,9 +37,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 2.6,
-          "height": 2.6,
-          "width": 3.6
+          "drill": 0.0,
+          "height": 0.4,
+          "width": 1.625
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
@@ -58,20 +58,7 @@
           "width": 0.0
         }
       ],
-      "drc_exclusions": [
-        [
-          "clearance|106435000|73893000|d7243462-71a9-4e65-bb21-844513885858|ca341689-628e-4877-bcde-173dbb58a25f",
-          ""
-        ],
-        [
-          "clearance|106435000|76560000|3a3da599-b844-4690-a008-4139021a406c|cf5527d3-605b-45d1-823d-05a491ce8660",
-          ""
-        ],
-        [
-          "starved_thermal|126317000|49729500|2130b696-8f6f-42a4-b7e3-a6b7807f045f|6c621ee3-b5ba-4f28-8dc0-d3b1e9a5d01d|F.Cu",
-          ""
-        ]
-      ],
+      "drc_exclusions": [],
       "meta": {
         "version": 2
       },
@@ -235,6 +222,10 @@
         {
           "diameter": 0.0,
           "drill": 0.0
+        },
+        {
+          "diameter": 0.4,
+          "drill": 0.2
         }
       ],
       "zones_allow_external_fillets": false
@@ -255,7 +246,24 @@
     "equivalence_files": []
   },
   "erc": {
-    "erc_exclusions": [],
+    "erc_exclusions": [
+      [
+        "power_pin_not_driven|1270000|1155700|debff59b-2e27-4db9-b5d7-03bd07d2028e|00000000-0000-0000-0000-000000000000|/29234817-d0fa-4eb1-a474-1667c7510ed7/51ea6481-0eee-45d4-9de8-34af618ab641|/29234817-d0fa-4eb1-a474-1667c7510ed7/51ea6481-0eee-45d4-9de8-34af618ab641|",
+        ""
+      ],
+      [
+        "power_pin_not_driven|1270000|1155700|debff59b-2e27-4db9-b5d7-03bd07d2028e|00000000-0000-0000-0000-000000000000|/29234817-d0fa-4eb1-a474-1667c7510ed7/7f93613a-81ac-4b21-b4ec-bfcfa7fb6a2a|/29234817-d0fa-4eb1-a474-1667c7510ed7/7f93613a-81ac-4b21-b4ec-bfcfa7fb6a2a|",
+        ""
+      ],
+      [
+        "power_pin_not_driven|1270000|1155700|debff59b-2e27-4db9-b5d7-03bd07d2028e|00000000-0000-0000-0000-000000000000|/29234817-d0fa-4eb1-a474-1667c7510ed7/99c758cf-7348-4a3f-b49c-c983f0e10cf9|/29234817-d0fa-4eb1-a474-1667c7510ed7/99c758cf-7348-4a3f-b49c-c983f0e10cf9|",
+        ""
+      ],
+      [
+        "power_pin_not_driven|1270000|1155700|debff59b-2e27-4db9-b5d7-03bd07d2028e|00000000-0000-0000-0000-000000000000|/29234817-d0fa-4eb1-a474-1667c7510ed7/dd1611f7-e72c-48f4-8076-9494b5857835|/29234817-d0fa-4eb1-a474-1667c7510ed7/dd1611f7-e72c-48f4-8076-9494b5857835|",
+        ""
+      ]
+    ],
     "meta": {
       "version": 0
     },
@@ -499,23 +507,23 @@
         "priority": 2147483647,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.2,
-        "via_diameter": 0.5,
+        "via_diameter": 0.6,
         "via_drill": 0.3,
         "wire_width": 6
       },
       {
         "clearance": 0.2,
-        "diff_pair_gap": 0.1524,
-        "diff_pair_width": 0.1524,
+        "diff_pair_gap": 0.2,
+        "diff_pair_width": 0.4,
         "microvia_diameter": 0.3,
         "microvia_drill": 0.1,
-        "name": "HV",
+        "name": "AMP_OUT",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 0,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 0.5,
-        "via_diameter": 1.0,
-        "via_drill": 0.5
+        "track_width": 0.4,
+        "via_diameter": 0.6,
+        "via_drill": 0.2
       }
     ],
     "meta": {
@@ -525,7 +533,7 @@
     "netclass_assignments": null,
     "netclass_patterns": [
       {
-        "netclass": "HV",
+        "netclass": "Default",
         "pattern": "+5V"
       },
       {
@@ -533,48 +541,24 @@
         "pattern": "+3V3"
       },
       {
-        "netclass": "HV",
+        "netclass": "Default",
         "pattern": "+12V"
       },
       {
-        "netclass": "HV",
+        "netclass": "Default",
         "pattern": "/DAC/VOUT3-"
       },
       {
-        "netclass": "HV",
-        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP*"
+        "netclass": "Default",
+        "pattern": "+5VA"
       },
       {
-        "netclass": "Default",
-        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP1"
+        "netclass": "AMP_OUT",
+        "pattern": "*_OUT+"
       },
       {
-        "netclass": "Default",
-        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP2"
-      },
-      {
-        "netclass": "Default",
-        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP3"
-      },
-      {
-        "netclass": "Default",
-        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP4"
-      },
-      {
-        "netclass": "Default",
-        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP64"
-      },
-      {
-        "netclass": "Default",
-        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP63"
-      },
-      {
-        "netclass": "Default",
-        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP61"
-      },
-      {
-        "netclass": "Default",
-        "pattern": "/HAT_Amplifiers/ALL_AMPS/AMP62"
+        "netclass": "AMP_OUT",
+        "pattern": "*_OUT-"
       }
     ]
   },
@@ -646,12 +630,6 @@
           "show": true
         },
         {
-          "group_by": false,
-          "label": "#",
-          "name": "${ITEM_NUMBER}",
-          "show": false
-        },
-        {
           "group_by": true,
           "label": "DNP",
           "name": "${DNP}",
@@ -685,7 +663,7 @@
           "group_by": false,
           "label": "Datasheet",
           "name": "Datasheet",
-          "show": false
+          "show": true
         },
         {
           "group_by": false,
@@ -713,6 +691,18 @@
         },
         {
           "group_by": false,
+          "label": "Manufacturer_Name",
+          "name": "Manufacturer_Name",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "#",
+          "name": "${ITEM_NUMBER}",
+          "show": false
+        },
+        {
+          "group_by": false,
           "label": "Height",
           "name": "Height",
           "show": false
@@ -722,8 +712,8 @@
       "group_symbols": true,
       "include_excluded_from_bom": false,
       "name": "",
-      "sort_asc": true,
-      "sort_field": "Reference"
+      "sort_asc": false,
+      "sort_field": "Price"
     },
     "connection_grid_size": 50.0,
     "drawing": {
@@ -805,6 +795,10 @@
     [
       "75ac028a-e1d4-447c-89fd-2224da49f1f3",
       "ALL_AMPS"
+    ],
+    [
+      "591d8c95-cb3d-4998-991f-ef9e794f151c",
+      "ADC_AK5538"
     ],
     [
       "f424c636-f5a6-449b-bf45-f5c9d75cfde5",

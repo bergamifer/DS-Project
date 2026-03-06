@@ -1,0 +1,9 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP PCM1690DCA
+D PCM1690DCA, Audio DAC Octal 24 bit-, 192ksps +/-6%FSR Serial (I2C/SPI), 48-Pin HTSSOP
+K
+F http://www.ti.com/lit/ds/symlink/pcm1690.pdf
+$ENDCMP
+#
+#End Doc Library
