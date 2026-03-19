@@ -1,57 +1,91 @@
-🛠 Domosonica (DS) - Hardware & Schematic Specifications
-Este repositorio contiene el diseño electrónico de Domosonica, una plataforma de desarrollo basada en el microcontrolador de alto rendimiento STM32H743. El diseño está optimizado para la gestión de interfaces visuales de alta velocidad y procesamiento de señales.
+# Domosonica DS10 — 32-Channel Beamforming Audio System
 
-📋 Resumen de Componentes Clave
-MCU: STM32H743VIT6 (LQFP-100).
+Sistema de audio espacial de 32 canales con amplificadores Class-D integrados, diseñado para instalaciones artísticas con ~500 speakers distribuidos en ~18 cajas.
 
-Display: TFT LCD 0.96" IPS (Controlador ST7735).
+## Arquitectura del Sistema
 
-Passives: Capacitores de desacople de 100nF y 4.7uF para estabilidad de carril de potencia del H7.
+```
+STM32H743 (MCU) ──SAI1/SAI2──> 4x PCM1690 (DAC 8ch c/u) ──differential──> 32x PAM8302A (Class-D) ──> Speakers
+       |                              |
+       ├──UART──> ESP32-C3-Mini      AK5538VN (ADC 8ch) <──differential── Mic inputs
+       |          (WiFi/BLE)               |
+       ├──I2C1──> DAC control         SAI3 (TDM256)
+       ├──I2C4──> EEPROM (CAT24C256)       |
+       └──USB-C   (programming)       STM32H743
+```
 
-User Interface: Pulsador táctil con red de resistencia de pull-down.
+## Componentes Principales
 
-🔍 Análisis de Bloques del Esquemático
-1. Núcleo de Procesamiento (MCU Block)
+| Componente | IC | Cantidad | Funcion |
+|---|---|---|---|
+| MCU | STM32H743VIT6 (LQFP100) | 1 | Control central, SAI, I2C, USB |
+| DAC | PCM1690 (8ch, differential) | 4 | 32 canales de audio, salida diferencial |
+| ADC | AK5538VN (8ch, 32-bit, TDM256) | 1 | 8 entradas de micrófono diferencial |
+| Amplificador | PAM8302A (mono 2.5W Class-D) | 32 | Amplificación directa a speakers |
+| WiFi/BLE | ESP32-C3-Mini | 1 | Conectividad inalámbrica |
+| EEPROM | CAT24C256 | 1 | Almacenamiento de configuración |
+| LDO analogico | AP2125K-3.3 | 1 | AVDD limpio para DACs y ADC |
 
-El corazón del diseño es el STM32H743. Se ha prestado especial atención a los pines de alimentación y la integridad de señal en los buses de alta frecuencia.
+## Alimentacion
 
-VCC/GND: Distribución de planos de potencia para minimizar el ruido conmutado.
+```
+24V DC externo ──> MP2315S Buck (24V→5V, 3A) ──┬──> 5V_AMP (32x PAM8302A)
+                                                 |
+                                              [Ferrite]
+                                                 |
+                                                 ├──> LDO → 3.3V digital
+                                                 └──> AP2125K → 3.3VA analogico
+```
 
-Pin PE3 (Timing/Debug): Salida directa para instrumentación externa. Es la "pata" principal para medir físicamente latencias de hardware.
+- Entrada: 24V DC bus (daisy-chain entre cajas, cable 14AWG)
+- Buck local: MP2315S en cada placa (SOT-23-8, JLCPCB Basic)
+- Aislamiento: Ferrite bead entre 5V_AMP y 5V_CLEAN
 
-2. Bloque de Interfaz Visual (Display ST7735)
+## Distribucion de Audio
 
-Este bloque gestiona la comunicación con el display TFT. Se utiliza el bus SPI4 por su disposición física en los puertos E, facilitando el ruteado paralelo.
+- 8 canales diferenciales por enlace Cat5e/RJ45 (4 pares trenzados)
+- 4 enlaces Cat5e por placa DS10 (32ch / 8 = 4)
+- Topologia daisy-chain con passthrough RJ45 en cada caja
+- Nomenclatura pares: VP1/VN1 ... VP32/VN32
 
-Pines Críticos (Netlist): | Etiqueta | Pin MCU | Función | Notas de Hardware | | :--- | :--- | :--- | :--- | | LCD_CS | PE13 | Chip Select | Control de habilitación del periférico. | | LCD_RS | PE12 | Register Select | Selecciona entre bus de datos o comandos. | | LCD_RES | PE11 | Reset | Línea de inicialización física del ST7735. | | SCL | PE14 | SPI Clock | Línea de sincronía de datos. | | SDA | PE15 | SPI MOSI | Línea de datos (Master Out). |
+## PCB — 4 Capas
 
-3. Control de Retroiluminación (Backlight)
+| Capa | Funcion |
+|---|---|
+| L1 (Top) | Componentes + señales digitales (izq) + pares diferenciales (der) |
+| L2 (GND) | Plano solido — sin trazas |
+| L3 (Power) | Zonas 3.3V digital, 5V, AVDD analogico |
+| L4 (Bottom) | Pasivos, aux, salidas PAM8302A a speakers |
 
-El control del brillo se realiza mediante hardware dedicado para evitar parpadeos y ruidos en la línea de 3.3V.
+- Stackup: JLCPCB JLC04161H-7628 (1.6mm, 1oz/0.5oz/0.5oz/1oz)
+- Impedancia diferencial objetivo: 100 Ohm en L1
 
-Pin PE10 (TIM1_CH2N): Utiliza un canal de timer avanzado para generar una señal de control de alta precisión hacia el ánodo/cátodo del backlight.
+## Red de Entrada DAC → Amp (por canal diferencial)
 
-4. Entrada de Usuario
+```
+PCM1690 VOUT+ ──[1kOhm]──┬──[0.22uF]──> PAM8302A A+
+                          |
+                       [4.7nF]
+                          |
+                         GND
+```
 
-Pin PC13: Entrada digital conectada al pulsador K1. Configurado con pull-down físico para asegurar un estado lógico LOW estable cuando no está presionado.
+- LPF: 1kOhm + 4.7nF C0G (fc=34kHz, atenua ruido delta-sigma)
+- Acople: 0.22uF X7R (fc=72Hz con RI=10kOhm interno)
+- EMI salida: Ferrite beads + 220pF en OUT+/OUT-
 
-🏗 Especificaciones de Fabricación (PCBWay)
-El diseño ha sido validado y enviado a fabricación con los siguientes parámetros técnicos, asegurando compatibilidad con procesos industriales de alta precisión:
+## Fabricacion
 
-Parámetro	Especificación
-Dimensiones	100 mm x 100 mm
-Capas	2 Capas (Top/Bottom)
-Material	FR-4 : TG150 (Alta resistencia térmica)
-Espesor de Placa	1.6 mm
-Ancho de Pista Mínimo	6 mil (0.15 mm)
-Espaciado Mínimo	6 mil (0.15 mm)
-Tamaño de Vía Mínimo	0.3 mm
-Máscara de Soldadura	Blanca (White)
-Serigrafía	Negra (Black)
-Acabado de Superficie	HASL con plomo (HASL with lead)
-Cobre Final	1 oz Cu
-Vía Process	Tenting vias (Vías cubiertas)
-📐 Notas de Layout y Ruteado
-Planos de Masa: Se recomienda el uso de planos de masa sólidos en ambas capas para reducir la EMI (Interferencia Electromagnética) generada por el clock del sistema de 400+ MHz.
+- **Fabricante**: JLCPCB
+- **KiCad**: 9.0
+- **PCB**: 4 capas, FR-4, 1.6mm, HASL
+- **Ensamblaje**: SMD ambos lados
 
-Diferencial de SPI: Las líneas SCL y SDA deben mantenerse con longitudes similares para evitar desfasajes en frecuencias de SPI superiores a 25MHz.
+## Documentacion
+
+- [DS_Amp_Design_Notes.md](DS_Amp_Design_Notes.md) — Notas detalladas de diseño (amplificadores, fuente, distribucion, componentes LCSC)
+
+## Bugs Conocidos (DS10)
+
+1. **VREF1 swap en AK5538VN**: R8 conecta VREFL1 (pin 61) a +3.3VA en lugar de VREFH1 (pin 62)
+2. **AK5538VN I2C flotante**: SDA/SCL del ADC no conectados a ningun bus I2C del STM32
