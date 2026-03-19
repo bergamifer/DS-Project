@@ -1291,6 +1291,419 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Connector_Generic_MountingPin:Conn_01x10_MountingPin"
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "J"
+				(at 0 12.7 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Conn_01x10_MountingPin"
+				(at 1.27 -15.24 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Generic connectable mounting pin connector, single row, 01x10, script generated (kicad-library-utils/schlib/autogen/connector/)"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "connector"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "Connector*:*_1x??-1MP*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "Conn_01x10_MountingPin_1_1"
+				(rectangle
+					(start -1.27 11.43)
+					(end 1.27 -13.97)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+				(rectangle
+					(start -1.27 10.287)
+					(end 0 10.033)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -1.27 7.747)
+					(end 0 7.493)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -1.27 5.207)
+					(end 0 4.953)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -1.27 2.667)
+					(end 0 2.413)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -1.27 0.127)
+					(end 0 -0.127)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -1.27 -2.413)
+					(end 0 -2.667)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -1.27 -4.953)
+					(end 0 -5.207)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -1.27 -7.493)
+					(end 0 -7.747)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -1.27 -10.033)
+					(end 0 -10.287)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -1.27 -12.573)
+					(end 0 -12.827)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.016 -14.732) (xy 1.016 -14.732)
+					)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(text "Mounting"
+					(at 0 -14.351 0)
+					(effects
+						(font
+							(size 0.381 0.381)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 10.16 0)
+					(length 3.81)
+					(name "Pin_1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 7.62 0)
+					(length 3.81)
+					(name "Pin_2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 5.08 0)
+					(length 3.81)
+					(name "Pin_3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 2.54 0)
+					(length 3.81)
+					(name "Pin_4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 0 0)
+					(length 3.81)
+					(name "Pin_5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 -2.54 0)
+					(length 3.81)
+					(name "Pin_6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 -5.08 0)
+					(length 3.81)
+					(name "Pin_7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 -7.62 0)
+					(length 3.81)
+					(name "Pin_8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 -10.16 0)
+					(length 3.81)
+					(name "Pin_9"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "9"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 -12.7 0)
+					(length 3.81)
+					(name "Pin_10"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "10"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -17.78 90)
+					(length 3.048)
+					(name "MountPin"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "MP"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "Device:C_Polarized"
 			(pin_numbers
 				(hide yes)
@@ -2493,12 +2906,6 @@
 		)
 	)
 	(junction
-		(at 67.31 96.52)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "077b19c1-27e6-4fe9-94c7-939e95495131")
-	)
-	(junction
 		(at 168.91 95.25)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2533,6 +2940,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "31ceaf45-edf6-46dd-8373-d20acab828ce")
+	)
+	(junction
+		(at 67.31 96.52)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "348145a8-0f4a-4d93-bb0b-d0715523712b")
 	)
 	(junction
 		(at 133.35 123.19)
@@ -2595,6 +3008,12 @@
 		(uuid "987ae8a6-b43f-4e28-bfb2-d0fecb09fcb3")
 	)
 	(junction
+		(at 67.31 91.44)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "a1a87ed2-cd37-4f11-b406-89f12a5c0f60")
+	)
+	(junction
 		(at 105.41 130.81)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2623,12 +3042,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c5556710-e596-4a0c-a69e-0de76aad0403")
-	)
-	(junction
-		(at 67.31 91.44)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "c7386e5e-484b-4496-922d-ca29a595fb10")
 	)
 	(junction
 		(at 138.43 119.38)
@@ -2661,7 +3074,7 @@
 		(uuid "f97a26f8-f28f-46e6-85f2-d77f6fc21f9d")
 	)
 	(junction
-		(at 58.42 91.44)
+		(at 58.42 96.52)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "fd36123d-63b1-4bcb-977c-8dbb17a52a0d")
@@ -2936,7 +3349,7 @@
 	)
 	(wire
 		(pts
-			(xy 58.42 91.44) (xy 67.31 91.44)
+			(xy 58.42 96.52) (xy 67.31 96.52)
 		)
 		(stroke
 			(width 0)
@@ -3176,7 +3589,7 @@
 	)
 	(wire
 		(pts
-			(xy 58.42 96.52) (xy 67.31 96.52)
+			(xy 58.42 91.44) (xy 67.31 91.44)
 		)
 		(stroke
 			(width 0)
@@ -8346,7 +8759,7 @@
 		)
 	)
 	(label "AIN3P"
-		(at 34.29 100.33 180)
+		(at 34.29 72.39 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8356,7 +8769,7 @@
 		(uuid "0d6fec4f-b2c7-4357-b7a7-34a47df5ae23")
 	)
 	(label "AIN3N"
-		(at 34.29 102.87 180)
+		(at 34.29 74.93 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8386,7 +8799,7 @@
 		(uuid "1d748a64-1990-4604-9a59-442aca169a2b")
 	)
 	(label "AIN4N"
-		(at 34.29 107.95 180)
+		(at 34.29 80.01 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8466,7 +8879,7 @@
 		(uuid "6d858e37-7b1a-4e8e-8588-8dbed657d4d8")
 	)
 	(label "AIN1N"
-		(at 34.29 92.71 180)
+		(at 34.29 64.77 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8506,7 +8919,7 @@
 		(uuid "7fe82419-b249-4a42-b99c-99da2b2b8c26")
 	)
 	(label "AIN2P"
-		(at 34.29 95.25 180)
+		(at 34.29 67.31 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8606,7 +9019,7 @@
 		(uuid "aff1b9ae-60a3-4c87-8eb5-ef1f3f1a09ca")
 	)
 	(label "AIN2N"
-		(at 34.29 97.79 180)
+		(at 34.29 69.85 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8646,7 +9059,7 @@
 		(uuid "c7577b62-225a-4ba4-a56f-7ca0b3f84c2f")
 	)
 	(label "AIN4P"
-		(at 34.29 105.41 180)
+		(at 34.29 77.47 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8656,7 +9069,7 @@
 		(uuid "d45a0995-02a1-4c3e-890f-b48aa3c4bf8b")
 	)
 	(label "AIN1P"
-		(at 34.29 90.17 180)
+		(at 34.29 62.23 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8988,7 +9401,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C307331"
 			(at 101.6 130.81 90)
 			(effects
 				(font
@@ -9113,7 +9526,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579706172544782336"
 			(at 179.07 100.33 0)
 			(effects
 				(font
@@ -9140,7 +9553,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.0013"
+		(property "Price" "0.0016"
 			(at 179.07 100.33 90)
 			(effects
 				(font
@@ -9158,7 +9571,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "0603WAF750JT5E"
+		(property "Manufacturer_Part_Number" "0603WAF200JT5E"
 			(at 179.07 100.33 90)
 			(effects
 				(font
@@ -9167,7 +9580,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C4275"
+		(property "LCSC" "C22950"
 			(at 179.07 100.33 90)
 			(effects
 				(font
@@ -9186,6 +9599,73 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "R6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GNDA")
+		(at 34.29 130.81 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "1477b6f9-1149-44a0-bdc4-dd3bc8e31a1f")
+		(property "Reference" "#PWR0397"
+			(at 27.94 130.81 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GNDA"
+			(at 30.48 130.8099 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" ""
+			(at 34.29 130.81 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 34.29 130.81 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GNDA\" , analog ground"
+			(at 34.29 130.81 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "3c73ca94-3425-4009-92fa-25bc1264f118")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "#PWR0397")
 					(unit 1)
 				)
 			)
@@ -9251,6 +9731,73 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "#PWR0382")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GNDA")
+		(at 34.29 85.09 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "14e00e5d-0812-4810-8dc8-5ada27907bc7")
+		(property "Reference" "#PWR0396"
+			(at 27.94 85.09 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GNDA"
+			(at 30.48 85.0899 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" ""
+			(at 34.29 85.09 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 34.29 85.09 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GNDA\" , analog ground"
+			(at 34.29 85.09 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "4be0dad4-8181-4992-b4b6-3e3f850f8dd7")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "#PWR0396")
 					(unit 1)
 				)
 			)
@@ -9346,7 +9893,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C134745"
+		(property "LCSC" "C1691"
 			(at 180.34 85.09 0)
 			(effects
 				(font
@@ -9861,6 +10408,73 @@
 		)
 	)
 	(symbol
+		(lib_id "power:GNDA")
+		(at 34.29 133.35 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "330744fe-68e4-4086-9fb3-86b753b25799")
+		(property "Reference" "#PWR0398"
+			(at 27.94 133.35 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GNDA"
+			(at 30.48 133.3499 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" ""
+			(at 34.29 133.35 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 34.29 133.35 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GNDA\" , analog ground"
+			(at 34.29 133.35 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "1ce00379-7caf-4311-8968-a2f0f3e18c99")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "#PWR0398")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GNDD")
 		(at 77.47 77.47 270)
 		(unit 1)
@@ -9929,8 +10543,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Polarized_Small")
-		(at 58.42 93.98 0)
-		(mirror y)
+		(at 58.42 93.98 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -9938,7 +10551,7 @@
 		(dnp no)
 		(uuid "3addb9ba-d48b-4028-9924-4cc4a6ffbd6b")
 		(property "Reference" "C263"
-			(at 61.214 93.472 90)
+			(at 61.214 94.488 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9947,7 +10560,7 @@
 			)
 		)
 		(property "Value" "100uF"
-			(at 58.166 98.044 0)
+			(at 58.166 89.916 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10208,7 +10821,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C307331"
 			(at 171.45 78.74 90)
 			(effects
 				(font
@@ -10360,6 +10973,120 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "#PWR0368")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic_MountingPin:Conn_01x10_MountingPin")
+		(at 39.37 120.65 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "45e0af6a-345b-43a2-947a-842cb07d7a42")
+		(property "Reference" "J12"
+			(at 37.846 107.442 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Conn_01x10"
+			(at 41.91 127.254 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Connector_JST:JST_SH_BM10B-SRSS-TB_1x10-1MP_P1.00mm_Vertical"
+			(at 39.37 120.65 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 39.37 120.65 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Generic connectable mounting pin connector, single row, 01x10, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 39.37 120.65 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C5343037"
+			(at 39.37 120.65 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "HX 1.0-10P LT"
+			(at 39.37 120.65 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "a7f0d97d-60c3-49ed-af6c-d38eccbcbcd4")
+		)
+		(pin "2"
+			(uuid "f1b312dd-c8ff-4b99-b729-dbc3bfafcabf")
+		)
+		(pin "3"
+			(uuid "23f9bc22-db97-40a7-8170-6a88a9b676c1")
+		)
+		(pin "4"
+			(uuid "ad9b2753-e81f-4d51-817c-e88d8bc9a037")
+		)
+		(pin "6"
+			(uuid "ff1b0ad0-c684-4026-87c9-41a6dae60252")
+		)
+		(pin "10"
+			(uuid "2e3efe62-b4a6-4edc-a2a7-7bfd2d5f8a35")
+		)
+		(pin "9"
+			(uuid "1142d333-f5fc-4412-8857-0a4b18398e5f")
+		)
+		(pin "8"
+			(uuid "bbc7bbb4-92aa-4b04-a94e-2fee407a8355")
+		)
+		(pin "7"
+			(uuid "ebe89b36-c025-457a-b1ef-cb01c2308abb")
+		)
+		(pin "5"
+			(uuid "5a95e811-bea7-4534-9fe4-1598f1347973")
+		)
+		(pin "MP"
+			(uuid "db0ea48d-f19a-4279-b258-df5140cbd673")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "J12")
 					(unit 1)
 				)
 			)
@@ -10717,7 +11444,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C307331"
 			(at 130.81 123.19 90)
 			(effects
 				(font
@@ -10775,7 +11502,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579706172544782336"
 			(at 115.57 135.89 0)
 			(effects
 				(font
@@ -10802,7 +11529,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.0013"
+		(property "Price" "0.0016"
 			(at 115.57 135.89 90)
 			(effects
 				(font
@@ -10820,7 +11547,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "0603WAF750JT5E"
+		(property "Manufacturer_Part_Number" "0603WAF200JT5E"
 			(at 115.57 135.89 90)
 			(effects
 				(font
@@ -10829,7 +11556,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C4275"
+		(property "LCSC" "C22950"
 			(at 115.57 135.89 90)
 			(effects
 				(font
@@ -11210,7 +11937,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C307331"
 			(at 113.03 123.19 90)
 			(effects
 				(font
@@ -11229,6 +11956,72 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "C266")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GNDA")
+		(at 39.37 90.17 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "7efd6640-14aa-488a-97b3-b6e81b6dc645")
+		(property "Reference" "#PWR0394"
+			(at 39.37 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GNDA"
+			(at 39.37 95.25 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 39.37 90.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 39.37 90.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GNDA\" , analog ground"
+			(at 39.37 90.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "01990eee-4e86-4ebe-890f-b01279e62657")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "#PWR0394")
 					(unit 1)
 				)
 			)
@@ -11301,7 +12094,8 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 67.31 93.98 180)
+		(at 67.31 93.98 0)
+		(mirror y)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -11309,7 +12103,7 @@
 		(dnp no)
 		(uuid "84426fd3-db7e-4e01-a977-ffc451b99172")
 		(property "Reference" "C255"
-			(at 70.104 91.44 90)
+			(at 70.104 96.52 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11318,7 +12112,7 @@
 			)
 		)
 		(property "Value" "0.1u"
-			(at 64.516 91.948 90)
+			(at 64.516 96.012 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11389,7 +12183,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C307331"
 			(at 67.31 93.98 90)
 			(effects
 				(font
@@ -11633,7 +12427,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C307331"
 			(at 168.91 97.79 90)
 			(effects
 				(font
@@ -12249,6 +13043,73 @@
 		)
 	)
 	(symbol
+		(lib_id "power:GNDA")
+		(at 34.29 82.55 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "ae55d8b6-b9d6-4f83-af8e-cc51a899eef5")
+		(property "Reference" "#PWR0395"
+			(at 27.94 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GNDA"
+			(at 30.48 82.5499 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" ""
+			(at 34.29 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 34.29 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GNDA\" , analog ground"
+			(at 34.29 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "865262f4-7dc0-4d67-a370-4888f5166e01")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "#PWR0395")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:C_Polarized")
 		(at 142.24 119.38 90)
 		(mirror x)
@@ -12518,7 +13379,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C307331"
 			(at 171.45 83.82 90)
 			(effects
 				(font
@@ -12544,7 +13405,8 @@
 	)
 	(symbol
 		(lib_id "power:+3.3VA")
-		(at 53.34 91.44 90)
+		(at 53.34 96.52 90)
+		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -12553,7 +13415,7 @@
 		(fields_autoplaced yes)
 		(uuid "c4856732-0dd2-4432-bfe8-b91e32034707")
 		(property "Reference" "#PWR0384"
-			(at 57.15 91.44 0)
+			(at 57.15 96.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12562,7 +13424,7 @@
 			)
 		)
 		(property "Value" "+3.3VA"
-			(at 49.53 91.4401 90)
+			(at 49.53 96.5199 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12571,7 +13433,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 53.34 91.44 0)
+			(at 53.34 96.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12580,7 +13442,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 53.34 91.44 0)
+			(at 53.34 96.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12589,7 +13451,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+3.3VA\""
-			(at 53.34 91.44 0)
+			(at 53.34 96.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12700,7 +13562,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C307331"
 			(at 142.24 128.27 90)
 			(effects
 				(font
@@ -12719,6 +13581,120 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "C271")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic_MountingPin:Conn_01x10_MountingPin")
+		(at 39.37 72.39 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "ca3d06b7-243d-4e24-ab8f-a66961dbd587")
+		(property "Reference" "J8"
+			(at 37.846 59.182 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Conn_01x10"
+			(at 41.91 78.994 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Connector_JST:JST_SH_BM10B-SRSS-TB_1x10-1MP_P1.00mm_Vertical"
+			(at 39.37 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 39.37 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Generic connectable mounting pin connector, single row, 01x10, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 39.37 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C7423307"
+			(at 39.37 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "HX 1.0-10P LT"
+			(at 39.37 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "82f1c5ad-9d8b-4204-9a92-48b181af16ff")
+		)
+		(pin "2"
+			(uuid "25e22356-5d48-4669-88d7-498120a04a76")
+		)
+		(pin "3"
+			(uuid "3e4a2a3b-7947-4e29-a401-2d7cd1c75dba")
+		)
+		(pin "4"
+			(uuid "224ea1b9-b8fe-482f-a7f5-70813c2c6839")
+		)
+		(pin "6"
+			(uuid "ca5cd592-d80f-45e7-9c9c-0a4527bdbeb7")
+		)
+		(pin "10"
+			(uuid "ebea3684-7b19-4aef-a0b7-4ed212a2b721")
+		)
+		(pin "9"
+			(uuid "b93a4479-0203-40de-9ddf-2158b4a54ce5")
+		)
+		(pin "8"
+			(uuid "e68eccf1-e868-495c-948d-f61ab6a77577")
+		)
+		(pin "7"
+			(uuid "43787cd0-38f3-4135-b1e9-c1d9635a0030")
+		)
+		(pin "5"
+			(uuid "9625d8c3-1e28-44dd-8b8c-faa012803629")
+		)
+		(pin "MP"
+			(uuid "6007d742-77e9-48c5-9d84-eb5400a05eb0")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "J8")
 					(unit 1)
 				)
 			)
@@ -12825,7 +13801,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579706172544782336"
 			(at 128.27 135.89 0)
 			(effects
 				(font
@@ -12852,7 +13828,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.0013"
+		(property "Price" "0.0016"
 			(at 128.27 135.89 90)
 			(effects
 				(font
@@ -12870,7 +13846,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "0603WAF750JT5E"
+		(property "Manufacturer_Part_Number" "0603WAF200JT5E"
 			(at 128.27 135.89 90)
 			(effects
 				(font
@@ -12879,7 +13855,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C4275"
+		(property "LCSC" "C22950"
 			(at 128.27 135.89 90)
 			(effects
 				(font
@@ -13349,7 +14325,8 @@
 	)
 	(symbol
 		(lib_id "Device:R_Small")
-		(at 55.88 91.44 270)
+		(at 55.88 96.52 270)
+		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -13357,7 +14334,7 @@
 		(dnp no)
 		(uuid "e5f2100e-0e5d-4736-bb79-7e6d3b527c45")
 		(property "Reference" "R8"
-			(at 55.88 87.122 90)
+			(at 55.88 100.838 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13365,7 +14342,7 @@
 			)
 		)
 		(property "Value" "20"
-			(at 55.88 89.154 90)
+			(at 55.88 98.806 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13373,7 +14350,7 @@
 			)
 		)
 		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 55.88 91.44 0)
+			(at 55.88 96.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13381,8 +14358,8 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
-			(at 55.88 91.44 0)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579706172544782336"
+			(at 55.88 96.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13391,7 +14368,7 @@
 			)
 		)
 		(property "Description" "Resistor, small symbol"
-			(at 55.88 91.44 0)
+			(at 55.88 96.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13400,7 +14377,7 @@
 			)
 		)
 		(property "Mouser part" ""
-			(at 46.355 96.774 90)
+			(at 46.355 91.186 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13408,8 +14385,8 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.0013"
-			(at 55.88 91.44 90)
+		(property "Price" "0.0016"
+			(at 55.88 96.52 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13418,7 +14395,7 @@
 			)
 		)
 		(property "Version" ""
-			(at 55.88 91.44 90)
+			(at 55.88 96.52 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13426,8 +14403,8 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer_Part_Number" "0603WAF750JT5E"
-			(at 55.88 91.44 90)
+		(property "Manufacturer_Part_Number" "0603WAF200JT5E"
+			(at 55.88 96.52 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13435,8 +14412,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C4275"
-			(at 55.88 91.44 90)
+		(property "LCSC" "C22950"
+			(at 55.88 96.52 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13549,6 +14526,72 @@
 			(project ""
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "C259")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GNDA")
+		(at 39.37 138.43 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "f1227acc-72c2-4240-a623-fd69e59df9ca")
+		(property "Reference" "#PWR0393"
+			(at 39.37 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GNDA"
+			(at 39.37 143.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 39.37 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 39.37 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GNDA\" , analog ground"
+			(at 39.37 138.43 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "7af170f8-09c3-4148-87de-2cc84a4f17d9")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "#PWR0393")
 					(unit 1)
 				)
 			)

@@ -1029,6 +1029,16 @@
 	)
 	(wire
 		(pts
+			(xy 67.31 49.53) (xy 92.71 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "992e7bd5-1bd9-4e3d-aebc-558a719d2322")
+	)
+	(wire
+		(pts
 			(xy 127 45.72) (xy 163.83 45.72)
 		)
 		(stroke
@@ -1056,6 +1066,16 @@
 			(type default)
 		)
 		(uuid "9c6dddfd-312e-4f7e-b60d-789c79e64dcb")
+	)
+	(wire
+		(pts
+			(xy 67.31 52.07) (xy 92.71 52.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9e51b139-e48d-46c8-b4a2-c8f03ef4f83d")
 	)
 	(wire
 		(pts
@@ -2748,7 +2768,7 @@
 			)
 		)
 		(pin "CKS0/SDA/CDTI" input
-			(at 45.72 41.91 90)
+			(at 67.31 52.07 0)
 			(uuid "2281f5aa-ce9a-443b-bc44-e1605353c87b")
 			(effects
 				(font
@@ -2758,7 +2778,7 @@
 			)
 		)
 		(pin "CKS2/SCL/CCLK" input
-			(at 48.26 41.91 90)
+			(at 67.31 49.53 0)
 			(uuid "e2eabea9-6c6c-4d64-9af0-25ba3a9964b4")
 			(effects
 				(font
@@ -3337,6 +3357,26 @@
 		(pin "SAI3_SD_B" output
 			(at 92.71 69.85 180)
 			(uuid "baab180f-3f4f-473e-beea-e785d2cf7c81")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "I2C3_SCL" bidirectional
+			(at 92.71 49.53 180)
+			(uuid "bf9f36c1-3224-4c0d-bba4-05b53f76f2cf")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "I2C3_SDA" bidirectional
+			(at 92.71 52.07 180)
+			(uuid "8cad26cb-a010-4816-8e31-5101bfdb4252")
 			(effects
 				(font
 					(size 1.27 1.27)

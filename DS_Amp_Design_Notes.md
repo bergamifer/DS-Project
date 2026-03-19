@@ -1,10 +1,12 @@
 # DS_Amp — Notas de Diseño
 
 ## Arquitectura General
-- 32x PAM8302A (mono 2.5W Class-D, entrada diferencial)
-- Alimentación: 5V/10A PSU externa (independiente del DS9)
+- 32x PAM8302A (mono 2.5W Class-D, entrada diferencial) integrados en PCB DS10
+- Alimentación: 24V DC externo → Buck 24V→5V en PCB
 - Speakers: 0.5-1W, 8 Ohm, reciclados de TV
-- Escala objetivo: ~500 speakers via múltiples pares DS9+Amp
+- Escala objetivo: ~500 speakers via ~18 cajas DS10
+- Distribución audio: Cat5e con pares trenzados (8 canales diferenciales por cable)
+- Distribución power: Bus 24V daisy-chain + buck local por placa
 
 ## PAM8302A — Specs Clave
 - Entrada diferencial: A+ (pin 3), A- (pin 4)
@@ -131,3 +133,95 @@ Total:         ~1.6mm
 - Separación entre pares: mín 3x ancho de traza (~0.6mm)
 - Nomenclatura: VP1/VN1, VP2/VN2, ... VP32/VN32
 - Wildcard KiCad: VP[1..32] / VN[1..32]
+
+## Distribución de Audio (Cat5e/RJ45)
+
+### Problema
+~500 speakers distribuidos en ~18 cajas a lo largo de una instalación.
+Cada placa DS10 tiene 32 canales de salida diferencial desde 4x PCM1690.
+
+### Solución: Cat5e con pares trenzados
+- Cat5e tiene 4 pares trenzados → 4 canales diferenciales por cable
+- 2x Cat5e por placa → 8 canales diferenciales por enlace
+- 32 canales / 8 = 4 enlaces Cat5e por placa DS10
+- Conector: RJ45 estándar (barato, robusto, fácil de cablear)
+
+### Topología
+```
+DS10 [RJ45 x4] ──Cat5e──> Caja 1 [RJ45 in/out] ──Cat5e──> Caja 2 ...
+```
+- Daisy-chain con passthrough RJ45 en cada caja
+- Cada caja recibe los 8 pares y toma los que necesita localmente
+- Señal diferencial tolera bien cables largos (>10m) con pares trenzados
+
+### Asignación de pines RJ45 (T568B)
+| Par Cat5e | Pines RJ45 | Canal |
+|---|---|---|
+| Par 1 (naranja) | 1, 2 | VP1/VN1 |
+| Par 2 (verde) | 3, 6 | VP2/VN2 |
+| Par 3 (azul) | 4, 5 | VP3/VN3 |
+| Par 4 (marrón) | 7, 8 | VP4/VN4 |
+
+## Distribución de Alimentación (24V Bus)
+
+### Problema
+A 5V, 18 cajas con 32 speakers cada una requieren ~77A total — imposible distribuir.
+
+### Solución: Bus 24V + Buck local
+- Fuente externa: 24V DC (ej. 24V/10A = 240W para el sistema completo)
+- Distribución: Cable 14AWG (~16A max) en daisy-chain entre cajas
+- Conversión local: 1x Buck 24V→5V por placa DS10
+- Ventajas:
+  - Corriente 5x menor que a 5V (I = P/V)
+  - Cables más delgados, menos pérdidas
+  - Cada placa regula su propio 5V independientemente
+
+## Fuente de Alimentación en PCB — Diseño Definitivo
+
+### Arquitectura de Power
+```
+24V DC (externo) ──> Buck 24V→5V (1 solo, en PCB) ──┬──> 5V_AMP (32× PAM8302A)
+                                                      |
+                                                   [Ferrite bead]
+                                                      |
+                                                      ├──> LDO 5V→3.3V digital (STM32, ESP32)
+                                                      |
+                                                      └──> LDO 5V→3.3VA (AP2125K-3.3)
+                                                              └──> AVDD (PCM1690, AK5538)
+```
+
+### Por qué 1 solo buck (no 2)
+- PAM8302A tiene 77dB PSRR — rechaza ruido de su alimentación
+- AVDD pasa por AP2125K-3.3 LDO (75dB PSRR adicional)
+- 3.3V digital pasa por otro LDO
+- 2 etapas de filtrado entre buck y circuitos sensibles = suficiente
+- Un segundo buck agrega complejidad sin beneficio audible
+
+### Buck recomendado: MP2315S
+- Rango entrada: 4.5V-24V
+- Salida: 5V, 3A continuo (margen: amps ~2A promedio + ~1A digital)
+- Package: SOT-23-8
+- JLCPCB: Basic (sin fee de Extended)
+- Switching: 500kHz (inductor chico)
+- Componentes externos mínimos
+
+### Componentes del buck
+| Parte | Valor | Requisito | Notas |
+|---|---|---|---|
+| Inductor | 10uH blindado | Blindado obligatorio | Reduce radiación EMI |
+| Cap entrada | 22uF X5R 50V | Cerca del IC | Cerámico |
+| Cap salida | 22uF X5R 16V x2 | ESR bajo | Cerámico, ripple mínimo |
+| Ferrite bead | 600Ohm@100MHz >=2A | Entre 5V_AMP y 5V_CLEAN | Aislamiento amp/digital |
+| Cap post-ferrite | 47uF | Después del ferrite | Antes de los LDOs |
+
+### Layout del buck en PCB
+- Ubicación: extremo izquierdo del PCB (lejos de señales analógicas)
+- Todo en L1, GND return por L2 con vías anchas
+- Polígono de cobre debajo del IC para disipación térmica
+- 5V_AMP sale hacia la derecha (zona PAM8302A)
+- 5V_CLEAN sale después del ferrite hacia LDOs (zona centro-izquierda)
+
+### Lo que NO se necesita
+- Segundo buck — los LDOs limpian suficiente
+- Filtro LC de segundo orden — ferrite + cap basta
+- Regulador externo — todo integrado en PCB

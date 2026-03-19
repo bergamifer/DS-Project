@@ -48,4 +48,13 @@ gerber/
 
 .DS_Store
 
+# KiCad lock files
+*.lck
+
+# KiCad old schematic backups
+*.kicad_sch_old
+
+# KiCad autosave directories
+\#auto_saved_files#
+
 # End of https://www.toptal.com/developers/gitignore/api/kicad
