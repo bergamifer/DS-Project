@@ -1,0 +1,264 @@
+ERC report (2026-03-23T21:05:54-0300, Encoding UTF8)
+
+***** Sheet /
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 2200 mils): Hierarchical Sheet Pin Frame Sync
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 2300 mils): Hierarchical Sheet Pin OSR
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 2800 mils): Hierarchical Sheet Pin SAI4_FS_B
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 2900 mils): Hierarchical Sheet Pin SAI4_SCK_B
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 3000 mils): Hierarchical Sheet Pin SAI4_SD_B
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 3200 mils): Hierarchical Sheet Pin FMT0
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 3300 mils): Hierarchical Sheet Pin FMT1
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 3400 mils): Hierarchical Sheet Pin MODE0
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 3500 mils): Hierarchical Sheet Pin MODE1
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 3650 mils): Hierarchical Sheet Pin PDWN
+[pin_not_connected]: Pin not connected
+    ; error
+    @(25 mils, 3750 mils): Hierarchical Sheet Pin BYPASS
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(6350 mils, 1100 mils): Symbol #PWR1 Pin 1 [Power input, Line]
+[label_dangling]: Label not connected to anything
+    ; error
+    @(4700 mils, 5350 mils): Hierarchical Label 'SAI4_FS_B'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(4700 mils, 5450 mils): Hierarchical Label 'SAI4_SD_B'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(5650 mils, 4550 mils): Hierarchical Label 'PDWN'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(4700 mils, 5550 mils): Hierarchical Label 'SAI4_SCK_B'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(5650 mils, 4650 mils): Hierarchical Label 'BYPASS'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(5650 mils, 4750 mils): Hierarchical Label 'Frame Sync'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(6750 mils, 3950 mils): Hierarchical Label 'MODE1'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(6750 mils, 4050 mils): Hierarchical Label 'MODE0'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(6750 mils, 4150 mils): Hierarchical Label 'FMT1'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(6750 mils, 4250 mils): Hierarchical Label 'FMT0'
+[label_dangling]: Label not connected to anything
+    ; error
+    @(6750 mils, 4350 mils): Hierarchical Label 'OSR'
+[lib_symbol_issues]: Symbol 'PCM1802' not found in symbol library 'Analog_ADC'
+    ; warning
+    @(6200 mils, 4350 mils): Symbol U1 [PCM1802]
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(7800 mils, 2275 mils): Vertical Wire, length 125 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(7800 mils, 2200 mils): Vertical Wire, length 75 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(8200 mils, 2275 mils): Horizontal Wire, length 400 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(8200 mils, 2200 mils): Vertical Wire, length 75 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(8200 mils, 2275 mils): Horizontal Wire, length 400 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(8600 mils, 2200 mils): Vertical Wire, length 75 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(8600 mils, 2275 mils): Horizontal Wire, length 400 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(9000 mils, 2200 mils): Vertical Wire, length 75 mils
+
+***** Sheet /ADC/
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(4450 mils, 4450 mils): Symbol #PWR02 Pin 1 [Power input, Line]
+[pin_not_driven]: Input pin not driven by any Output pins
+    ; error
+    @(5650 mils, 4550 mils): Symbol U1 Pin 7 [PDWN, Input, Line]
+[pin_not_driven]: Input pin not driven by any Output pins
+    ; error
+    @(5650 mils, 4650 mils): Symbol U1 Pin 8 [BYPAS, Input, Line]
+[pin_not_driven]: Input pin not driven by any Output pins
+    ; error
+    @(5650 mils, 4750 mils): Symbol U1 Pin 9 [FSYNC, Input, Line]
+[pin_not_driven]: Input pin not driven by any Output pins
+    ; error
+    @(6750 mils, 3950 mils): Symbol U1 Pin 20 [MODE1, Input, Line]
+[pin_not_driven]: Input pin not driven by any Output pins
+    ; error
+    @(6750 mils, 4050 mils): Symbol U1 Pin 19 [MODE0, Input, Line]
+[pin_not_driven]: Input pin not driven by any Output pins
+    ; error
+    @(6750 mils, 4150 mils): Symbol U1 Pin 18 [FMT1, Input, Line]
+[pin_not_driven]: Input pin not driven by any Output pins
+    ; error
+    @(6750 mils, 4250 mils): Symbol U1 Pin 17 [FMT0, Input, Line]
+[pin_not_driven]: Input pin not driven by any Output pins
+    ; error
+    @(6750 mils, 4350 mils): Symbol U1 Pin 16 [OSR, Input, Line]
+
+***** Sheet /DAC2/
+[pin_to_pin]: Pins of type Output and Output are connected
+    ; error
+    @(3200 mils, 4150 mils): Symbol U2 Pin 19 [AMUTEO, Output, Line]
+    @(3200 mils, 4150 mils): Symbol U2 Pin 19 [AMUTEO, Output, Line]
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(5400 mils, 4500 mils): Symbol #PWR036 Pin 1 [Power input, Line]
+
+***** Sheet /DAC0/
+[pin_to_pin]: Pins of type Output and Output are connected
+    ; error
+    @(3200 mils, 4150 mils): Symbol U2 Pin 19 [AMUTEO, Output, Line]
+    @(3200 mils, 4150 mils): Symbol U2 Pin 19 [AMUTEO, Output, Line]
+
+***** Sheet /DAC1/
+[pin_to_pin]: Pins of type Output and Output are connected
+    ; error
+    @(3200 mils, 4150 mils): Symbol U2 Pin 19 [AMUTEO, Output, Line]
+    @(3200 mils, 4150 mils): Symbol U2 Pin 19 [AMUTEO, Output, Line]
+[pin_to_pin]: Pins of type Bidirectional and Power output are connected
+    ; warning
+    @(3200 mils, 4550 mils): Symbol U2 Pin 23 [TEST/ADR1/RSV, Bidirectional, Line]
+    @(4500 mils, 4700 mils): Symbol U10 Pin 2 [VO, Power output, Line]
+
+***** Sheet /DAC3/
+[pin_to_pin]: Pins of type Bidirectional and Power output are connected
+    ; warning
+    @(3200 mils, 4550 mils): Symbol U2 Pin 23 [TEST/ADR1/RSV, Bidirectional, Line]
+    @(4500 mils, 4700 mils): Symbol U10 Pin 2 [VO, Power output, Line]
+
+***** Sheet /esp32-mini/
+
+***** Sheet /stm32_custom/
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(2800 mils, 1750 mils): Symbol U5 Pin 6 [VBAT, Power input, Line]
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(3400 mils, 1750 mils): Symbol U5 Pin 21 [VDDA, Power input, Line]
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(5600 mils, 5050 mils): Symbol #PWR035 Pin 1 [Power input, Line]
+[pin_not_connected]: Pin not connected
+    ; error
+    @(6400 mils, 5350 mils): Symbol J29 Pin 4 [Pin_4, Passive, Line]
+[pin_not_connected]: Pin not connected
+    ; error
+    @(6400 mils, 5450 mils): Symbol J29 Pin 5 [Pin_5, Passive, Line]
+[multiple_net_names]: Both DAC0_SAI_FS and DAC1_SAI_FS are attached to the same items; DAC0_SAI_FS will be used in the netlist
+    ; warning
+    @(2200 mils, 3450 mils): Hierarchical Label 'DAC0_SAI_FS'
+    @(1500 mils, 3500 mils): Hierarchical Label 'DAC1_SAI_FS'
+[multiple_net_names]: Both DAC0_SAI_SCK and DAC1_SAI_SCK are attached to the same items; DAC0_SAI_SCK will be used in the netlist
+    ; warning
+    @(2200 mils, 3550 mils): Hierarchical Label 'DAC0_SAI_SCK'
+    @(1500 mils, 3600 mils): Hierarchical Label 'DAC1_SAI_SCK'
+[multiple_net_names]: Both DAC2_SAI_FS and DAC3_SAI_FS are attached to the same items; DAC2_SAI_FS will be used in the netlist
+    ; warning
+    @(2200 mils, 5950 mils): Hierarchical Label 'DAC2_SAI_FS'
+    @(1550 mils, 6000 mils): Hierarchical Label 'DAC3_SAI_FS'
+[multiple_net_names]: Both DAC2_SAI_SCK and DAC3_SAI_SCK are attached to the same items; DAC2_SAI_SCK will be used in the netlist
+    ; warning
+    @(2200 mils, 6050 mils): Hierarchical Label 'DAC2_SAI_SCK'
+    @(1550 mils, 6100 mils): Hierarchical Label 'DAC3_SAI_SCK'
+[multiple_net_names]: Both AMUTEO and PC10 are attached to the same items; AMUTEO will be used in the netlist
+    ; warning
+    @(5850 mils, 7150 mils): Global Label 'AMUTEO'
+    @(4000 mils, 6550 mils): Label 'PC10'
+[multiple_net_names]: Both ~{RST} and PC11 are attached to the same items; ~{RST} will be used in the netlist
+    ; warning
+    @(6400 mils, 6900 mils): Global Label '~{RST}'
+    @(4000 mils, 6650 mils): Label 'PC11'
+[multiple_net_names]: Both AMUTEI and PC12 are attached to the same items; AMUTEI will be used in the netlist
+    ; warning
+    @(5900 mils, 7000 mils): Global Label 'AMUTEI'
+    @(4000 mils, 6750 mils): Label 'PC12'
+
+***** Sheet /DS_Power/
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(2600 mils, 2200 mils): Symbol #PWR0396 Pin 1 [Power input, Line]
+[pin_not_connected]: Pin not connected
+    ; error
+    @(8800 mils, 3000 mils): Symbol #PWR0169 Pin 1 [Power input, Line]
+[multiple_net_names]: Both +5V and VIN are attached to the same items; +5V will be used in the netlist
+    ; warning
+    @(2700 mils, 6200 mils): Symbol #PWR0163 Pin 1 [Power input, Line]
+    @(3200 mils, 6200 mils): Label 'VIN'
+[multiple_net_names]: Both +5VA and VDD are attached to the same items; +5VA will be used in the netlist
+    ; warning
+    @(6050 mils, 3400 mils): Symbol #PWR0417 Pin 1 [Power input, Line]
+    @(9900 mils, 3550 mils): Symbol #PWR0128 Pin 1 [Power input, Line]
+
+***** Sheet /ALL_AMPS/
+
+***** Sheet /ADC_AK5538/
+[multiple_net_names]: Both SAI1_MCLK and MCLK are attached to the same items; SAI1_MCLK will be used in the netlist
+    ; warning
+    @(6500 mils, 1650 mils): Global Label 'SAI1_MCLK'
+    @(6500 mils, 1650 mils): Label 'MCLK'
+
+***** Sheet /ALL_AMPS/Amp_Bank_A1/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A2/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A3/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A4/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A5/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A6/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A7/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A8/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A9/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A10/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A11/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A12/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A13/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A14/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A15/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A/
+
+ ** ERC messages: 64  Errors 43  Warnings 21

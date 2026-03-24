@@ -145,7 +145,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "power:GND2"
+		(symbol "power:GND"
 			(power)
 			(pin_numbers
 				(hide yes)
@@ -166,7 +166,7 @@
 					(hide yes)
 				)
 			)
-			(property "Value" "GND2"
+			(property "Value" "GND"
 				(at 0 -3.81 0)
 				(effects
 					(font
@@ -192,7 +192,7 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Power symbol creates a global label with name \"GND2\" , ground"
+			(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 				(at 0 0 0)
 				(effects
 					(font
@@ -210,7 +210,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "GND2_0_1"
+			(symbol "GND_0_1"
 				(polyline
 					(pts
 						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
@@ -224,7 +224,7 @@
 					)
 				)
 			)
-			(symbol "GND2_1_1"
+			(symbol "GND_1_1"
 				(pin power_in line
 					(at 0 0 270)
 					(length 0)
@@ -3651,7 +3651,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 182.88 87.63 90)
 			(effects
 				(font
@@ -3765,7 +3765,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 231.14 87.63 90)
 			(effects
 				(font
@@ -3879,7 +3879,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 198.12 87.63 90)
 			(effects
 				(font
@@ -3904,7 +3904,7 @@
 		)
 	)
 	(symbol
-		(lib_id "power:GND2")
+		(lib_id "power:GND")
 		(at 182.88 90.17 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -3913,7 +3913,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "4c1aa7ee-29f0-4486-a013-4316bbf7522c")
-		(property "Reference" "#PWR0118"
+		(property "Reference" "#PWR118"
 			(at 182.88 96.52 0)
 			(effects
 				(font
@@ -3922,7 +3922,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "GND2"
+		(property "Value" "GND"
 			(at 182.88 95.25 0)
 			(effects
 				(font
@@ -3948,7 +3948,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Power symbol creates a global label with name \"GND2\" , ground"
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 182.88 90.17 0)
 			(effects
 				(font
@@ -3963,7 +3963,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "#PWR0118")
+					(reference "#PWR118")
 					(unit 1)
 				)
 			)
@@ -4059,7 +4059,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 222.25 87.63 90)
 			(effects
 				(font
@@ -4173,7 +4173,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 190.5 87.63 90)
 			(effects
 				(font
@@ -4287,7 +4287,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 214.63 87.63 90)
 			(effects
 				(font
@@ -4467,7 +4467,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 205.74 87.63 90)
 			(effects
 				(font
@@ -4581,7 +4581,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 238.76 87.63 90)
 			(effects
 				(font

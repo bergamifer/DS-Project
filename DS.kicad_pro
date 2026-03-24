@@ -48,7 +48,7 @@
         "silk_text_thickness": 0.1,
         "silk_text_upright": false,
         "zones": {
-          "min_clearance": 0.2
+          "min_clearance": 0.5
         }
       },
       "diff_pair_dimensions": [
@@ -58,7 +58,12 @@
           "width": 0.0
         }
       ],
-      "drc_exclusions": [],
+      "drc_exclusions": [
+        [
+          "clearance|132017000|79368500|7f23b616-e1c7-4312-82b9-c024164062de|f5e8c932-6c96-4ff6-a34e-8ed0b2347e68",
+          ""
+        ]
+      ],
       "meta": {
         "version": 2
       },
@@ -190,7 +195,8 @@
         0.0,
         0.2,
         0.3,
-        0.5
+        0.5,
+        2.0
       ],
       "tuning_pattern_settings": {
         "diff_pair_defaults": {
@@ -226,6 +232,10 @@
         {
           "diameter": 0.4,
           "drill": 0.2
+        },
+        {
+          "diameter": 0.8,
+          "drill": 0.4
         }
       ],
       "zones_allow_external_fillets": false
@@ -507,8 +517,8 @@
         "priority": 2147483647,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.2,
-        "via_diameter": 0.6,
-        "via_drill": 0.3,
+        "via_diameter": 0.4,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
@@ -519,11 +529,19 @@
         "microvia_drill": 0.1,
         "name": "AMP_OUT",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
-        "priority": 0,
+        "priority": 1,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.4,
-        "via_diameter": 0.6,
+        "via_diameter": 0.4,
         "via_drill": 0.2
+      },
+      {
+        "clearance": 0.2,
+        "name": "Ancha",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 0,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.6
       }
     ],
     "meta": {
@@ -533,7 +551,7 @@
     "netclass_assignments": null,
     "netclass_patterns": [
       {
-        "netclass": "Default",
+        "netclass": "Ancha",
         "pattern": "+5V"
       },
       {
@@ -541,15 +559,15 @@
         "pattern": "+3V3"
       },
       {
-        "netclass": "Default",
-        "pattern": "+12V"
+        "netclass": "Ancha",
+        "pattern": "+24V"
       },
       {
         "netclass": "Default",
         "pattern": "/DAC/VOUT3-"
       },
       {
-        "netclass": "Default",
+        "netclass": "Ancha",
         "pattern": "+5VA"
       },
       {
@@ -559,6 +577,10 @@
       {
         "netclass": "AMP_OUT",
         "pattern": "*_OUT-"
+      },
+      {
+        "netclass": "Ancha",
+        "pattern": "+5VA_DAC"
       }
     ]
   },
@@ -705,6 +727,30 @@
           "group_by": false,
           "label": "Height",
           "name": "Height",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Field8",
+          "name": "Field8",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Sim.Pins",
+          "name": "Sim.Pins",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Alt_text",
+          "name": "Alt_text",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Description_1",
+          "name": "Description_1",
           "show": false
         }
       ],
