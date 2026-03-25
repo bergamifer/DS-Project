@@ -317,17 +317,102 @@ Alternativa: usar **KiCad Fabrication Toolkit** plugin (GUI, mantiene diccionari
 
 ---
 
-## 8. PRÓXIMOS PASOS
+## 8. NETLIST VERIFICATION (2026-03-25, 570 nets)
 
-1. **Schematic DS10**: Reemplazar PCM1802 por AK5538VN, agregar AP2125K-3.3 para AVDD
-2. **AK5538VN**: Verificar footprint en `librerias/LIB_AK5538VN/`, conectar según power map arriba
-3. **Expansion header**: Definir pinout 1.27mm 2×10 para inter-board sync
-4. **THT → SMD**: Reemplazar caps electrolíticos, decidir qué conectores JST-XH soldar a mano
-5. **KiCad P&P**: Aplicar script de corrección de rotaciones antes de subir a JLCPCB
-6. **PCB Layout**: 4 capas, MCLK interno, AVDD zona separada en L3
-7. **Firmware update**: Driver AK5538VN (I2C config + SAI3_A TDM256 RX)
+### Power Supply Chain — VERIFIED
+```
++24V (J9/2) → IC2/2 (MP2315S VIN)
+IC2/3 (SW) → L1/1 → L1/2 → +5VA (32x PAM + FB2 + FB3)
++5VA → FB2 → +5V (U10 input, U11 input)
++5V → U11/3 (AP1117) → U11/2 → +3V3 (digital)
++5V → U10/1 (AP2125K) → U10/5 → +3.3VA (analog)
++5VA → FB3 → +5VA_DAC (4x PCM1690 AVDD)
+```
+
+### SAI Bus Mapping — VERIFIED
+| SAI | STM32 Pins | Target | Data |
+|-----|-----------|--------|------|
+| SAI1_A (FS/SCK/SD) | U7/3,4,5 | U2+U3 (DAC0+DAC1) | 16ch via RN2,RN3 |
+| SAI1_B (SD) | U7/2 | U3 (DAC1) | 8ch via RN3 |
+| SAI2_A (FS/SCK/SD) | U7/58,59,60 | U1+U4 (DAC2+DAC3) | 16ch via RN1,RN4 |
+| SAI2_B (SD) | U7/41 | U4 (DAC3) | 8ch via RN4 |
+| SAI3_B (SCK/SD/FS) | U7/55,56,57 | IC3 AK5538 (BICK/SDTO1/LRCK) | 8ch TDM256 |
+| SAI1_MCLK | U7/1 (PE2) | All DACs + IC3/24 + JP2 | 12.288MHz |
+
+### I2C Bus Map — VERIFIED
+| Bus | STM32 Pins | Targets | Pull-ups |
+|-----|-----------|---------|----------|
+| I2C1 | U7/95(SCL), U7/96(SDA) | U1-U4 DACs (0x4C-0x4F) | RN5 |
+| I2C2 | U7/46(SCL), U7/47(SDA) | J5 expansion header | RN6 |
+| I2C3 | U7/67(SCL), U7/66(SDA) | IC3 AK5538 (0x14) | RN6 |
+| I2C4 | U7/92(SCL), U7/93(SDA) | U8 EEPROM | RN5 |
+
+### AK5538VN Strapping — VERIFIED
+| Pin | Function | Connection | Result |
+|-----|----------|------------|--------|
+| 51 | TDM0 | GND | L |
+| 52 | TDM1 | +3V3 | H |
+| → | **TDM Mode** | TDM1=H, TDM0=L | **TDM256** |
+| 54 | I2C | +3V3 | I2C mode enabled |
+| 29-31 | PW0-PW2 | +3V3 | 32-bit word |
+| 32 | MSN | GND | Slave mode |
+| 57 | LDOE | +3V3 | Internal 1.8V LDO on |
+
+### +3.3VA Net — VERIFIED
+`U10/5, IC3/2(AVDD1), IC3/15(AVDD2), R102-R105(VREFH), C63, C64, C259, C260, C265, C266`
+
+### DAC I2C Addresses — VERIFIED
+| DAC | ADR0 (pin22) | ADR1 (pin23) | Address |
+|-----|-------------|-------------|---------|
+| U2 | GND | GND | 0x4C |
+| U1 | +3V3 | GND | 0x4D |
+| U3 | GND | +3V3 | 0x4E |
+| U4 | +3V3 | +3V3 | 0x4F |
+
+### Control Signals — VERIFIED
+- RST: U1-U4/15 + R16→+3V3 + U7/79
+- AMUTEI: U1-U4/18 + R15→+3V3 + U7/80
+- AMUTEO: U1-U4/19 + U7/78 (wire-OR intentional)
+- PAM SD: 32x PAMs /ALL_AMPS/SD → R20 → U7/84 (PD3)
 
 ---
 
-**Documento preparado por**: Claude Code
-**Referencia**: [DS9 pin audit](../firmware/docs/ds9_pin_audit.md) | [Datos temperature/fill time](../firmware/Core/Src/main.c)
+## 9. PRE-PRODUCTION CHECKLIST (2026-03-25)
+
+### Completed
+- [x] PCM1802 sheet removed from schematic
+- [x] AK5538VN TDM256 strapping corrected (TDM0↔TDM1 swapped)
+- [x] VBAT connected to +3V3
+- [x] VREFL1-4 connected to GND
+- [x] AK5538VN I2C3 connected (SDA/SCL with pull-ups RN6)
+- [x] FB67 removed (was bridging +3V3 → +3.3VA)
+- [x] GND unified (single net, solid L2 plane)
+- [x] SAI1→DAC0+DAC1, SAI2→DAC2+DAC3, SAI3_B→AK5538 verified
+- [x] All 4 DAC I2C addresses unique (0x4C-0x4F)
+- [x] +3.3VA LDO output verified connected to AK5538 AVDD + VREFH
+- [x] Netlist script fixed (null check + auto-save)
+- [x] 570-net complete netlist generated and verified
+
+### Remaining DRC (19 violations)
+- [ ] Resize 5 vias: drill 0.2→0.3mm, diameter 0.4→0.6mm (USART2, VREF+)
+- [ ] Connect +5V track to C59 pad (via between layers)
+- [ ] Connect +3V3 zones (via stitching B.Cu↔In2.Cu)
+- [ ] Delete dangling tracks AIN7P/AIN7N on In2.Cu
+- [ ] Fix silk text size R49, R81 (0.8mm/0.08mm)
+
+### Remaining ERC (10 errors)
+- [ ] Add PWR_FLAG on: +24V, +5VA, +3V3(ESP32), VBAT, VDDA, +5VA(DS_Power)
+- [ ] Suppress AMUTEO output-output warnings (intentional wire-OR)
+- [ ] Clean up duplicate labels (VIN→+5V, VDD→+5VA, local MCLK)
+
+### Before Ordering
+- [ ] Verify AP1117 output cap total >= 22uF near U11
+- [ ] Re-run DRC + ERC after all fixes → target 0 errors
+- [ ] Generate Gerbers + BOM + Pick&Place
+- [ ] Apply JLCPCB rotation corrections
+- [ ] Verify BOM vs P&P component count consistency
+
+---
+
+**Last updated**: 2026-03-25
+**Branch**: power_supply_24

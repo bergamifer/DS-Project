@@ -24,7 +24,9 @@ STM32H743 (MCU) ──SAI1/SAI2──> 4x PCM1690 (DAC 8ch c/u) ──differenti
 | Amplificador | PAM8302A (mono 2.5W Class-D) | 32 | Amplificación directa a speakers |
 | WiFi/BLE | ESP32-C3-Mini | 1 | Conectividad inalámbrica |
 | EEPROM | CAT24C256 | 1 | Almacenamiento de configuración |
-| LDO analogico | AP2125K-3.3 | 1 | AVDD limpio para DACs y ADC |
+| Buck converter | MP2315S (24V→5V, 3A) | 1 | Fuente principal desde 24V DC |
+| LDO digital | AP1117-33 | 1 | +3V3 para STM32, ESP32, digital |
+| LDO analogico | AP2125K-3.3 | 1 | +3.3VA limpio para ADC AVDD y VREF |
 
 ## Alimentacion
 
@@ -85,7 +87,33 @@ PCM1690 VOUT+ ──[1kOhm]──┬──[0.22uF]──> PAM8302A A+
 
 - [DS_Amp_Design_Notes.md](DS_Amp_Design_Notes.md) — Notas detalladas de diseño (amplificadores, fuente, distribucion, componentes LCSC)
 
-## Bugs Conocidos (DS10)
+## Estado de Verificacion (2026-03-25)
 
-1. **VREF1 swap en AK5538VN**: R8 conecta VREFL1 (pin 61) a +3.3VA en lugar de VREFH1 (pin 62)
-2. **AK5538VN I2C flotante**: SDA/SCL del ADC no conectados a ningun bus I2C del STM32
+### Fixes completados
+- VREFL1-4 conectados a GND (antes VREFL1 iba a +3.3VA)
+- AK5538VN I2C conectado via I2C3 (U7/66=SDA, U7/67=SCL, AF4)
+- FB67 eliminado (bridgeaba +3V3 con +3.3VA)
+- PCM1802 sheet eliminado del schematic
+- TDM0/TDM1 corregidos: TDM256 mode (TDM1=H, TDM0=L)
+- VBAT (U7/6) conectado a +3V3
+- GND unificado (no mas GNDA/GNDD/GND2)
+- Netlist script corregido (null check + auto-save a netlist.md)
+
+### Verificado por netlist (570 nets, completo)
+- SAI1 → DAC0(U2)+DAC1(U3), SAI2 → DAC2(U1)+DAC3(U4)
+- SAI3_B → AK5538VN (BICK=U7/55, SDTO1=U7/56, LRCK=U7/57)
+- MCLK 12.288MHz compartido: DACs + ADC + extension header
+- 4 DACs con I2C addresses unicos (0x4C-0x4F) en I2C1
+- +3.3VA: U10(AP2125K) output → IC3 AVDD + VREFH network
+- +24V → IC2(MP2315S) → L1 → +5VA → FB2 → +5V → LDOs
+
+### DRC restante (19 violations)
+- 5x vias con drill 0.2mm (min 0.3mm) — resize pendiente
+- 2x unconnected pads (+5V a C59, zonas +3V3)
+- 2x dangling tracks (AIN7P/AIN7N en In2.Cu)
+- Resto: warnings cosmeticos (silk text, lib mismatch)
+
+### ERC restante (10 errores)
+- 6x power_pin_not_driven — agregar PWR_FLAG
+- 3x AMUTEO output-output — intencional, suprimir
+- Warnings de labels duplicados — cleanup pendiente

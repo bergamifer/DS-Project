@@ -636,7 +636,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "1242d016-63d3-42df-91d0-58bf16e0e8d3")
-		(property "Reference" "#PWR5"
+		(property "Reference" "#PWR05"
 			(at 157.48 95.25 0)
 			(effects
 				(font
@@ -687,7 +687,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7"
-					(reference "#PWR5")
+					(reference "#PWR05")
 					(unit 1)
 				)
 			)
@@ -768,7 +768,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "37b7df63-b197-4644-af91-1d2993467d2d")
-		(property "Reference" "#PWR4"
+		(property "Reference" "#PWR04"
 			(at 157.48 63.5 0)
 			(effects
 				(font
@@ -819,7 +819,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7"
-					(reference "#PWR4")
+					(reference "#PWR04")
 					(unit 1)
 				)
 			)
@@ -965,7 +965,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "ecc49c3b-1796-405e-ae1c-4914f204516a")
-		(property "Reference" "#PWR1"
+		(property "Reference" "#PWR02"
 			(at 154.94 27.94 0)
 			(effects
 				(font
@@ -1016,7 +1016,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7"
-					(reference "#PWR1")
+					(reference "#PWR02")
 					(unit 1)
 				)
 			)
@@ -1032,7 +1032,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "f78b8ca2-0b8f-437a-b1cc-7f577d2a4391")
-		(property "Reference" "#PWR196"
+		(property "Reference" "#PWR01"
 			(at 154.94 25.4 0)
 			(effects
 				(font
@@ -1083,7 +1083,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7"
-					(reference "#PWR196")
+					(reference "#PWR01")
 					(unit 1)
 				)
 			)
@@ -1150,158 +1150,6 @@
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7"
 					(reference "#PWR03")
 					(unit 1)
-				)
-			)
-		)
-	)
-	(sheet
-		(at -28.575 50.8)
-		(size 29.21 52.07)
-		(exclude_from_sim yes)
-		(in_bom no)
-		(on_board no)
-		(dnp yes)
-		(fields_autoplaced yes)
-		(stroke
-			(width 0.1524)
-			(type solid)
-		)
-		(fill
-			(color 213 249 255 1.0000)
-		)
-		(uuid "129b3238-cb56-46ef-8d84-9e0026f2ffd4")
-		(property "Sheetname" "ADC"
-			(at -28.575 50.0884 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left bottom)
-			)
-		)
-		(property "Sheetfile" "ADC_PCM1802.kicad_sch"
-			(at -28.575 103.4546 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-			)
-		)
-		(pin "BYPASS" input
-			(at 0.635 95.25 0)
-			(uuid "bf4ddc20-2ae6-4eda-825f-90e145df4020")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "Frame Sync" input
-			(at 0.635 55.88 0)
-			(uuid "c64e9717-d864-45a7-bbf6-7fefdbeb1859")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "OSR" input
-			(at 0.635 58.42 0)
-			(uuid "c0450cd5-8afb-44c0-a2d7-33740f16d011")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "PDWN" input
-			(at 0.635 92.71 0)
-			(uuid "e6c3cdc7-93a5-4e37-880e-aba0c0991aac")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "SAI4_FS_B" input
-			(at 0.635 71.12 0)
-			(uuid "14e499d4-d14e-43c9-9669-08b434efabc0")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "SAI4_SCK_B" input
-			(at 0.635 73.66 0)
-			(uuid "28e49e74-b412-440a-9946-2d34647cc0d3")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "SAI4_SD_B" input
-			(at 0.635 76.2 0)
-			(uuid "9baca286-8178-42ec-86f7-8f4e940183a8")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "FMT0" input
-			(at 0.635 81.28 0)
-			(uuid "c9f1fa26-ed86-4a52-87b1-e0006bc8f421")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "FMT1" input
-			(at 0.635 83.82 0)
-			(uuid "81f6813d-1cfd-478f-94f4-8f0eaf2ac191")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "MODE0" input
-			(at 0.635 86.36 0)
-			(uuid "f5d9f9ea-c9c7-4119-81e6-c36db9641571")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "MODE1" input
-			(at 0.635 88.9 0)
-			(uuid "ee5f4da1-5014-4f33-a030-ffc2a1ac8a7c")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(instances
-			(project "DS"
-				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7"
-					(page "2")
 				)
 			)
 		)
