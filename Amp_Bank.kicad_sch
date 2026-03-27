@@ -1993,7 +1993,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3904388"
+		(property "LCSC" "C342963"
 			(at 97.79 54.61 90)
 			(effects
 				(font
@@ -2980,7 +2980,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3904388"
+		(property "LCSC" "C342963"
 			(at 97.79 90.17 90)
 			(effects
 				(font
@@ -3082,7 +3082,7 @@
 				)
 			)
 		)
-		(property "Value" "FerriteBead_Small"
+		(property "Value" "FerriteBead"
 			(at 173.9519 73.66 90)
 			(effects
 				(font
@@ -3108,7 +3108,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "600Ω@100MHz Ferrite Bead 0805 1.5A 250mΩ"
+		(property "Description" "-55℃~+125℃ 1 1.5A 220mΩ 600Ω@100MHz ±25% 0805 Ferrite Beads ROHS"
 			(at 173.99 77.47 0)
 			(effects
 				(font
@@ -3117,7 +3117,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C127291"
+		(property "LCSC" "C21286"
 			(at 173.99 77.47 90)
 			(effects
 				(font
@@ -3237,7 +3237,7 @@
 				)
 			)
 		)
-		(property "Value" "FerriteBead_Small"
+		(property "Value" "FerriteBead"
 			(at 173.9519 50.8 90)
 			(effects
 				(font
@@ -3263,7 +3263,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "600Ω@100MHz Ferrite Bead 0805 1.5A 250mΩ"
+		(property "Description" "-55℃~+125℃ 1 1.5A 220mΩ 600Ω@100MHz ±25% 0805 Ferrite Beads ROHS"
 			(at 173.99 54.61 0)
 			(effects
 				(font
@@ -3272,7 +3272,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C127291"
+		(property "LCSC" "C21286"
 			(at 173.99 54.61 90)
 			(effects
 				(font
@@ -3692,7 +3692,7 @@
 				)
 			)
 		)
-		(property "Value" "FerriteBead_Small"
+		(property "Value" "FerriteBead"
 			(at 173.9519 88.9 90)
 			(effects
 				(font
@@ -3718,7 +3718,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "600Ω@100MHz Ferrite Bead 0805 1.5A 250mΩ"
+		(property "Description" "-55℃~+125℃ 1 1.5A 220mΩ 600Ω@100MHz ±25% 0805 Ferrite Beads ROHS"
 			(at 173.99 85.09 0)
 			(effects
 				(font
@@ -3727,7 +3727,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C127291"
+		(property "LCSC" "C21286"
 			(at 173.99 85.09 90)
 			(effects
 				(font
@@ -4391,7 +4391,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3904388"
+		(property "LCSC" "C342963"
 			(at 97.79 44.45 90)
 			(effects
 				(font
@@ -4563,7 +4563,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C3904388"
+		(property "LCSC" "C342963"
 			(at 97.79 80.01 90)
 			(effects
 				(font
@@ -4665,7 +4665,7 @@
 				)
 			)
 		)
-		(property "Value" "FerriteBead_Small"
+		(property "Value" "FerriteBead"
 			(at 173.9519 66.04 90)
 			(effects
 				(font
@@ -4691,7 +4691,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "600Ω@100MHz Ferrite Bead 0805 1.5A 250mΩ"
+		(property "Description" "-55℃~+125℃ 1 1.5A 220mΩ 600Ω@100MHz ±25% 0805 Ferrite Beads ROHS"
 			(at 173.99 62.23 0)
 			(effects
 				(font
@@ -4700,7 +4700,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C127291"
+		(property "LCSC" "C21286"
 			(at 173.99 62.23 90)
 			(effects
 				(font
@@ -5875,11 +5875,11 @@
 		(at 203.2 57.15 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "b798d423-f687-41f3-b6ff-ce41f554d7fb")
-		(property "Reference" "J11"
+		(property "Reference" "JSPK02"
 			(at 203.454 65.278 0)
 			(effects
 				(font
@@ -5973,67 +5973,67 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/16ecdc9f-2955-41c5-9136-75600ff03441"
-					(reference "J25")
+					(reference "JSPK16")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/2b0daeb3-3c79-482b-9f9c-7b6a2b9774e3"
-					(reference "J26")
+					(reference "JSPK01")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/67a660be-ab7a-4103-9ee5-14a9df089f5d"
-					(reference "J19")
+					(reference "JSPK09")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/68953218-066b-4312-982f-4447c0d453ac"
-					(reference "J22")
+					(reference "JSPK13")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/730cd834-eccd-45d8-89ec-c34e9c180675"
-					(reference "J13")
+					(reference "JSPK04")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/7cc95407-6d28-4956-8add-6797e7018242"
-					(reference "J14")
+					(reference "JSPK05")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/8b422221-c5aa-4f8b-9b48-fd5742db3d46"
-					(reference "J18")
+					(reference "JSPK10")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/a5935750-5f02-4fd9-a584-54f461348a72"
-					(reference "J16")
+					(reference "JSPK07")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/c183f130-4c58-4bab-ba07-bceadf2fecca"
-					(reference "J17")
+					(reference "JSPK08")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/c4c7ece7-29a4-4aff-aa76-dd856c5046a5"
-					(reference "J20")
+					(reference "JSPK11")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/c6f69862-5787-4e81-8a28-86f0a39d73e3"
-					(reference "J23")
+					(reference "JSPK14")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/cb2c404b-cd14-4a9b-b219-d260ee336c01"
-					(reference "J12")
+					(reference "JSPK03")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/d34e4b53-f91f-40c8-97a0-01a247e49716"
-					(reference "J15")
+					(reference "JSPK06")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/dacc2298-b218-4152-8767-0adc7b8f65c0"
-					(reference "J21")
+					(reference "JSPK12")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/e273877f-fb0e-4e37-a97b-4573ce1804c1"
-					(reference "J24")
+					(reference "JSPK15")
 					(unit 1)
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3/f424c636-f5a6-449b-bf45-f5c9d75cfde5"
-					(reference "J11")
+					(reference "JSPK02")
 					(unit 1)
 				)
 			)

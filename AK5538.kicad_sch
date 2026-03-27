@@ -2430,7 +2430,7 @@
 		)
 	)
 	(rectangle
-		(start 154.94 22.86)
+		(start 154.94 36.195)
 		(end 186.69 47.625)
 		(stroke
 			(width 0)
@@ -9617,7 +9617,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 62.23 57.15 270)
+		(at 62.23 54.61 270)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -9626,7 +9626,7 @@
 		(fields_autoplaced yes)
 		(uuid "1d96c9a8-4907-4953-89e2-ef49900467ba")
 		(property "Reference" "#PWR0371"
-			(at 55.88 57.15 0)
+			(at 55.88 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9635,7 +9635,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 58.42 57.1499 90)
+			(at 58.42 54.6099 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9644,7 +9644,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 62.23 57.15 0)
+			(at 62.23 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9653,7 +9653,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 62.23 57.15 0)
+			(at 62.23 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9662,7 +9662,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 62.23 57.15 0)
+			(at 62.23 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10572,7 +10572,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Connector_RJ:RJ45_Amphenol_RJHSE5380"
+		(property "Footprint" "DS_local_library:RJ45_Amphenol_RJHSE5380"
 			(at 212.09 103.505 90)
 			(effects
 				(font
@@ -11272,7 +11272,6 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "75d8ba81-dc85-4a7b-84f6-8e2af86f842a")
 		(property "Reference" "#PWR0395"
 			(at 158.75 77.47 0)
@@ -11284,7 +11283,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 156.21 77.4699 90)
+			(at 152.4 80.01 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11560,7 +11559,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Connector_RJ:RJ45_Amphenol_RJHSE5380"
+		(property "Footprint" "DS_local_library:RJ45_Amphenol_RJHSE5380"
 			(at 256.54 71.755 90)
 			(effects
 				(font
@@ -11792,7 +11791,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Connector_RJ:RJ45_Amphenol_RJHSE5380"
+		(property "Footprint" "DS_local_library:RJ45_Amphenol_RJHSE5380"
 			(at 256.54 103.505 90)
 			(effects
 				(font
@@ -12130,7 +12129,7 @@
 	)
 	(symbol
 		(lib_id "power:+3.3V")
-		(at 62.23 54.61 90)
+		(at 62.23 57.15 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -12138,7 +12137,7 @@
 		(dnp no)
 		(uuid "84a69e65-470e-4bbe-9524-d3d7c6a971e3")
 		(property "Reference" "#PWR0370"
-			(at 66.04 54.61 0)
+			(at 66.04 57.15 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12147,7 +12146,7 @@
 			)
 		)
 		(property "Value" "+3V3"
-			(at 55.372 54.61 90)
+			(at 55.372 57.15 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12155,7 +12154,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 62.23 54.61 0)
+			(at 62.23 57.15 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12164,7 +12163,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 62.23 54.61 0)
+			(at 62.23 57.15 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12173,7 +12172,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
-			(at 62.23 54.61 0)
+			(at 62.23 57.15 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12466,7 +12465,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Connector_RJ:RJ45_Amphenol_RJHSE5380"
+		(property "Footprint" "DS_local_library:RJ45_Amphenol_RJHSE5380"
 			(at 212.09 71.755 90)
 			(effects
 				(font
