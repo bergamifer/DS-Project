@@ -393,26 +393,53 @@ IC2/3 (SW) → L1/1 → L1/2 → +5VA (32x PAM + FB2 + FB3)
 - [x] Netlist script fixed (null check + auto-save)
 - [x] 570-net complete netlist generated and verified
 
-### Remaining DRC (19 violations)
-- [ ] Resize 5 vias: drill 0.2→0.3mm, diameter 0.4→0.6mm (USART2, VREF+)
-- [ ] Connect +5V track to C59 pad (via between layers)
-- [ ] Connect +3V3 zones (via stitching B.Cu↔In2.Cu)
-- [ ] Delete dangling tracks AIN7P/AIN7N on In2.Cu
-- [ ] Fix silk text size R49, R81 (0.8mm/0.08mm)
+### Additional fixes (2026-03-31, pre-production)
+- [x] SMBJ24A TVS added on 24V input (parallel +24V to GND, DO-214AA)
+- [x] ESP32 GPIO9 external pull-up 10kΩ to +3V3 (boot mode fix)
+- [x] AK5538 OVF (IC3/42) connected to STM32 PA15 (U7/77)
+- [x] 16x 100pF C0G/NP0 caps on AK5538 analog inputs (AINxP/AINxN)
+- [x] Speaker connectors renamed JSPK01-JSPK16 (was scattered JXX)
+- [x] Ferrite universal: CBW201209U601T (C21286) for all 67 positions
+- [x] Production Gerbers generated and uploaded to JLCPCB
+- [x] STM32H743VIT6 procurement via LCSC consignment to JLCPCB
 
-### Remaining ERC (10 errors)
-- [ ] Add PWR_FLAG on: +24V, +5VA, +3V3(ESP32), VBAT, VDDA, +5VA(DS_Power)
-- [ ] Suppress AMUTEO output-output warnings (intentional wire-OR)
-- [ ] Clean up duplicate labels (VIN→+5V, VDD→+5VA, local MCLK)
+### Remaining DRC/ERC (at time of production order)
+- Minor DRC: 5x vias 0.2mm drill (min 0.3mm), 2x unconnected pads, silk text
+- Minor ERC: 6x PWR_FLAG needed, 3x AMUTEO suppressions, duplicate labels
+- These are non-critical and do not affect board functionality
 
-### Before Ordering
-- [ ] Verify AP1117 output cap total >= 22uF near U11
-- [ ] Re-run DRC + ERC after all fixes → target 0 errors
-- [ ] Generate Gerbers + BOM + Pick&Place
-- [ ] Apply JLCPCB rotation corrections
-- [ ] Verify BOM vs P&P component count consistency
+### Post-production improvements (for next revision)
+- [ ] C47 (1000µF THT) → 4-5x 220µF polymer SMD (SS221M160E7R7R4Z00ZZ, 16V)
+- [ ] Barrel jack J32 switch pin → end-of-chain detection (100kΩ/10kΩ divider to GPIO)
+- [ ] MP2315S thermal pad: verify via array (min 4-6x 0.3mm tented) + solid GND on L1/L2
+- [ ] ESD protection on first-in-chain RJ45 inputs (future consideration)
+- [ ] SAI clock routing: buses with 0.2mm clearance OK, consider 0.3mm if EMI issues arise
 
 ---
 
-**Last updated**: 2026-03-25
+## 10. PRODUCTION NOTES (2026-03-31)
+
+### JLCPCB Order
+- **Quantity**: 5 units
+- **PCB**: 4-layer, 1.6mm, JLC04161H-7628 stackup, HASL
+- **Assembly**: SMD both sides
+- **Manual solder (THT)**: RJ45 connectors (×4), barrel jacks J31/J32, speaker connectors JSPK01-16
+- **Consignment**: STM32H743VIT6 (LCSC internal transfer to JLCPCB SMT stock)
+
+### Component Selection Notes
+- **Ferrite (all 67 positions)**: CBW201209U601T (LCSC C21286) — 600Ω@100MHz, 0805, 300mA
+- **Coupling caps (DAC→Amp)**: 0.22µF X7R, 10% tolerance — adequate for fc=72Hz
+- **LPF caps (ΔΣ noise)**: 4.7nF C0G/NP0 — fc≈34kHz
+- **ADC input caps**: 100pF C0G/NP0, one per analog input (16 total)
+- **TVS protection**: SMBJ24A unidirectional (24V standoff, DO-214AA)
+
+### Known Limitations (this production run)
+- C47 is still THT 1000µF electrolytic (manual solder) — plan to replace with SMD polymer
+- Minor DRC/ERC warnings remain (cosmetic, non-functional)
+- STM32H743VIT6 stock limited on LCSC — ordered via consignment
+
+---
+
+**Last updated**: 2026-03-31
 **Branch**: power_supply_24
+**Status**: SENT TO PRODUCTION

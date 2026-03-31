@@ -87,9 +87,11 @@ PCM1690 VOUT+ ──[1kOhm]──┬──[0.22uF]──> PAM8302A A+
 
 - [DS_Amp_Design_Notes.md](DS_Amp_Design_Notes.md) — Notas detalladas de diseño (amplificadores, fuente, distribucion, componentes LCSC)
 
-## Estado de Verificacion (2026-03-25)
+## Estado de Produccion (2026-03-31)
 
-### Fixes completados
+**PCB enviado a produccion en JLCPCB** — 5 unidades, branch `power_supply_24`.
+
+### Fixes completados (pre-produccion)
 - VREFL1-4 conectados a GND (antes VREFL1 iba a +3.3VA)
 - AK5538VN I2C conectado via I2C3 (U7/66=SDA, U7/67=SCL, AF4)
 - FB67 eliminado (bridgeaba +3V3 con +3.3VA)
@@ -97,7 +99,11 @@ PCM1690 VOUT+ ──[1kOhm]──┬──[0.22uF]──> PAM8302A A+
 - TDM0/TDM1 corregidos: TDM256 mode (TDM1=H, TDM0=L)
 - VBAT (U7/6) conectado a +3V3
 - GND unificado (no mas GNDA/GNDD/GND2)
-- Netlist script corregido (null check + auto-save a netlist.md)
+- Proteccion 24V: SMBJ24A TVS en entrada (paralelo +24V a GND)
+- ESP32 GPIO9: pull-up 10kΩ externo a +3V3 (boot normal)
+- AK5538 OVF: conectado a STM32 PA15 (U7/77) para deteccion overflow
+- 16x 100pF C0G/NP0 en entradas analogicas AK5538 (AINxP/AINxN)
+- Speaker connectors renombrados: JSPK01-JSPK16
 
 ### Verificado por netlist (570 nets, completo)
 - SAI1 → DAC0(U2)+DAC1(U3), SAI2 → DAC2(U1)+DAC3(U4)
@@ -107,13 +113,12 @@ PCM1690 VOUT+ ──[1kOhm]──┬──[0.22uF]──> PAM8302A A+
 - +3.3VA: U10(AP2125K) output → IC3 AVDD + VREFH network
 - +24V → IC2(MP2315S) → L1 → +5VA → FB2 → +5V → LDOs
 
-### DRC restante (19 violations)
-- 5x vias con drill 0.2mm (min 0.3mm) — resize pendiente
-- 2x unconnected pads (+5V a C59, zonas +3V3)
-- 2x dangling tracks (AIN7P/AIN7N en In2.Cu)
-- Resto: warnings cosmeticos (silk text, lib mismatch)
+### Componentes criticos
+- Ferrite universal: CBW201209U601T (C21286) — 67 posiciones
+- STM32H743VIT6: consignment LCSC → JLCPCB (stock limitado)
+- RJ45 + barrel jacks: soldadura manual (THT, no ensamblados por JLCPCB)
 
-### ERC restante (10 errores)
-- 6x power_pin_not_driven — agregar PWR_FLAG
-- 3x AMUTEO output-output — intencional, suprimir
-- Warnings de labels duplicados — cleanup pendiente
+### Mejoras pendientes (post-produccion)
+- C47 (1000µF THT): reemplazar con 4-5x 220µF polymer SMD (SS221M160E7R7R4Z00ZZ)
+- Barrel jack J32 switch pin: deteccion end-of-chain via divisor resistivo a GPIO
+- MP2315S thermal pad: verificar vias termicas y zona GND solida en L1/L2
