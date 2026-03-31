@@ -2498,6 +2498,12 @@
 		(uuid "0dbd1f96-b6de-4dfd-9570-e0d0c0a0a2af")
 	)
 	(junction
+		(at 207.01 134.62)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "1287ad40-22aa-4824-a360-e0bdd3677bfb")
+	)
+	(junction
 		(at 153.67 87.63)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2508,6 +2514,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "28e42d8b-ddc7-4e62-984a-02caab20dc0e")
+	)
+	(junction
+		(at 226.06 137.16)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "2e52660a-8c22-49ef-a250-7082bfcedcb5")
 	)
 	(junction
 		(at 113.03 118.11)
@@ -2534,6 +2546,18 @@
 		(uuid "45ff8c48-2c5c-443f-8a81-2b5cd31c73f5")
 	)
 	(junction
+		(at 226.06 144.78)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "4a533cdb-c847-4ada-8ae1-d66fa35afd96")
+	)
+	(junction
+		(at 226.06 142.24)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "4c65c115-662a-4f53-952b-601d9d3ce1c6")
+	)
+	(junction
 		(at 82.55 109.22)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2546,10 +2570,40 @@
 		(uuid "536313f9-4ca2-4734-ab22-090fb1cff532")
 	)
 	(junction
+		(at 207.01 137.16)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "59607a06-db8b-420d-9843-72e83470858b")
+	)
+	(junction
+		(at 226.06 139.7)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "59a2d5c5-0f72-453c-b771-6e69749b032b")
+	)
+	(junction
+		(at 226.06 134.62)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "5de0b970-da2a-414d-afa6-0992cc15869a")
+	)
+	(junction
+		(at 207.01 139.7)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "607df364-1b83-4bc1-a0cc-280707dbaef2")
+	)
+	(junction
 		(at 158.75 87.63)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "66867fec-4027-4f76-8b12-4cc089bb3c96")
+	)
+	(junction
+		(at 226.06 149.86)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "6ac87812-8a3e-46da-b800-aacb1d4ff540")
 	)
 	(junction
 		(at 130.81 115.57)
@@ -2582,10 +2636,22 @@
 		(uuid "7551f7be-f91c-41a6-b105-64afcdd88486")
 	)
 	(junction
+		(at 226.06 147.32)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "78aa680c-235d-4368-b0e7-ba503ada88fd")
+	)
+	(junction
 		(at 130.81 107.95)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "7c40cdd6-9454-465d-b9c4-1543f00f1cba")
+	)
+	(junction
+		(at 207.01 149.86)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "91e60fe9-fadd-4028-baca-409331410312")
 	)
 	(junction
 		(at 123.19 115.57)
@@ -2616,6 +2682,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "a53cd502-2647-48f4-b073-27c86fcbd9e6")
+	)
+	(junction
+		(at 207.01 144.78)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "a90628be-5b18-4808-b640-72a34827ee0c")
 	)
 	(junction
 		(at 118.11 118.11)
@@ -2660,18 +2732,26 @@
 		(uuid "f97a26f8-f28f-46e6-85f2-d77f6fc21f9d")
 	)
 	(junction
+		(at 207.01 142.24)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "fa4bf5a0-75be-4e6d-a19a-56b5153463ce")
+	)
+	(junction
 		(at 43.18 83.82)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "fd36123d-63b1-4bcb-977c-8dbb17a52a0d")
 	)
+	(junction
+		(at 207.01 147.32)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "feb371cb-ee6c-4738-9113-dee458e11d8c")
+	)
 	(no_connect
 		(at 120.65 41.91)
 		(uuid "2f3264e2-2266-43f8-aeb6-292cc68bc13e")
-	)
-	(no_connect
-		(at 102.87 41.91)
-		(uuid "4073d9cf-ca63-4f08-bd4b-3ac124df07f6")
 	)
 	(no_connect
 		(at 105.41 41.91)
@@ -2745,6 +2825,16 @@
 	)
 	(wire
 		(pts
+			(xy 226.06 142.24) (xy 226.06 144.78)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "15c4aa39-a6df-4f4e-b9b4-b9f2aac04887")
+	)
+	(wire
+		(pts
 			(xy 143.51 85.09) (xy 147.32 85.09)
 		)
 		(stroke
@@ -2752,6 +2842,16 @@
 			(type default)
 		)
 		(uuid "1c2900ea-ece7-4486-9b05-7e37f868a4c3")
+	)
+	(wire
+		(pts
+			(xy 207.01 144.78) (xy 207.01 147.32)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1c6dfb1e-7dc5-48c9-acb4-90495c4c24f8")
 	)
 	(wire
 		(pts
@@ -2855,6 +2955,16 @@
 	)
 	(wire
 		(pts
+			(xy 209.55 149.86) (xy 207.01 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3b177bf7-752b-459a-990b-c85651c91665")
+	)
+	(wire
+		(pts
 			(xy 130.81 97.79) (xy 125.73 97.79)
 		)
 		(stroke
@@ -2915,6 +3025,16 @@
 	)
 	(wire
 		(pts
+			(xy 226.06 132.08) (xy 226.06 134.62)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4d9f9f9f-fd89-491d-8606-22305e7916a2")
+	)
+	(wire
+		(pts
 			(xy 129.54 115.57) (xy 130.81 115.57)
 		)
 		(stroke
@@ -2932,6 +3052,16 @@
 			(type default)
 		)
 		(uuid "5e119f31-4183-4f36-9aa6-fa48e75a3895")
+	)
+	(wire
+		(pts
+			(xy 226.06 144.78) (xy 226.06 147.32)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "61b648f1-05aa-46d0-9119-76380050de08")
 	)
 	(wire
 		(pts
@@ -3025,6 +3155,26 @@
 	)
 	(wire
 		(pts
+			(xy 226.06 149.86) (xy 228.6 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "72c2d9bc-ca57-432c-ad3f-794d3baa204b")
+	)
+	(wire
+		(pts
+			(xy 207.01 134.62) (xy 207.01 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "73143555-5ff1-4009-b954-bbfba8d90497")
+	)
+	(wire
+		(pts
 			(xy 90.17 97.79) (xy 90.17 109.22)
 		)
 		(stroke
@@ -3082,6 +3232,36 @@
 			(type default)
 		)
 		(uuid "876da56b-09d2-457a-831b-85df6ca9a91a")
+	)
+	(wire
+		(pts
+			(xy 207.01 147.32) (xy 207.01 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8b35e56d-af7e-46b9-83f4-218b8e392fe2")
+	)
+	(wire
+		(pts
+			(xy 226.06 147.32) (xy 226.06 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8d6172c4-e840-4353-bd33-ab415098fc76")
+	)
+	(wire
+		(pts
+			(xy 228.6 149.86) (xy 228.6 152.4)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "90d3242c-39eb-42d4-ab4b-2fb261514e06")
 	)
 	(wire
 		(pts
@@ -3145,6 +3325,16 @@
 	)
 	(wire
 		(pts
+			(xy 207.01 137.16) (xy 207.01 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9eb4c328-8273-410f-9df4-a760f8c993d1")
+	)
+	(wire
+		(pts
 			(xy 143.51 64.77) (xy 147.32 64.77)
 		)
 		(stroke
@@ -3172,6 +3362,16 @@
 			(type default)
 		)
 		(uuid "ad3530b3-314d-43b9-b7b2-5b6e8646b8ba")
+	)
+	(wire
+		(pts
+			(xy 226.06 134.62) (xy 226.06 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "aee92786-307a-46fa-af52-6469a4712def")
 	)
 	(wire
 		(pts
@@ -3215,6 +3415,16 @@
 	)
 	(wire
 		(pts
+			(xy 207.01 142.24) (xy 207.01 144.78)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b83c8936-a809-46ab-9ab8-1b653515b7a1")
+	)
+	(wire
+		(pts
 			(xy 130.81 97.79) (xy 130.81 107.95)
 		)
 		(stroke
@@ -3232,6 +3442,16 @@
 			(type default)
 		)
 		(uuid "ba3e7bc3-3a1e-43eb-8561-6ab80c009193")
+	)
+	(wire
+		(pts
+			(xy 226.06 139.7) (xy 226.06 142.24)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bec59a49-98c3-4165-b2eb-1c0767df0034")
 	)
 	(wire
 		(pts
@@ -3295,6 +3515,16 @@
 	)
 	(wire
 		(pts
+			(xy 207.01 132.08) (xy 207.01 134.62)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c912fd4d-9741-4f76-94af-7d5bb51371ca")
+	)
+	(wire
+		(pts
 			(xy 118.11 118.11) (xy 118.11 121.92)
 		)
 		(stroke
@@ -3315,6 +3545,16 @@
 	)
 	(wire
 		(pts
+			(xy 226.06 137.16) (xy 226.06 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ce011aa4-a4f4-4339-957c-653b81ef49b5")
+	)
+	(wire
+		(pts
 			(xy 153.67 82.55) (xy 158.75 82.55)
 		)
 		(stroke
@@ -3322,6 +3562,16 @@
 			(type default)
 		)
 		(uuid "cfe1ea7a-e2aa-4a74-8aac-4afa1211242f")
+	)
+	(wire
+		(pts
+			(xy 207.01 139.7) (xy 207.01 142.24)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d49d1041-bab3-41f9-8f95-623eb201bfeb")
 	)
 	(wire
 		(pts
@@ -3342,6 +3592,16 @@
 			(type default)
 		)
 		(uuid "e267400b-9856-47d6-b92e-c2297b10b59d")
+	)
+	(wire
+		(pts
+			(xy 209.55 152.4) (xy 209.55 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e4db3b15-1243-4fcf-a1d3-b515ec718240")
 	)
 	(wire
 		(pts
@@ -8414,6 +8674,16 @@
 		)
 		(uuid "1c85ee95-7967-499a-bff0-30ccb3e4cfe4")
 	)
+	(label "AIN2P"
+		(at 201.93 144.78 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "1d44d2f7-168e-4e62-8bf4-2720afe495ea")
+	)
 	(label "AIN1P"
 		(at 62.23 74.93 180)
 		(effects
@@ -8424,6 +8694,16 @@
 		)
 		(uuid "1d748a64-1990-4604-9a59-442aca169a2b")
 	)
+	(label "AIN5P"
+		(at 220.98 149.86 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "2776760a-944c-49cf-8955-9c70b1cd6300")
+	)
 	(label "AIN4N"
 		(at 201.93 63.5 180)
 		(effects
@@ -8433,6 +8713,16 @@
 			(justify right bottom)
 		)
 		(uuid "2e7ab13e-94a0-4d04-aaa7-15ef327719ef")
+	)
+	(label "AIN7N"
+		(at 220.98 137.16 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "31837a82-f3c3-453d-87c0-023a3d38e1d9")
 	)
 	(label "AIN8N"
 		(at 246.38 95.25 180)
@@ -8453,6 +8743,16 @@
 			(justify right bottom)
 		)
 		(uuid "3cae3185-88f8-4165-8fbe-9567a9f52b05")
+	)
+	(label "AIN8N"
+		(at 220.98 132.08 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "46857b2d-19a3-498c-852a-c6ddc647ffc6")
 	)
 	(label "AIN6N"
 		(at 118.11 97.79 270)
@@ -8484,6 +8784,16 @@
 		)
 		(uuid "52b8abe9-d3ee-49d8-8e2d-c0f79aedcda8")
 	)
+	(label "AIN4P"
+		(at 201.93 134.62 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "545f4d15-b10b-4619-ab25-f8bd958e9abb")
+	)
 	(label "AIN6P"
 		(at 246.38 107.95 180)
 		(effects
@@ -8503,6 +8813,26 @@
 			(justify right bottom)
 		)
 		(uuid "626071c7-bafd-46cb-b5ed-1ef9a03745c9")
+	)
+	(label "AIN6P"
+		(at 220.98 144.78 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "69c86dbb-f499-4802-a2d5-ef88ac9dc02e")
+	)
+	(label "AIN5N"
+		(at 220.98 147.32 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "6a133417-ba37-4b02-9cbb-00e52309c3ca")
 	)
 	(label "AIN4P"
 		(at 105.41 97.79 270)
@@ -8553,6 +8883,16 @@
 			(justify right bottom)
 		)
 		(uuid "72cb595f-2fe7-428e-86db-4c3053ef5599")
+	)
+	(label "AIN2N"
+		(at 201.93 142.24 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "73430831-4bc2-429c-82c9-3013a4007e35")
 	)
 	(label "AIN8N"
 		(at 143.51 80.01 0)
@@ -8645,6 +8985,26 @@
 		(uuid "8f3046cb-3d64-4a2c-814c-6e3ae95dc9f1")
 	)
 	(label "AIN6N"
+		(at 220.98 142.24 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "90da05fb-9775-4fee-844b-b4ad7cb0bc97")
+	)
+	(label "AIN4N"
+		(at 201.93 132.08 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "93c39a3a-a6c6-4a6f-ac63-b760d4db6a1e")
+	)
+	(label "AIN6N"
 		(at 201.93 105.41 180)
 		(effects
 			(font
@@ -8653,6 +9013,16 @@
 			(justify right bottom)
 		)
 		(uuid "973d91e0-e7b7-4edf-9483-7465f2b937a7")
+	)
+	(label "AIN7P"
+		(at 220.98 139.7 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "98dec640-b36a-4a28-b8ea-24d53292427b")
 	)
 	(label "AIN2P"
 		(at 246.38 76.2 180)
@@ -8693,6 +9063,26 @@
 			(justify right bottom)
 		)
 		(uuid "9f049511-45bf-4eae-821f-72bd08ffe381")
+	)
+	(label "AIN3P"
+		(at 201.93 139.7 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "9fc8e9ec-fe00-471d-9c1e-5cf4078c1092")
+	)
+	(label "AIN1N"
+		(at 201.93 147.32 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "a0c51d74-fc5a-4c02-a420-316fb41dd57f")
 	)
 	(label "AIN8P"
 		(at 143.51 77.47 0)
@@ -8753,6 +9143,16 @@
 			(justify right bottom)
 		)
 		(uuid "ba9f661e-8912-45a4-8a25-35be47623428")
+	)
+	(label "AIN1P"
+		(at 201.93 149.86 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "bd675a8e-4544-4392-a58b-0b2afaeb56fe")
 	)
 	(label "AIN5N"
 		(at 201.93 110.49 180)
@@ -8864,6 +9264,26 @@
 		)
 		(uuid "e9944b37-2be1-47c4-91ff-e1914038ee9c")
 	)
+	(label "AIN8P"
+		(at 220.98 134.62 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "eb590052-244e-4117-b2b6-2923ca952082")
+	)
+	(label "AIN3N"
+		(at 201.93 137.16 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "ef99de52-4abe-4a9d-a18c-5fbc3bf863c6")
+	)
 	(global_label "SAI1_MCLK"
 		(shape input)
 		(at 165.1 41.91 0)
@@ -8907,6 +9327,17 @@
 			(justify left)
 		)
 		(uuid "17e257b1-121b-45b5-8776-ce630b37f75b")
+	)
+	(hierarchical_label "OVF"
+		(shape input)
+		(at 102.87 41.91 90)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "1bffc755-f623-4b59-a051-097cabe1f5e0")
 	)
 	(hierarchical_label "PDN_AK"
 		(shape input)
@@ -9079,6 +9510,123 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
+		(at 223.52 139.7 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "05e7518d-2972-49fb-a4de-b0c0a91c546e")
+		(property "Reference" "C285"
+			(at 221.234 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 221.488 135.128 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 223.52 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 223.52 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 223.52 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 223.52 154.686 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 223.52 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 223.52 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 223.52 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 223.52 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "ac982047-657a-4bff-b36d-45583758a839")
+		)
+		(pin "2"
+			(uuid "2ddf8aa4-b99f-45a0-a59e-4b1686e8c30c")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C285")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
 		(at 86.36 118.11 270)
 		(unit 1)
 		(exclude_from_sim no)
@@ -9095,7 +9643,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "0.1u"
+		(property "Value" "0.1uF"
 			(at 84.328 122.682 90)
 			(effects
 				(font
@@ -9167,7 +9715,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C1525"
 			(at 86.36 118.11 90)
 			(effects
 				(font
@@ -9677,6 +10225,123 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "#PWR0371")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 204.47 137.16 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "21a7afb6-f003-494f-abdf-e331d8f21b32")
+		(property "Reference" "C276"
+			(at 202.184 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 202.438 132.588 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 204.47 137.16 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 204.47 137.16 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 204.47 137.16 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 204.47 152.146 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 204.47 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 204.47 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 204.47 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 204.47 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "13f48857-29bd-472d-be12-dc1eafd47dc9")
+		)
+		(pin "2"
+			(uuid "b37b9b19-85be-4cfa-b19c-395406aa3084")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C276")
 					(unit 1)
 				)
 			)
@@ -10315,7 +10980,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "0.1u"
+		(property "Value" "0.1uF"
 			(at 151.638 64.008 90)
 			(effects
 				(font
@@ -10387,7 +11052,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C1525"
 			(at 156.21 66.04 90)
 			(effects
 				(font
@@ -10551,7 +11216,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "417168cd-7928-4931-b801-22f7c7322c48")
 		(property "Reference" "J28"
@@ -10973,6 +11638,240 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:C_Small")
+		(at 223.52 144.78 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "61855b71-856f-4c53-aba4-c83a102f0608")
+		(property "Reference" "C287"
+			(at 221.234 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 221.488 140.208 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 223.52 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 223.52 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 223.52 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 223.52 159.766 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 223.52 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 223.52 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 223.52 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 223.52 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "d2bf7c80-7abc-4e16-82ff-13a6b2ba5592")
+		)
+		(pin "2"
+			(uuid "57d34fe2-0684-4119-8c75-85d3ef7b4e38")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C287")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 204.47 144.78 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "61cb9840-5746-4035-a3d6-1ecce4c06099")
+		(property "Reference" "C279"
+			(at 202.184 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 202.438 140.208 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 204.47 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 204.47 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 204.47 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 204.47 159.766 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 204.47 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 204.47 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 204.47 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 204.47 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "7f8f5472-7257-47fd-9ab5-708b75f04f29")
+		)
+		(pin "2"
+			(uuid "872e0e58-b4af-4a51-973b-193d9de50f61")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C279")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:+3.3V")
 		(at 62.23 69.85 90)
 		(unit 1)
@@ -11056,7 +11955,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "0.1u"
+		(property "Value" "0.1uF"
 			(at 113.538 105.918 90)
 			(effects
 				(font
@@ -11128,7 +12027,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C1525"
 			(at 115.57 110.49 90)
 			(effects
 				(font
@@ -11147,6 +12046,72 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "C263")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 209.55 152.4 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "6faf37ab-b10f-42e0-82fc-505e2bbd66c0")
+		(property "Reference" "#PWR0404"
+			(at 209.55 158.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 209.55 157.48 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 209.55 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 209.55 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 209.55 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "3bec766e-96db-44c7-927a-47418dc06464")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "#PWR0404")
 					(unit 1)
 				)
 			)
@@ -11538,7 +12503,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "7b7034eb-f2c4-494e-abc8-6bddf7ac6bec")
 		(property "Reference" "J29"
@@ -11667,7 +12632,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "0.1u"
+		(property "Value" "0.1uF"
 			(at 99.822 105.918 90)
 			(effects
 				(font
@@ -11739,7 +12704,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C1525"
 			(at 97.79 110.49 90)
 			(effects
 				(font
@@ -11770,7 +12735,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "82a52bef-c394-4b84-b5af-bf1a251213ac")
 		(property "Reference" "J30"
@@ -11948,6 +12913,123 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:C_Small")
+		(at 223.52 142.24 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "8339024d-302b-44e7-b1a5-1edcdf998016")
+		(property "Reference" "C286"
+			(at 221.234 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 221.488 137.668 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 223.52 142.24 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 223.52 142.24 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 223.52 142.24 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 223.52 157.226 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 223.52 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 223.52 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 223.52 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 223.52 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "509d96fd-5bf7-4792-a1d2-ac573b4057c7")
+		)
+		(pin "2"
+			(uuid "e5f0a73a-ae09-400f-9571-6f34dd336f2a")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C286")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 62.23 72.39 270)
 		(unit 1)
@@ -12031,7 +13113,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "0.1u"
+		(property "Value" "0.1uF"
 			(at 49.276 83.312 90)
 			(effects
 				(font
@@ -12103,7 +13185,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C1525"
 			(at 52.07 81.28 90)
 			(effects
 				(font
@@ -12193,6 +13275,123 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:C_Small")
+		(at 204.47 134.62 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "899c1d9a-3402-4e79-90ac-d2764575eb18")
+		(property "Reference" "C275"
+			(at 202.184 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 202.438 130.048 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 204.47 134.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 204.47 134.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 204.47 134.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 204.47 149.606 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 204.47 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 204.47 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 204.47 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 204.47 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "ef31e47d-3fe2-4401-ac3b-ce66a52417eb")
+		)
+		(pin "2"
+			(uuid "9f1d33f9-0d92-411c-b989-606ee477019c")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C275")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 143.51 52.07 90)
 		(unit 1)
@@ -12275,7 +13474,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "0.1u"
+		(property "Value" "0.1uF"
 			(at 149.098 83.058 90)
 			(effects
 				(font
@@ -12347,7 +13546,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C1525"
 			(at 153.67 85.09 90)
 			(effects
 				(font
@@ -12444,7 +13643,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "95dae844-2ce3-46bf-a5a8-023461a2969a")
 		(property "Reference" "J27"
@@ -12950,6 +14149,123 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:C_Small")
+		(at 204.47 142.24 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "9ee8b85d-f506-43ee-b368-455610d02741")
+		(property "Reference" "C278"
+			(at 202.184 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 202.438 137.668 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 204.47 142.24 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 204.47 142.24 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 204.47 142.24 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 204.47 157.226 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 204.47 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 204.47 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 204.47 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 204.47 142.24 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "890b36f0-8d43-4344-8fd2-53ac72ff5ac3")
+		)
+		(pin "2"
+			(uuid "5789a2e2-234f-48ad-8207-972e4d21ab45")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C278")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:+3.3V")
 		(at 143.51 57.15 270)
 		(unit 1)
@@ -13009,6 +14325,122 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "#PWR0393")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 204.47 132.08 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "a929c26c-7080-48bb-b9f3-47efed51252b")
+		(property "Reference" "C274"
+			(at 202.184 129.54 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 202.438 127.508 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 204.47 132.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 204.47 132.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 204.47 132.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 204.47 147.066 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 204.47 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 204.47 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 204.47 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 204.47 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "6bc47f5a-7483-47a1-952d-11525f0577b4")
+		)
+		(pin "2"
+			(uuid "4651220d-dc1f-49ab-8ef4-7690d057a6cb")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C274")
 					(unit 1)
 				)
 			)
@@ -13280,6 +14712,123 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
+		(at 204.47 139.7 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "c07c82ef-6c76-4b6f-8cb5-5f16d486d66f")
+		(property "Reference" "C277"
+			(at 202.184 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 202.438 135.128 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 204.47 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 204.47 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 204.47 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 204.47 154.686 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 204.47 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 204.47 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 204.47 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 204.47 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "d8738cae-c780-4bae-b170-4d8d940d95e2")
+		)
+		(pin "2"
+			(uuid "3b460e30-926c-4bd0-8e94-025a1cd7bff9")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C277")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
 		(at 156.21 71.12 180)
 		(unit 1)
 		(exclude_from_sim no)
@@ -13296,7 +14845,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "0.1u"
+		(property "Value" "0.1uF"
 			(at 151.638 69.088 90)
 			(effects
 				(font
@@ -13368,7 +14917,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C1525"
 			(at 156.21 71.12 90)
 			(effects
 				(font
@@ -13387,6 +14936,123 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "C269")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 223.52 134.62 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "c3089b5d-03c1-4ae7-83a4-5a80d39f69cc")
+		(property "Reference" "C283"
+			(at 221.234 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 221.488 130.048 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 223.52 134.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 223.52 134.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 223.52 134.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 223.52 149.606 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 223.52 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 223.52 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 223.52 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 223.52 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "546cdebd-3e86-49ce-b507-fc72184ed263")
+		)
+		(pin "2"
+			(uuid "1b7457a9-319f-4b26-9bc3-8a49fc282a42")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C283")
 					(unit 1)
 				)
 			)
@@ -13479,7 +15145,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "0.1u"
+		(property "Value" "0.1uF"
 			(at 129.286 120.396 90)
 			(effects
 				(font
@@ -13551,7 +15217,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C14663"
+		(property "LCSC" "C1525"
 			(at 127 115.57 90)
 			(effects
 				(font
@@ -13570,6 +15236,123 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "C266")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 204.47 149.86 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "c99046a0-bff0-45c7-9194-fa775694d979")
+		(property "Reference" "C281"
+			(at 202.184 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 202.438 145.288 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 204.47 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 204.47 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 204.47 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 204.47 164.846 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 204.47 149.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 204.47 149.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 204.47 149.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 204.47 149.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "f6ec9b63-7ee2-4dde-90c1-9ddc64393ad2")
+		)
+		(pin "2"
+			(uuid "4dbb91d9-f6c4-4710-8783-d2fc0e406a08")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C281")
 					(unit 1)
 				)
 			)
@@ -13822,6 +15605,72 @@
 		)
 	)
 	(symbol
+		(lib_id "power:GND")
+		(at 228.6 152.4 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "da155e14-6056-4298-baeb-8e9d83f9aa81")
+		(property "Reference" "#PWR0405"
+			(at 228.6 158.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 228.6 157.48 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 228.6 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 228.6 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 228.6 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "65ed8fdc-e409-4601-989c-4d317ce80e5e")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "#PWR0405")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:+3.3VA")
 		(at 123.19 119.38 0)
 		(mirror x)
@@ -14020,6 +15869,356 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:C_Small")
+		(at 223.52 132.08 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "dce7f0b8-06ae-400a-8101-d8c2445c5187")
+		(property "Reference" "C282"
+			(at 221.234 129.54 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 221.488 127.508 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 223.52 132.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 223.52 132.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 223.52 132.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 223.52 147.066 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 223.52 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 223.52 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 223.52 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 223.52 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "0b9a1a74-918b-4bdf-86bb-6c9042c6b60e")
+		)
+		(pin "2"
+			(uuid "1a34a90a-b780-49bc-8da9-6aaa378f7eb3")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C282")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 223.52 137.16 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "e01dee81-a069-49ca-ae51-077a7219075c")
+		(property "Reference" "C284"
+			(at 221.234 134.62 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 221.488 132.588 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 223.52 137.16 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 223.52 137.16 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 223.52 137.16 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 223.52 152.146 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 223.52 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 223.52 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 223.52 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 223.52 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "031d3c9f-79be-4194-b4ba-2e38788ea0af")
+		)
+		(pin "2"
+			(uuid "f7ba9abf-0037-48c6-abbc-00e750393276")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C284")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 223.52 147.32 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "e1766eca-3460-4816-bc9a-8e8e6ec0e6d7")
+		(property "Reference" "C288"
+			(at 221.234 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 221.488 142.748 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 223.52 147.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 223.52 147.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 223.52 147.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 223.52 162.306 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 223.52 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 223.52 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 223.52 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 223.52 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "c018d021-8672-49e7-98ec-f659faab023e")
+		)
+		(pin "2"
+			(uuid "1e8b3778-aa52-40f7-ac70-b41ff635ce97")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C288")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R_Small")
 		(at 40.64 83.82 270)
 		(mirror x)
@@ -14127,6 +16326,123 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "R102")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 223.52 149.86 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "e61f9737-bc46-4272-9c4b-241aaf9e7ea9")
+		(property "Reference" "C289"
+			(at 221.234 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 221.488 145.288 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 223.52 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 223.52 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 223.52 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 223.52 164.846 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 223.52 149.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 223.52 149.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 223.52 149.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 223.52 149.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "af4aea09-2f09-410f-93f4-5a6465b36176")
+		)
+		(pin "2"
+			(uuid "91ba64fe-1cdb-4e69-bc1b-587fb5106c35")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C289")
 					(unit 1)
 				)
 			)
@@ -14402,6 +16718,123 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
 					(reference "C265")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 204.47 147.32 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "f4c17cfd-26dd-4ac2-9209-6a9fa4c06e18")
+		(property "Reference" "C280"
+			(at 202.184 144.78 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "100pF"
+			(at 202.438 142.748 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 204.47 147.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+			(at 204.47 147.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 204.47 147.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" "TCC0402COG101F500AT"
+			(at 204.47 162.306 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0025"
+			(at 204.47 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 204.47 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+			(at 204.47 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C18164616"
+			(at 204.47 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "729f1829-7e4f-4614-bd45-7e55196857a7")
+		)
+		(pin "2"
+			(uuid "052bf81e-be7e-4e5a-ae4f-3cb9a8614d45")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/591d8c95-cb3d-4998-991f-ef9e794f151c"
+					(reference "C280")
 					(unit 1)
 				)
 			)

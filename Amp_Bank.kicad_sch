@@ -1466,16 +1466,6 @@
 	)
 	(wire
 		(pts
-			(xy 198.12 62.23) (xy 198.12 77.47)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "8c114f4c-94f7-458b-9a47-c8f4b7797945")
-	)
-	(wire
-		(pts
 			(xy 97.79 52.07) (xy 107.95 52.07)
 		)
 		(stroke
@@ -1553,6 +1543,16 @@
 			(type default)
 		)
 		(uuid "b9d9cc3a-8292-422b-a0e9-17204f8f558a")
+	)
+	(wire
+		(pts
+			(xy 198.12 62.23) (xy 198.12 77.47)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bfe7453c-520d-4dd1-8be5-8d76954f5e84")
 	)
 	(wire
 		(pts
@@ -1915,7 +1915,7 @@
 		(dnp no)
 		(uuid "072ffd92-447c-4b10-9e9e-b0bcf15b34d5")
 		(property "Reference" "C82"
-			(at 102.616 53.213 0)
+			(at 102.616 53.594 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1966,7 +1966,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.021"
+		(property "Price" "0.0507"
 			(at 97.79 54.61 90)
 			(effects
 				(font
@@ -1993,7 +1993,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C342963"
+		(property "LCSC" " C883564"
 			(at 97.79 54.61 90)
 			(effects
 				(font
@@ -2259,7 +2259,7 @@
 		(dnp no)
 		(uuid "11809bd7-4577-43da-abc8-70a578fdd532")
 		(property "Reference" "R40"
-			(at 90.17 85.09 90)
+			(at 90.17 78.232 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2557,7 +2557,7 @@
 		(dnp no)
 		(uuid "18ed8090-9fbf-42ea-8dc4-b472d6cca027")
 		(property "Reference" "C87"
-			(at 110.998 77.216 90)
+			(at 110.998 77.47 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2902,7 +2902,7 @@
 		(dnp no)
 		(uuid "2fbbcab7-29d8-4346-8a5d-20426d3877da")
 		(property "Reference" "C84"
-			(at 102.616 88.773 0)
+			(at 102.616 89.154 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2953,7 +2953,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.021"
+		(property "Price" "0.0507"
 			(at 97.79 90.17 90)
 			(effects
 				(font
@@ -2980,7 +2980,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C342963"
+		(property "LCSC" " C883564"
 			(at 97.79 90.17 90)
 			(effects
 				(font
@@ -3590,7 +3590,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C51938820"
+		(property "LCSC" " C39122"
 			(at 182.88 58.42 90)
 			(effects
 				(font
@@ -4313,7 +4313,7 @@
 		(dnp no)
 		(uuid "6a1aaf5b-f7d6-41aa-b373-b3cf0b95c9f2")
 		(property "Reference" "C81"
-			(at 102.616 43.053 0)
+			(at 102.616 43.434 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4364,7 +4364,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.021"
+		(property "Price" "0.0507"
 			(at 97.79 44.45 90)
 			(effects
 				(font
@@ -4391,7 +4391,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C342963"
+		(property "LCSC" " C883564"
 			(at 97.79 44.45 90)
 			(effects
 				(font
@@ -4485,7 +4485,7 @@
 		(dnp no)
 		(uuid "73bfdc56-5fb2-4d75-8465-d4249635f9ec")
 		(property "Reference" "C83"
-			(at 102.616 78.613 0)
+			(at 102.616 78.994 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4536,7 +4536,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.021"
+		(property "Price" "0.0507"
 			(at 97.79 80.01 90)
 			(effects
 				(font
@@ -4563,7 +4563,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C342963"
+		(property "LCSC" " C883564"
 			(at 97.79 80.01 90)
 			(effects
 				(font
@@ -5118,7 +5118,7 @@
 			)
 		)
 		(property "Value" "1k"
-			(at 90.17 85.09 90)
+			(at 90.17 92.202 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5362,7 +5362,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C51938820"
+		(property "LCSC" " C39122"
 			(at 182.88 81.28 90)
 			(effects
 				(font
@@ -5582,7 +5582,7 @@
 		(dnp no)
 		(uuid "ac2e7eb5-0ef7-439c-9ecf-abfe52f24525")
 		(property "Reference" "R38"
-			(at 90.17 49.53 90)
+			(at 89.916 42.672 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6057,7 +6057,7 @@
 			)
 		)
 		(property "Value" "1k"
-			(at 90.17 49.53 90)
+			(at 90.17 56.388 90)
 			(effects
 				(font
 					(size 1.27 1.27)

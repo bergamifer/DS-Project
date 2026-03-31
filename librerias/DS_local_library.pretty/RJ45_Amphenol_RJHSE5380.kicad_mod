@@ -340,15 +340,15 @@
 		(uuid "383a7a8e-8ff3-4ce8-8722-8c132c260cc0")
 	)
 	(embedded_fonts no)
-	(model "${KICAD9_3DMODEL_DIR}/Connector_RJ.3dshapes/RJ45_Amphenol_RJHSE5380.step"
+	(model "${KIPRJMOD}/librerias/footprints/RJ45.step"
 		(offset
-			(xyz 0 0 0)
+			(xyz -4 0.5 3.4)
 		)
 		(scale
 			(xyz 1 1 1)
 		)
 		(rotate
-			(xyz 0 0 0)
+			(xyz -0 -0 -180)
 		)
 	)
 )

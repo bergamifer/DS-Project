@@ -588,6 +588,16 @@
 	)
 	(wire
 		(pts
+			(xy 67.31 83.82) (xy 92.71 83.82)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e5f16ce3-fa0f-4a52-a8b5-25634be85da1")
+	)
+	(wire
+		(pts
 			(xy 127 146.05) (xy 163.83 146.05)
 		)
 		(stroke
@@ -1422,6 +1432,16 @@
 				(justify right)
 			)
 		)
+		(pin "OVF" output
+			(at 67.31 83.82 0)
+			(uuid "c117405c-0414-4d32-b35c-d60655ddfcad")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7"
@@ -1972,6 +1992,16 @@
 		(pin "I2C3_SDA" bidirectional
 			(at 92.71 52.07 180)
 			(uuid "8cad26cb-a010-4816-8e31-5101bfdb4252")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "PA15" input
+			(at 92.71 83.82 180)
+			(uuid "b89ed972-0114-4841-b31a-70a59f349965")
 			(effects
 				(font
 					(size 1.27 1.27)
