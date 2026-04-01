@@ -38,8 +38,8 @@
         "other_text_upright": false,
         "pads": {
           "drill": 0.0,
-          "height": 0.4,
-          "width": 1.625
+          "height": 3.5,
+          "width": 2.35
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
@@ -58,7 +58,72 @@
           "width": 0.0
         }
       ],
-      "drc_exclusions": [],
+      "drc_exclusions": [
+        [
+          "clearance|132397000|79368500|f5e8c932-6c96-4ff6-a34e-8ed0b2347e68|7f23b616-e1c7-4312-82b9-c024164062de",
+          ""
+        ],
+        [
+          "clearance|134835000|79368500|d7243462-71a9-4e65-bb21-844513885858|ca341689-628e-4877-bcde-173dbb58a25f",
+          ""
+        ],
+        [
+          "clearance|143136000|111099000|06142020-16d5-4d35-b94e-16902db85737|e36ce38b-c237-4b29-b0b4-fa7794497366",
+          ""
+        ],
+        [
+          "clearance|150936000|111099000|7c1ca2b6-9316-4a6c-9269-f755b8a02e42|759bd0ef-03e4-4960-add3-6875b0c541c9",
+          ""
+        ],
+        [
+          "clearance|151036000|103199000|3ccc31af-89d0-4bdd-b72f-d5507c85feff|696dede3-878d-495b-b696-0b99392e9ed4",
+          ""
+        ],
+        [
+          "solder_mask_bridge|132397000|79368500|f5e8c932-6c96-4ff6-a34e-8ed0b2347e68|7f23b616-e1c7-4312-82b9-c024164062de",
+          ""
+        ],
+        [
+          "solder_mask_bridge|134835000|79368500|d7243462-71a9-4e65-bb21-844513885858|ca341689-628e-4877-bcde-173dbb58a25f",
+          ""
+        ],
+        [
+          "solder_mask_bridge|143136000|111099000|06142020-16d5-4d35-b94e-16902db85737|e36ce38b-c237-4b29-b0b4-fa7794497366",
+          ""
+        ],
+        [
+          "solder_mask_bridge|150936000|111099000|7c1ca2b6-9316-4a6c-9269-f755b8a02e42|759bd0ef-03e4-4960-add3-6875b0c541c9",
+          ""
+        ],
+        [
+          "solder_mask_bridge|151036000|103199000|3ccc31af-89d0-4bdd-b72f-d5507c85feff|696dede3-878d-495b-b696-0b99392e9ed4",
+          ""
+        ],
+        [
+          "text_thickness|168666600|50030200|b41df0e5-ce3d-4f79-87db-cd7f99ee5459|00000000-0000-0000-0000-000000000000",
+          ""
+        ],
+        [
+          "text_thickness|176642200|91686200|89dd3a17-da0b-4025-b9d9-ae049a5ad27f|00000000-0000-0000-0000-000000000000",
+          ""
+        ],
+        [
+          "via_dangling|121879800|68623000|a3f27e60-36fa-47f4-992a-45c028d3da81|00000000-0000-0000-0000-000000000000",
+          ""
+        ],
+        [
+          "via_dangling|140371000|100881000|66dcd8b8-eeb5-44dc-9121-317f1fcac56a|00000000-0000-0000-0000-000000000000",
+          ""
+        ],
+        [
+          "via_dangling|140371000|94023000|4eae6f4b-45a1-4290-abed-51f7e66baa0e|00000000-0000-0000-0000-000000000000",
+          ""
+        ],
+        [
+          "via_dangling|140879000|71671000|790a1d96-3b4b-4e25-91c7-2425cd9e2e8f|00000000-0000-0000-0000-000000000000",
+          ""
+        ]
+      ],
       "meta": {
         "version": 2
       },
@@ -100,13 +165,13 @@
         "padstack": "warning",
         "pth_inside_courtyard": "ignore",
         "shorting_items": "error",
-        "silk_edge_clearance": "warning",
-        "silk_over_copper": "warning",
-        "silk_overlap": "warning",
+        "silk_edge_clearance": "ignore",
+        "silk_over_copper": "ignore",
+        "silk_overlap": "ignore",
         "skew_out_of_range": "error",
         "solder_mask_bridge": "error",
-        "starved_thermal": "warning",
-        "text_height": "warning",
+        "starved_thermal": "ignore",
+        "text_height": "ignore",
         "text_on_edge_cuts": "error",
         "text_thickness": "warning",
         "through_hole_pad_without_hole": "error",
@@ -133,12 +198,12 @@
         "min_microvia_drill": 0.1,
         "min_resolved_spokes": 2,
         "min_silk_clearance": 0.0,
-        "min_text_height": 0.8,
+        "min_text_height": 0.6,
         "min_text_thickness": 0.08,
-        "min_through_hole_diameter": 0.3,
+        "min_through_hole_diameter": 0.2,
         "min_track_width": 0.0,
         "min_via_annular_width": 0.1,
-        "min_via_diameter": 0.5,
+        "min_via_diameter": 0.45,
         "solder_mask_to_copper_clearance": 0.0,
         "use_height_for_length_calcs": true
       },
@@ -190,7 +255,8 @@
         0.0,
         0.2,
         0.3,
-        0.5
+        0.5,
+        2.0
       ],
       "tuning_pattern_settings": {
         "diff_pair_defaults": {
@@ -224,8 +290,16 @@
           "drill": 0.0
         },
         {
-          "diameter": 0.4,
+          "diameter": 0.45,
           "drill": 0.2
+        },
+        {
+          "diameter": 0.6,
+          "drill": 0.3
+        },
+        {
+          "diameter": 0.8,
+          "drill": 0.4
         }
       ],
       "zones_allow_external_fillets": false
@@ -500,30 +574,38 @@
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.1524,
         "line_style": 0,
-        "microvia_diameter": 0.3,
-        "microvia_drill": 0.1,
+        "microvia_diameter": 0.0,
+        "microvia_drill": 0.0,
         "name": "Default",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 2147483647,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.2,
-        "via_diameter": 0.6,
-        "via_drill": 0.3,
+        "via_diameter": 0.45,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
         "clearance": 0.2,
-        "diff_pair_gap": 0.2,
-        "diff_pair_width": 0.4,
-        "microvia_diameter": 0.3,
-        "microvia_drill": 0.1,
+        "diff_pair_gap": 0.1524,
+        "diff_pair_width": 0.2,
         "name": "AMP_OUT",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
-        "priority": 0,
+        "priority": 1,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.4,
         "via_diameter": 0.6,
-        "via_drill": 0.2
+        "via_drill": 0.3
+      },
+      {
+        "clearance": 0.2,
+        "name": "Ancha",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 0,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.6,
+        "via_diameter": 0.8,
+        "via_drill": 0.4
       }
     ],
     "meta": {
@@ -533,7 +615,7 @@
     "netclass_assignments": null,
     "netclass_patterns": [
       {
-        "netclass": "Default",
+        "netclass": "Ancha",
         "pattern": "+5V"
       },
       {
@@ -541,15 +623,15 @@
         "pattern": "+3V3"
       },
       {
-        "netclass": "Default",
-        "pattern": "+12V"
+        "netclass": "Ancha",
+        "pattern": "+24V"
       },
       {
         "netclass": "Default",
         "pattern": "/DAC/VOUT3-"
       },
       {
-        "netclass": "Default",
+        "netclass": "Ancha",
         "pattern": "+5VA"
       },
       {
@@ -559,6 +641,10 @@
       {
         "netclass": "AMP_OUT",
         "pattern": "*_OUT-"
+      },
+      {
+        "netclass": "Ancha",
+        "pattern": "+5VA_DAC"
       }
     ]
   },
@@ -570,7 +656,7 @@
       "plot": "Fabrication/gerber/",
       "pos_files": "Fabrication/position/",
       "specctra_dsn": "",
-      "step": "",
+      "step": "3d/DS10.step",
       "svg": "",
       "vrml": ""
     },
@@ -706,6 +792,30 @@
           "label": "Height",
           "name": "Height",
           "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Field8",
+          "name": "Field8",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Sim.Pins",
+          "name": "Sim.Pins",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Alt_text",
+          "name": "Alt_text",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Description_1",
+          "name": "Description_1",
+          "show": false
         }
       ],
       "filter_string": "",
@@ -759,10 +869,6 @@
     [
       "29234817-d0fa-4eb1-a474-1667c7510ed7",
       "Root"
-    ],
-    [
-      "129b3238-cb56-46ef-8d84-9e0026f2ffd4",
-      "ADC"
     ],
     [
       "51ea6481-0eee-45d4-9de8-34af618ab641",

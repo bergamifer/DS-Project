@@ -1,0 +1,16 @@
+.MP2315SGJ-P :1 ;Switching Voltage Regulators 3A 24V Hi Effc.Sync Step Down Converter
+SOT65P280X100-8N
+*STM IC
+*NGS
+*PLB 1="AAM" 2="IN" 3="SW" 4="GND" 5="BST" 6="EN" 7="VCC" 8="FB"
+*MXP 8
+*DFN MP2315SGJ-P
+~!Mouser Part Number (946-MP2315SGJ-P)
+~!Link Mouser Price/Stock (https://www.mouser.co.uk/ProductDetail/Monolithic-Power-Systems-MPS/MP2315SGJ-P?qs=Zwj7mHVHPHRNCucLjW2rNg%3D%3D)
+~!Manufacturer_Name (Monolithic Power Systems (MPS))
+~!Manufacturer_Part_Number (MP2315SGJ-P)
+~!Link Datasheet (https://www.monolithicpower.com/pub/media/document/MP2315S_r1.0.pdf)
+~!Height (1mm)
+~!3D_Model (MP2315SGJ-P)
+MP2315SGJ-P
+1.1!U 2.1!U 3.1!U 4.1!U 5.1!U 6.1!U 7.1!U 8.1!U 

@@ -145,7 +145,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "power:GND2"
+		(symbol "power:GND"
 			(power)
 			(pin_numbers
 				(hide yes)
@@ -166,7 +166,7 @@
 					(hide yes)
 				)
 			)
-			(property "Value" "GND2"
+			(property "Value" "GND"
 				(at 0 -3.81 0)
 				(effects
 					(font
@@ -192,7 +192,7 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Power symbol creates a global label with name \"GND2\" , ground"
+			(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 				(at 0 0 0)
 				(effects
 					(font
@@ -210,7 +210,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "GND2_0_1"
+			(symbol "GND_0_1"
 				(polyline
 					(pts
 						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
@@ -224,7 +224,7 @@
 					)
 				)
 			)
-			(symbol "GND2_1_1"
+			(symbol "GND_1_1"
 				(pin power_in line
 					(at 0 0 270)
 					(length 0)
@@ -3570,7 +3570,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "0c9813fe-58cf-4191-ab1a-8fc8388fb377")
-		(property "Reference" "C91"
+		(property "Reference" "C73"
 			(at 180.086 86.106 90)
 			(effects
 				(font
@@ -3651,7 +3651,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 182.88 87.63 90)
 			(effects
 				(font
@@ -3669,7 +3669,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "C91")
+					(reference "C73")
 					(unit 1)
 				)
 			)
@@ -3684,7 +3684,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "325fc934-16e3-4713-a40f-66c62a68aca7")
-		(property "Reference" "C133"
+		(property "Reference" "C79"
 			(at 228.346 86.106 90)
 			(effects
 				(font
@@ -3765,7 +3765,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 231.14 87.63 90)
 			(effects
 				(font
@@ -3783,7 +3783,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "C133")
+					(reference "C79")
 					(unit 1)
 				)
 			)
@@ -3798,7 +3798,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "47e548f5-4207-42cc-919d-56feff06fe75")
-		(property "Reference" "C109"
+		(property "Reference" "C75"
 			(at 195.326 86.106 90)
 			(effects
 				(font
@@ -3879,7 +3879,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 198.12 87.63 90)
 			(effects
 				(font
@@ -3897,14 +3897,14 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "C109")
+					(reference "C75")
 					(unit 1)
 				)
 			)
 		)
 	)
 	(symbol
-		(lib_id "power:GND2")
+		(lib_id "power:GND")
 		(at 182.88 90.17 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -3913,7 +3913,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "4c1aa7ee-29f0-4486-a013-4316bbf7522c")
-		(property "Reference" "#PWR0118"
+		(property "Reference" "#PWR0206"
 			(at 182.88 96.52 0)
 			(effects
 				(font
@@ -3922,7 +3922,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "GND2"
+		(property "Value" "GND"
 			(at 182.88 95.25 0)
 			(effects
 				(font
@@ -3948,7 +3948,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Power symbol creates a global label with name \"GND2\" , ground"
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 182.88 90.17 0)
 			(effects
 				(font
@@ -3963,7 +3963,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "#PWR0118")
+					(reference "#PWR0206")
 					(unit 1)
 				)
 			)
@@ -3978,7 +3978,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "4f6f67e0-55eb-41b0-bbf7-5c0eca944e92")
-		(property "Reference" "C127"
+		(property "Reference" "C78"
 			(at 219.456 86.106 90)
 			(effects
 				(font
@@ -4059,7 +4059,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 222.25 87.63 90)
 			(effects
 				(font
@@ -4077,7 +4077,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "C127")
+					(reference "C78")
 					(unit 1)
 				)
 			)
@@ -4092,7 +4092,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "59c4440e-5336-432d-89ac-67d528ed9943")
-		(property "Reference" "C103"
+		(property "Reference" "C74"
 			(at 187.706 86.106 90)
 			(effects
 				(font
@@ -4173,7 +4173,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 190.5 87.63 90)
 			(effects
 				(font
@@ -4191,7 +4191,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "C103")
+					(reference "C74")
 					(unit 1)
 				)
 			)
@@ -4206,7 +4206,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "85310ee1-e0fe-49ca-84fe-d5517d3bac67")
-		(property "Reference" "C121"
+		(property "Reference" "C77"
 			(at 211.836 86.106 90)
 			(effects
 				(font
@@ -4287,7 +4287,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 214.63 87.63 90)
 			(effects
 				(font
@@ -4305,7 +4305,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "C121")
+					(reference "C77")
 					(unit 1)
 				)
 			)
@@ -4321,7 +4321,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "995b4e48-260b-4dfa-9a0b-3140f682f113")
-		(property "Reference" "#PWR0114"
+		(property "Reference" "#PWR0205"
 			(at 182.88 88.9 0)
 			(effects
 				(font
@@ -4371,7 +4371,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "#PWR0114")
+					(reference "#PWR0205")
 					(unit 1)
 				)
 			)
@@ -4386,7 +4386,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "e002ae00-3882-4401-9ae6-662d61066288")
-		(property "Reference" "C115"
+		(property "Reference" "C76"
 			(at 202.946 86.106 90)
 			(effects
 				(font
@@ -4467,7 +4467,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 205.74 87.63 90)
 			(effects
 				(font
@@ -4485,7 +4485,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "C115")
+					(reference "C76")
 					(unit 1)
 				)
 			)
@@ -4500,7 +4500,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "f741bc31-e746-4991-95f7-59bc9994be99")
-		(property "Reference" "C139"
+		(property "Reference" "C80"
 			(at 235.966 86.106 90)
 			(effects
 				(font
@@ -4581,7 +4581,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C1691"
 			(at 238.76 87.63 90)
 			(effects
 				(font
@@ -4599,7 +4599,7 @@
 		(instances
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/75ac028a-e1d4-447c-89fd-2224da49f1f3"
-					(reference "C139")
+					(reference "C80")
 					(unit 1)
 				)
 			)

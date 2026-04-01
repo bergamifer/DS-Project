@@ -24,7 +24,9 @@ STM32H743 (MCU) ──SAI1/SAI2──> 4x PCM1690 (DAC 8ch c/u) ──differenti
 | Amplificador | PAM8302A (mono 2.5W Class-D) | 32 | Amplificación directa a speakers |
 | WiFi/BLE | ESP32-C3-Mini | 1 | Conectividad inalámbrica |
 | EEPROM | CAT24C256 | 1 | Almacenamiento de configuración |
-| LDO analogico | AP2125K-3.3 | 1 | AVDD limpio para DACs y ADC |
+| Buck converter | MP2315S (24V→5V, 3A) | 1 | Fuente principal desde 24V DC |
+| LDO digital | AP1117-33 | 1 | +3V3 para STM32, ESP32, digital |
+| LDO analogico | AP2125K-3.3 | 1 | +3.3VA limpio para ADC AVDD y VREF |
 
 ## Alimentacion
 
@@ -85,7 +87,44 @@ PCM1690 VOUT+ ──[1kOhm]──┬──[0.22uF]──> PAM8302A A+
 
 - [DS_Amp_Design_Notes.md](DS_Amp_Design_Notes.md) — Notas detalladas de diseño (amplificadores, fuente, distribucion, componentes LCSC)
 
-## Bugs Conocidos (DS10)
+## Estado de Produccion (2026-03-31)
 
-1. **VREF1 swap en AK5538VN**: R8 conecta VREFL1 (pin 61) a +3.3VA en lugar de VREFH1 (pin 62)
-2. **AK5538VN I2C flotante**: SDA/SCL del ADC no conectados a ningun bus I2C del STM32
+**PCB enviado a produccion en JLCPCB** — 5 unidades, branch `power_supply_24`.
+
+### Fixes completados (pre-produccion)
+- VREFL1-4 conectados a GND (antes VREFL1 iba a +3.3VA)
+- AK5538VN I2C conectado via I2C3 (U7/66=SDA, U7/67=SCL, AF4)
+- FB67 eliminado (bridgeaba +3V3 con +3.3VA)
+- PCM1802 sheet eliminado del schematic
+- TDM0/TDM1 corregidos: TDM256 mode (TDM1=H, TDM0=L)
+- VBAT (U7/6) conectado a +3V3
+- GND unificado (no mas GNDA/GNDD/GND2)
+- Proteccion 24V: SMBJ24A TVS en entrada (paralelo +24V a GND)
+- ESP32 GPIO9: pull-up 10kΩ externo a +3V3 (boot normal)
+- AK5538 OVF: conectado a STM32 PA15 (U7/77) para deteccion overflow
+- 16x 100pF C0G/NP0 en entradas analogicas AK5538 (AINxP/AINxN)
+- Speaker connectors renombrados: JSPK01-JSPK16
+
+### Verificado por netlist (570 nets, completo)
+- SAI1 → DAC0(U2)+DAC1(U3), SAI2 → DAC2(U1)+DAC3(U4)
+- SAI3_B → AK5538VN (BICK=U7/55, SDTO1=U7/56, LRCK=U7/57)
+- MCLK 12.288MHz compartido: DACs + ADC + extension header
+- 4 DACs con I2C addresses unicos (0x4C-0x4F) en I2C1
+- +3.3VA: U10(AP2125K) output → IC3 AVDD + VREFH network
+- +24V → IC2(MP2315S) → L1 → +5VA → FB2 → +5V → LDOs
+
+### Componentes criticos
+- Ferrite universal: CBW201209U601T (C21286) — 67 posiciones
+- STM32H743VIT6: consignment LCSC → JLCPCB (stock limitado)
+- RJ45 + barrel jacks: soldadura manual (THT, no ensamblados por JLCPCB)
+
+### Thermal management MP2315S (IC2)
+- SOT-23-8 sin exposed pad — calor sale por pines al cobre del PCB
+- Solid copper fill en nodo SW / footprint inductor L1 en L1
+- Via stitching en zona GND alrededor de IC2 (0.4/0.8mm, L1 → plano L2)
+- L2 intacto y solido debajo del buck (sin cortes)
+
+### Mejoras pendientes (post-produccion)
+- C47 (1000µF THT): reemplazar con 4-5x 220µF polymer SMD (SS221M160E7R7R4Z00ZZ)
+- Barrel jack J32 switch pin: deteccion end-of-chain via divisor resistivo a GPIO
+- ESD en RJ45 de primera placa en cadena (consideracion futura)

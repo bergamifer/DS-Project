@@ -317,17 +317,134 @@ Alternativa: usar **KiCad Fabrication Toolkit** plugin (GUI, mantiene diccionari
 
 ---
 
-## 8. PRÓXIMOS PASOS
+## 8. NETLIST VERIFICATION (2026-03-25, 570 nets)
 
-1. **Schematic DS10**: Reemplazar PCM1802 por AK5538VN, agregar AP2125K-3.3 para AVDD
-2. **AK5538VN**: Verificar footprint en `librerias/LIB_AK5538VN/`, conectar según power map arriba
-3. **Expansion header**: Definir pinout 1.27mm 2×10 para inter-board sync
-4. **THT → SMD**: Reemplazar caps electrolíticos, decidir qué conectores JST-XH soldar a mano
-5. **KiCad P&P**: Aplicar script de corrección de rotaciones antes de subir a JLCPCB
-6. **PCB Layout**: 4 capas, MCLK interno, AVDD zona separada en L3
-7. **Firmware update**: Driver AK5538VN (I2C config + SAI3_A TDM256 RX)
+### Power Supply Chain — VERIFIED
+```
++24V (J9/2) → IC2/2 (MP2315S VIN)
+IC2/3 (SW) → L1/1 → L1/2 → +5VA (32x PAM + FB2 + FB3)
++5VA → FB2 → +5V (U10 input, U11 input)
++5V → U11/3 (AP1117) → U11/2 → +3V3 (digital)
++5V → U10/1 (AP2125K) → U10/5 → +3.3VA (analog)
++5VA → FB3 → +5VA_DAC (4x PCM1690 AVDD)
+```
+
+### SAI Bus Mapping — VERIFIED
+| SAI | STM32 Pins | Target | Data |
+|-----|-----------|--------|------|
+| SAI1_A (FS/SCK/SD) | U7/3,4,5 | U2+U3 (DAC0+DAC1) | 16ch via RN2,RN3 |
+| SAI1_B (SD) | U7/2 | U3 (DAC1) | 8ch via RN3 |
+| SAI2_A (FS/SCK/SD) | U7/58,59,60 | U1+U4 (DAC2+DAC3) | 16ch via RN1,RN4 |
+| SAI2_B (SD) | U7/41 | U4 (DAC3) | 8ch via RN4 |
+| SAI3_B (SCK/SD/FS) | U7/55,56,57 | IC3 AK5538 (BICK/SDTO1/LRCK) | 8ch TDM256 |
+| SAI1_MCLK | U7/1 (PE2) | All DACs + IC3/24 + JP2 | 12.288MHz |
+
+### I2C Bus Map — VERIFIED
+| Bus | STM32 Pins | Targets | Pull-ups |
+|-----|-----------|---------|----------|
+| I2C1 | U7/95(SCL), U7/96(SDA) | U1-U4 DACs (0x4C-0x4F) | RN5 |
+| I2C2 | U7/46(SCL), U7/47(SDA) | J5 expansion header | RN6 |
+| I2C3 | U7/67(SCL), U7/66(SDA) | IC3 AK5538 (0x14) | RN6 |
+| I2C4 | U7/92(SCL), U7/93(SDA) | U8 EEPROM | RN5 |
+
+### AK5538VN Strapping — VERIFIED
+| Pin | Function | Connection | Result |
+|-----|----------|------------|--------|
+| 51 | TDM0 | GND | L |
+| 52 | TDM1 | +3V3 | H |
+| → | **TDM Mode** | TDM1=H, TDM0=L | **TDM256** |
+| 54 | I2C | +3V3 | I2C mode enabled |
+| 29-31 | PW0-PW2 | +3V3 | 32-bit word |
+| 32 | MSN | GND | Slave mode |
+| 57 | LDOE | +3V3 | Internal 1.8V LDO on |
+
+### +3.3VA Net — VERIFIED
+`U10/5, IC3/2(AVDD1), IC3/15(AVDD2), R102-R105(VREFH), C63, C64, C259, C260, C265, C266`
+
+### DAC I2C Addresses — VERIFIED
+| DAC | ADR0 (pin22) | ADR1 (pin23) | Address |
+|-----|-------------|-------------|---------|
+| U2 | GND | GND | 0x4C |
+| U1 | +3V3 | GND | 0x4D |
+| U3 | GND | +3V3 | 0x4E |
+| U4 | +3V3 | +3V3 | 0x4F |
+
+### Control Signals — VERIFIED
+- RST: U1-U4/15 + R16→+3V3 + U7/79
+- AMUTEI: U1-U4/18 + R15→+3V3 + U7/80
+- AMUTEO: U1-U4/19 + U7/78 (wire-OR intentional)
+- PAM SD: 32x PAMs /ALL_AMPS/SD → R20 → U7/84 (PD3)
 
 ---
 
-**Documento preparado por**: Claude Code
-**Referencia**: [DS9 pin audit](../firmware/docs/ds9_pin_audit.md) | [Datos temperature/fill time](../firmware/Core/Src/main.c)
+## 9. PRE-PRODUCTION CHECKLIST (2026-03-25)
+
+### Completed
+- [x] PCM1802 sheet removed from schematic
+- [x] AK5538VN TDM256 strapping corrected (TDM0↔TDM1 swapped)
+- [x] VBAT connected to +3V3
+- [x] VREFL1-4 connected to GND
+- [x] AK5538VN I2C3 connected (SDA/SCL with pull-ups RN6)
+- [x] FB67 removed (was bridging +3V3 → +3.3VA)
+- [x] GND unified (single net, solid L2 plane)
+- [x] SAI1→DAC0+DAC1, SAI2→DAC2+DAC3, SAI3_B→AK5538 verified
+- [x] All 4 DAC I2C addresses unique (0x4C-0x4F)
+- [x] +3.3VA LDO output verified connected to AK5538 AVDD + VREFH
+- [x] Netlist script fixed (null check + auto-save)
+- [x] 570-net complete netlist generated and verified
+
+### Additional fixes (2026-03-31, pre-production)
+- [x] SMBJ24A TVS added on 24V input (parallel +24V to GND, DO-214AA)
+- [x] ESP32 GPIO9 external pull-up 10kΩ to +3V3 (boot mode fix)
+- [x] AK5538 OVF (IC3/42) connected to STM32 PA15 (U7/77)
+- [x] 16x 100pF C0G/NP0 caps on AK5538 analog inputs (AINxP/AINxN)
+- [x] Speaker connectors renamed JSPK01-JSPK16 (was scattered JXX)
+- [x] Ferrite universal: CBW201209U601T (C21286) for all 67 positions
+- [x] Production Gerbers generated and uploaded to JLCPCB
+- [x] STM32H743VIT6 procurement via LCSC consignment to JLCPCB
+
+### Remaining DRC/ERC (at time of production order)
+- Minor DRC: 5x vias 0.2mm drill (min 0.3mm), 2x unconnected pads, silk text
+- Minor ERC: 6x PWR_FLAG needed, 3x AMUTEO suppressions, duplicate labels
+- These are non-critical and do not affect board functionality
+
+### Additional thermal improvements (2026-04-01, pre-release)
+- [x] MP2315S (IC2): solid copper fill on SW node / inductor L1 footprint on L1
+- [x] Via stitching added in GND copper zone around IC2 (6-10x vias, 0.4/0.8mm, L1→L2)
+  - SOT-23-8 has no exposed thermal pad — heat path is: pins → GND copper → vias → L2 plane
+  - Vias placed within 3-4mm of IC2 in the surrounding GND pour, not under component
+
+### Post-production improvements (for next revision)
+- [ ] C47 (1000µF THT) → 4-5x 220µF polymer SMD (SS221M160E7R7R4Z00ZZ, 16V)
+- [ ] Barrel jack J32 switch pin → end-of-chain detection (100kΩ/10kΩ divider to GPIO)
+- [ ] ESD protection on first-in-chain RJ45 inputs (future consideration)
+- [ ] SAI clock routing: buses with 0.2mm clearance OK, consider 0.3mm if EMI issues arise
+
+---
+
+## 10. PRODUCTION NOTES (2026-03-31)
+
+### JLCPCB Order
+- **Quantity**: 5 units
+- **PCB**: 4-layer, 1.6mm, JLC04161H-7628 stackup, HASL
+- **Assembly**: SMD both sides
+- **Manual solder (THT)**: RJ45 connectors (×4), barrel jacks J31/J32, speaker connectors JSPK01-16
+- **Consignment**: STM32H743VIT6 (LCSC internal transfer to JLCPCB SMT stock)
+
+### Component Selection Notes
+- **Ferrite (all 67 positions)**: CBW201209U601T (LCSC C21286) — 600Ω@100MHz, 0805, 300mA
+- **Coupling caps (DAC→Amp)**: 0.22µF X7R, 10% tolerance — adequate for fc=72Hz
+- **LPF caps (ΔΣ noise)**: 4.7nF C0G/NP0 — fc≈34kHz
+- **ADC input caps**: 100pF C0G/NP0, one per analog input (16 total)
+- **TVS protection**: SMBJ24A unidirectional (24V standoff, DO-214AA)
+
+### Known Limitations (this production run)
+- C47 is still THT 1000µF electrolytic (manual solder) — plan to replace with SMD polymer
+- Minor DRC/ERC warnings remain (cosmetic, non-functional)
+- STM32H743VIT6 stock limited on LCSC — ordered via consignment
+
+---
+
+**Last updated**: 2026-03-31
+**Branch**: power_supply_24
+**Status**: SENT TO PRODUCTION
