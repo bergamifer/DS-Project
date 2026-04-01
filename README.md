@@ -118,7 +118,13 @@ PCM1690 VOUT+ ──[1kOhm]──┬──[0.22uF]──> PAM8302A A+
 - STM32H743VIT6: consignment LCSC → JLCPCB (stock limitado)
 - RJ45 + barrel jacks: soldadura manual (THT, no ensamblados por JLCPCB)
 
+### Thermal management MP2315S (IC2)
+- SOT-23-8 sin exposed pad — calor sale por pines al cobre del PCB
+- Solid copper fill en nodo SW / footprint inductor L1 en L1
+- Via stitching en zona GND alrededor de IC2 (0.4/0.8mm, L1 → plano L2)
+- L2 intacto y solido debajo del buck (sin cortes)
+
 ### Mejoras pendientes (post-produccion)
 - C47 (1000µF THT): reemplazar con 4-5x 220µF polymer SMD (SS221M160E7R7R4Z00ZZ)
 - Barrel jack J32 switch pin: deteccion end-of-chain via divisor resistivo a GPIO
-- MP2315S thermal pad: verificar vias termicas y zona GND solida en L1/L2
+- ESD en RJ45 de primera placa en cadena (consideracion futura)

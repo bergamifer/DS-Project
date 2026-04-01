@@ -408,10 +408,15 @@ IC2/3 (SW) → L1/1 → L1/2 → +5VA (32x PAM + FB2 + FB3)
 - Minor ERC: 6x PWR_FLAG needed, 3x AMUTEO suppressions, duplicate labels
 - These are non-critical and do not affect board functionality
 
+### Additional thermal improvements (2026-04-01, pre-release)
+- [x] MP2315S (IC2): solid copper fill on SW node / inductor L1 footprint on L1
+- [x] Via stitching added in GND copper zone around IC2 (6-10x vias, 0.4/0.8mm, L1→L2)
+  - SOT-23-8 has no exposed thermal pad — heat path is: pins → GND copper → vias → L2 plane
+  - Vias placed within 3-4mm of IC2 in the surrounding GND pour, not under component
+
 ### Post-production improvements (for next revision)
 - [ ] C47 (1000µF THT) → 4-5x 220µF polymer SMD (SS221M160E7R7R4Z00ZZ, 16V)
 - [ ] Barrel jack J32 switch pin → end-of-chain detection (100kΩ/10kΩ divider to GPIO)
-- [ ] MP2315S thermal pad: verify via array (min 4-6x 0.3mm tented) + solid GND on L1/L2
 - [ ] ESD protection on first-in-chain RJ45 inputs (future consideration)
 - [ ] SAI clock routing: buses with 0.2mm clearance OK, consider 0.3mm if EMI issues arise
 
