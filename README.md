@@ -1,130 +1,119 @@
-# Domosonica DS10 — 32-Channel Beamforming Audio System
+# Domosonica DS10
 
-Sistema de audio espacial de 32 canales con amplificadores Class-D integrados, diseñado para instalaciones artísticas con ~500 speakers distribuidos en ~18 cajas.
+Sistema de audio espacial de 32 canales con capacidad de beamforming, diseñado para instalaciones artísticas a gran escala.
 
-## Arquitectura del Sistema
+---
 
-```
-STM32H743 (MCU) ──SAI1/SAI2──> 4x PCM1690 (DAC 8ch c/u) ──differential──> 32x PAM8302A (Class-D) ──> Speakers
-       |                              |
-       ├──UART──> ESP32-C3-Mini      AK5538VN (ADC 8ch) <──differential── Mic inputs
-       |          (WiFi/BLE)               |
-       ├──I2C1──> DAC control         SAI3 (TDM256)
-       ├──I2C4──> EEPROM (CAT24C256)       |
-       └──USB-C   (programming)       STM32H743
-```
+## El proyecto
 
-## Componentes Principales
+**Domosonica** es una instalación sonora inmersiva basada en un campo de ~500 parlantes distribuidos en el espacio. El objetivo es crear experiencias de escucha donde el sonido se percibe como un fenómeno espacial: fuentes que se mueven, campos que emergen, focos que aparecen y desaparecen en el espacio físico.
 
-| Componente | IC | Cantidad | Funcion |
-|---|---|---|---|
-| MCU | STM32H743VIT6 (LQFP100) | 1 | Control central, SAI, I2C, USB |
-| DAC | PCM1690 (8ch, differential) | 4 | 32 canales de audio, salida diferencial |
-| ADC | AK5538VN (8ch, 32-bit, TDM256) | 1 | 8 entradas de micrófono diferencial |
-| Amplificador | PAM8302A (mono 2.5W Class-D) | 32 | Amplificación directa a speakers |
-| WiFi/BLE | ESP32-C3-Mini | 1 | Conectividad inalámbrica |
-| EEPROM | CAT24C256 | 1 | Almacenamiento de configuración |
-| Buck converter | MP2315S (24V→5V, 3A) | 1 | Fuente principal desde 24V DC |
-| LDO digital | AP1117-33 | 1 | +3V3 para STM32, ESP32, digital |
-| LDO analogico | AP2125K-3.3 | 1 | +3.3VA limpio para ADC AVDD y VREF |
+El beamforming permite dirigir energía sonora hacia puntos específicos del espacio sumando señales con retardos calculados. Con suficientes parlantes y resolución de fase, es posible construir frentes de onda arbitrarios — lo que convierte el espacio en un instrumento.
 
-## Alimentacion
+### Por qué hardware propio
+
+La escala del proyecto (~500 parlantes) hace inviable el uso de hardware de audio profesional estándar: demasiado costoso, demasiado grande, demasiado dependiente de infraestructura. El DS10 es una solución diseñada específicamente para esta instalación: barato, compacto, reproducible, y capaz de operar en red distribuida.
+
+---
+
+## DS10 — Placa de producción
+
+Cada unidad DS10 es un nodo de audio autónomo que distribuye 32 canales amplificados hacia 32 parlantes. La instalación completa usa ~18 unidades conectadas en red.
 
 ```
-24V DC externo ──> MP2315S Buck (24V→5V, 3A) ──┬──> 5V_AMP (32x PAM8302A)
-                                                 |
-                                              [Ferrite]
-                                                 |
-                                                 ├──> LDO → 3.3V digital
-                                                 └──> AP2125K → 3.3VA analogico
+                        DS10 (por unidad)
+┌────────────────────────────────────────────────────────┐
+│                                                        │
+│  24V DC ──> Buck ──> 5V ──> 32x PAM8302A ──> Speakers │
+│              │                                         │
+│              └──> LDOs ──> STM32H743 ──SAI──> 4x DAC  │
+│                                │                       │
+│                            ESP32-C3  (WiFi/BLE)        │
+│                                │                       │
+│                            AK5538VN  (8ch ADC)         │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+         ↑                              ↑
+    24V daisy-chain              Cat5e/RJ45 audio
+    entre cajas                  (4 links × 8ch = 32ch)
 ```
 
-- Entrada: 24V DC bus (daisy-chain entre cajas, cable 14AWG)
-- Buck local: MP2315S en cada placa (SOT-23-8, JLCPCB Basic)
-- Aislamiento: Ferrite bead entre 5V_AMP y 5V_CLEAN
+### Capacidades por unidad
 
-## Distribucion de Audio
+- **32 canales de salida** — DAC diferencial 32-bit + amp Class-D 2.5W por canal
+- **8 canales de entrada** — ADC diferencial 32-bit (micrófonos o señal de referencia)
+- **Sincronización de red** — MCLK 12.288MHz compartido garantiza coherencia de fase entre unidades
+- **WiFi/BLE** — configuración y control inalámbrico
+- **Alimentación 24V** — bus daisy-chain entre cajas, un solo cable de potencia
 
-- 8 canales diferenciales por enlace Cat5e/RJ45 (4 pares trenzados)
-- 4 enlaces Cat5e por placa DS10 (32ch / 8 = 4)
-- Topologia daisy-chain con passthrough RJ45 en cada caja
-- Nomenclatura pares: VP1/VN1 ... VP32/VN32
+### Escala del sistema completo
 
-## PCB — 4 Capas
+| | Por unidad | Sistema (18 unidades) |
+| --- | --- | --- |
+| Canales de salida | 32 | ~576 |
+| Canales de entrada | 8 | ~144 |
+| Parlantes | 32 | ~500 |
+| Alimentación | 24V DC | Bus daisy-chain |
 
-| Capa | Funcion |
-|---|---|
-| L1 (Top) | Componentes + señales digitales (izq) + pares diferenciales (der) |
-| L2 (GND) | Plano solido — sin trazas |
-| L3 (Power) | Zonas 3.3V digital, 5V, AVDD analogico |
-| L4 (Bottom) | Pasivos, aux, salidas PAM8302A a speakers |
+---
 
-- Stackup: JLCPCB JLC04161H-7628 (1.6mm, 1oz/0.5oz/0.5oz/1oz)
-- Impedancia diferencial objetivo: 100 Ohm en L1
+## Beamforming
 
-## Red de Entrada DAC → Amp (por canal diferencial)
+El beamforming en este contexto no es telecomunicaciones — es síntesis de campo sonoro. La idea central es que si conocés la posición de cada parlante y podés controlar la fase y amplitud de cada canal de forma independiente, podés construir patrones de interferencia específicos en el espacio.
 
-```
-PCM1690 VOUT+ ──[1kOhm]──┬──[0.22uF]──> PAM8302A A+
-                          |
-                       [4.7nF]
-                          |
-                         GND
-```
+**Aplicaciones concretas en la instalación:**
 
-- LPF: 1kOhm + 4.7nF C0G (fc=34kHz, atenua ruido delta-sigma)
-- Acople: 0.22uF X7R (fc=72Hz con RI=10kOhm interno)
-- EMI salida: Ferrite beads + 220pF en OUT+/OUT-
+- Focos de sonido: energía concentrada en un punto del espacio
+- Fuentes virtuales: la percepción de que el sonido viene de un lugar donde no hay parlante
+- Zonas silenciosas: cancelación activa por interferencia destructiva
+- Movimiento: barrido de un frente de onda a través del espacio
 
-## Fabricacion
+El STM32H743 corre a 480MHz con DMA audio pipeline y opera los 5 puertos SAI simultáneamente sin underruns, lo que permite actualizar los 32 canales en tiempo real a 48kHz.
 
-- **Fabricante**: JLCPCB
-- **KiCad**: 9.0
-- **PCB**: 4 capas, FR-4, 1.6mm, HASL
-- **Ensamblaje**: SMD ambos lados
+---
 
-## Documentacion
+## Hardware
 
-- [DS_Amp_Design_Notes.md](DS_Amp_Design_Notes.md) — Notas detalladas de diseño (amplificadores, fuente, distribucion, componentes LCSC)
+### Componentes principales
 
-## Estado de Produccion (2026-03-31)
+| IC | Función | Bus |
+| --- | --- | --- |
+| STM32H743VIT6 | MCU central, 480MHz, LQFP100 | — |
+| 4× PCM1690 | DAC 8ch diferencial 32-bit | SAI1/SAI2 |
+| AK5538VN | ADC 8ch diferencial 32-bit | SAI3_B (TDM256) |
+| 32× PAM8302A | Amplificador Class-D 2.5W/ch | — |
+| ESP32-C3-Mini | WiFi / BLE | UART |
+| MP2315S | Buck 24V→5V 3A | — |
 
-**PCB enviado a produccion en JLCPCB** — 5 unidades, branch `power_supply_24`.
+### PCB
 
-### Fixes completados (pre-produccion)
-- VREFL1-4 conectados a GND (antes VREFL1 iba a +3.3VA)
-- AK5538VN I2C conectado via I2C3 (U7/66=SDA, U7/67=SCL, AF4)
-- FB67 eliminado (bridgeaba +3V3 con +3.3VA)
-- PCM1802 sheet eliminado del schematic
-- TDM0/TDM1 corregidos: TDM256 mode (TDM1=H, TDM0=L)
-- VBAT (U7/6) conectado a +3V3
-- GND unificado (no mas GNDA/GNDD/GND2)
-- Proteccion 24V: SMBJ24A TVS en entrada (paralelo +24V a GND)
-- ESP32 GPIO9: pull-up 10kΩ externo a +3V3 (boot normal)
-- AK5538 OVF: conectado a STM32 PA15 (U7/77) para deteccion overflow
-- 16x 100pF C0G/NP0 en entradas analogicas AK5538 (AINxP/AINxN)
-- Speaker connectors renombrados: JSPK01-JSPK16
+- 4 capas, FR-4, 1.6mm — stackup JLC04161H-7628
+- Fabricado por JLCPCB
+- Diseñado en KiCad 9.0
 
-### Verificado por netlist (570 nets, completo)
-- SAI1 → DAC0(U2)+DAC1(U3), SAI2 → DAC2(U1)+DAC3(U4)
-- SAI3_B → AK5538VN (BICK=U7/55, SDTO1=U7/56, LRCK=U7/57)
-- MCLK 12.288MHz compartido: DACs + ADC + extension header
-- 4 DACs con I2C addresses unicos (0x4C-0x4F) en I2C1
-- +3.3VA: U10(AP2125K) output → IC3 AVDD + VREFH network
-- +24V → IC2(MP2315S) → L1 → +5VA → FB2 → +5V → LDOs
+### Distribución de audio
 
-### Componentes criticos
-- Ferrite universal: CBW201209U601T (C21286) — 67 posiciones
-- STM32H743VIT6: consignment LCSC → JLCPCB (stock limitado)
-- RJ45 + barrel jacks: soldadura manual (THT, no ensamblados por JLCPCB)
+Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados por cable = 4 canales diferenciales. 2 cables por placa = 8 canales por enlace × 4 enlaces = 32 canales.
 
-### Thermal management MP2315S (IC2)
-- SOT-23-8 sin exposed pad — calor sale por pines al cobre del PCB
-- Solid copper fill en nodo SW / footprint inductor L1 en L1
-- Via stitching en zona GND alrededor de IC2 (0.4/0.8mm, L1 → plano L2)
-- L2 intacto y solido debajo del buck (sin cortes)
+---
 
-### Mejoras pendientes (post-produccion)
-- C47 (1000µF THT): reemplazar con 4-5x 220µF polymer SMD (SS221M160E7R7R4Z00ZZ)
-- Barrel jack J32 switch pin: deteccion end-of-chain via divisor resistivo a GPIO
-- ESD en RJ45 de primera placa en cadena (consideracion futura)
+## Estado
+
+| Versión | Estado |
+| --- | --- |
+| DS9 | En producción — sistema base, PCM1802 2ch ADC |
+| **DS10** | **Orden enviada a JLCPCB (2026-04-09) — 5 unidades** |
+
+### Mejoras DS10 respecto a DS9
+
+- PCM1802 (2ch) reemplazado por AK5538VN (8ch, 32-bit) — 4× más entradas
+- 32× PAM8302A integrados en PCB (antes módulo HAT externo)
+- Fuente 24V con buck local por placa (antes fuente externa)
+- Supply analógico separado (+3.3VA) para el ADC
+
+---
+
+## Documentación técnica
+
+- [DS10_DESIGN_REVIEW.md](DS10_DESIGN_REVIEW.md) — Revisión de diseño, verificación de netlist, decisiones de arquitectura
+- [DS10_PRE_PRODUCTION_CHECKLIST.md](DS10_PRE_PRODUCTION_CHECKLIST.md) — Checklist pre-producción, parámetros JLCPCB, verificación BOM
