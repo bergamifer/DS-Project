@@ -1,74 +1,9 @@
 ** Drc report for DS.kicad_pcb **
-** Created on 2026-03-24T12:04:32-0300 **
+** Created on 2026-04-02T00:48:27-0300 **
 
-** Found 19 DRC violations **
-[drill_out_of_range]: Hole size out of range (board setup constraints min hole 0.3000 mm; actual 0.2000 mm)
-    Rule: netclass 'Default'; error
-    @(125.0802 mm, 74.1420 mm): Via [/stm32_custom/USART2_RX] on F.Cu - B.Cu
-[drill_out_of_range]: Hole size out of range (board setup constraints min hole 0.3000 mm; actual 0.2000 mm)
-    Rule: netclass 'Default'; error
-    @(117.1955 mm, 74.2217 mm): Via [/stm32_custom/USART2_RX] on F.Cu - B.Cu
-[drill_out_of_range]: Hole size out of range (board setup constraints min hole 0.3000 mm; actual 0.2000 mm)
-    Rule: netclass 'Default'; error
-    @(125.7270 mm, 73.8554 mm): Via [/stm32_custom/USART2_TX] on F.Cu - B.Cu
-[drill_out_of_range]: Hole size out of range (board setup constraints min hole 0.3000 mm; actual 0.2000 mm)
-    Rule: netclass 'Default'; error
-    @(115.6314 mm, 73.2458 mm): Via [/stm32_custom/USART2_TX] on F.Cu - B.Cu
-[drill_out_of_range]: Hole size out of range (board setup constraints min hole 0.3000 mm; actual 0.2000 mm)
-    Rule: netclass 'Default'; error
-    @(126.8712 mm, 77.2082 mm): Via [/stm32_custom/VREF+] on F.Cu - B.Cu
-[via_diameter]: Via diameter (board setup constraints min diameter 0.5000 mm; actual 0.4000 mm)
-    Rule: netclass 'Default'; error
-    @(125.0802 mm, 74.1420 mm): Via [/stm32_custom/USART2_RX] on F.Cu - B.Cu
-[via_diameter]: Via diameter (board setup constraints min diameter 0.5000 mm; actual 0.4000 mm)
-    Rule: netclass 'Default'; error
-    @(117.1955 mm, 74.2217 mm): Via [/stm32_custom/USART2_RX] on F.Cu - B.Cu
-[via_diameter]: Via diameter (board setup constraints min diameter 0.5000 mm; actual 0.4000 mm)
-    Rule: netclass 'Default'; error
-    @(125.7270 mm, 73.8554 mm): Via [/stm32_custom/USART2_TX] on F.Cu - B.Cu
-[via_diameter]: Via diameter (board setup constraints min diameter 0.5000 mm; actual 0.4000 mm)
-    Rule: netclass 'Default'; error
-    @(115.6314 mm, 73.2458 mm): Via [/stm32_custom/USART2_TX] on F.Cu - B.Cu
-[via_diameter]: Via diameter (board setup constraints min diameter 0.5000 mm; actual 0.4000 mm)
-    Rule: netclass 'Default'; error
-    @(126.8712 mm, 77.2082 mm): Via [/stm32_custom/VREF+] on F.Cu - B.Cu
-[track_dangling]: Track has unconnected end
-    Local override; warning
-    @(160.1830 mm, 134.8916 mm): Track [/ADC_AK5538/AIN7P] on In2.Cu, length 0.0639 mm
-[track_dangling]: Track has unconnected end
-    Local override; warning
-    @(160.1830 mm, 135.1964 mm): Track [/ADC_AK5538/AIN7N] on In2.Cu, length 0.1901 mm
-[lib_footprint_mismatch]: Footprint 'CP_Elec_4x5.7' does not match copy in library 'Capacitor_SMD'.
-    Local override; warning
-    @(168.0570 mm, 114.5970 mm): Footprint C24
-[lib_footprint_mismatch]: Footprint 'C_0402_1005Metric' does not match copy in library 'Capacitor_SMD'.
-    Local override; warning
-    @(154.9760 mm, 110.1520 mm): Footprint C267
-[lib_footprint_mismatch]: Footprint 'R_0603_1608Metric' does not match copy in library 'Resistor_SMD'.
-    Local override; warning
-    @(153.8330 mm, 110.7870 mm): Footprint R105
-[text_thickness]: Text thickness out of range (board setup constraints silk text thickness min thickness 0.0800 mm; actual 0.0600 mm)
-    Rule: board setup constraints silk text thickness; warning
-    @(168.6666 mm, 50.0302 mm): Reference field of R49
-[text_height]: Text height out of range (board setup constraints silk text height min height 0.8000 mm; actual 0.4000 mm)
-    Rule: board setup constraints silk text height; warning
-    @(168.6666 mm, 50.0302 mm): Reference field of R49
-[text_thickness]: Text thickness out of range (board setup constraints silk text thickness min thickness 0.0800 mm; actual 0.0600 mm)
-    Rule: board setup constraints silk text thickness; warning
-    @(176.6422 mm, 91.6862 mm): Reference field of R81
-[text_height]: Text height out of range (board setup constraints silk text height min height 0.8000 mm; actual 0.4000 mm)
-    Rule: board setup constraints silk text height; warning
-    @(176.6422 mm, 91.6862 mm): Reference field of R81
+** Found 0 DRC violations **
 
-** Found 2 unconnected pads **
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(130.4650 mm, 109.5170 mm): Track [+5V] on In2.Cu, length 2.7940 mm
-    @(130.4650 mm, 109.4890 mm): Pad 2 [+5V] of C59 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(130.7190 mm, 55.1610 mm): Zone 'Disipadores' [+3V3] on B.Cu, priority 1
-    @(119.1909 mm, 67.8610 mm): Zone [+3V3] on In2.Cu, priority 2
+** Found 0 unconnected pads **
 
 ** Found 0 Footprint errors **
 

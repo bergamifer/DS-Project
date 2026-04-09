@@ -2651,6 +2651,16 @@
 	)
 	(wire
 		(pts
+			(xy 68.58 105.41) (xy 81.28 105.41)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6a1dbb48-d7d8-4583-bb1d-ca8e8d9961e7")
+	)
+	(wire
+		(pts
 			(xy 58.42 72.39) (xy 81.28 72.39)
 		)
 		(stroke
@@ -8964,8 +8974,8 @@
 		)
 	)
 	(global_label "AMUTEO"
-		(shape output)
-		(at 81.28 105.41 180)
+		(shape input)
+		(at 63.5 105.41 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -8975,7 +8985,7 @@
 		)
 		(uuid "bf492044-498d-4d4f-b768-cd13a1a57e5e")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 70.9772 105.41 0)
+			(at 53.1972 105.41 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10255,6 +10265,130 @@
 				)
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/dd1611f7-e72c-48f4-8076-9494b5857835"
 					(reference "U4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_Small")
+		(at 66.04 105.41 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "5de877c3-7303-4b84-a767-5b3da9d14077")
+		(property "Reference" "R107"
+			(at 66.04 107.95 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "1k"
+			(at 66.04 102.87 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+			(at 66.04 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579705924167974912"
+			(at 66.04 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "-55℃~+155℃ 1kΩ 50V 62.5mW Thick Film Resistor ±1% ±100ppm/℃ 0402 Chip Resistor - Surface Mount ROHS"
+			(at 66.04 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Mouser part" ""
+			(at 74.93 100.584 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.0007"
+			(at 66.04 105.41 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Version" ""
+			(at 66.04 105.41 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "CRCW06031K00FKEA"
+			(at 66.04 105.41 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 66.04 105.41 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "9ce5f705-21f5-4243-8d18-e1595f2607c1")
+		)
+		(pin "2"
+			(uuid "7fa50366-68b2-42bf-9917-c97c788382d8")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/51ea6481-0eee-45d4-9de8-34af618ab641"
+					(reference "R107")
+					(unit 1)
+				)
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/7f93613a-81ac-4b21-b4ec-bfcfa7fb6a2a"
+					(reference "R108")
+					(unit 1)
+				)
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/99c758cf-7348-4a3f-b49c-c983f0e10cf9"
+					(reference "R109")
+					(unit 1)
+				)
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/dd1611f7-e72c-48f4-8076-9494b5857835"
+					(reference "R110")
 					(unit 1)
 				)
 			)
