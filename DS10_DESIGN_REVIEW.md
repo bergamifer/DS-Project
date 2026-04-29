@@ -445,6 +445,294 @@ IC2/3 (SW) → L1/1 → L1/2 → +5VA (32x PAM + FB2 + FB3)
 
 ---
 
-**Last updated**: 2026-03-31
-**Branch**: power_supply_24
-**Status**: SENT TO PRODUCTION
+## 11. FIRMWARE CONFIGURATION REFERENCE — DS10
+
+> Referencia completa para la sesión de programación. Todos los datos verificados contra netlist (574 nets, 2026-04-02) y BOM de producción.
+>
+> **Nota sobre netlist**: R107-R110 (resistencias 1kΩ serie en cada línea AMUTEO) fueron agregadas al esquemático después de la última exportación de netlist.md. El BOM de producción las incluye. El netlist.md muestra AMUTEO como conexión directa, pero el circuito real tiene los 1kΩ de protección.
+
+---
+
+### 11.1 Relojes
+
+| Fuente | Frecuencia | Uso |
+|--------|-----------|-----|
+| HSE (Y2, PH0/PH1) | 25 MHz | Clock principal STM32 |
+| LSE (Y1, PC14/PC15) | 32.768 kHz | RTC |
+| PLL1 desde HSE | 480 MHz | SYSCLK |
+| PLL3 desde HSE | **12.288 MHz** | SAI1_MCLK → todos los DAC + AK5538 |
+
+**SAI1_MCLK (PE2)** sale del STM32 y es distribuido físicamente a:
+- RN1/4, RN2/4, RN3/4, RN4/4 → 4× PCM1690 MCLK
+- IC3/24 → AK5538VN MCLK
+- JP2/1 → JP2 jumper (normalmente ABIERTO) → J5/7
+
+Para obtener 12.288 MHz exacto desde HSE 25 MHz, usar PLL3 con FRACN habilitado o aceptar ≈12.25 MHz (error <0.3%, suficiente para audio no crítico). La coherencia de fase entre unidades depende de que **todas usen el mismo MCLK físico**, no de la frecuencia exacta.
+
+---
+
+### 11.2 SAI — Audio Serial Interface
+
+#### SAI1 → DAC0 (U2, 0x4C) + DAC1 (U3, 0x4E)
+
+| Señal | STM32 pin | GPIO | AF | Nota |
+|-------|-----------|------|----|------|
+| MCLK | 1 | PE2 | AF6 | Compartido con todos |
+| SCK_A | 4 | PE5 | AF6 | SAI1 master clock |
+| FS_A | 3 | PE4 | AF6 | Frame sync para DAC0+DAC1 |
+| SD_A | 5 | PE6 | AF6 | Data → DAC0 (U2) |
+| SD_B | 2 | PE3 | AF6 | Data → DAC1 (U3) |
+
+#### SAI2 → DAC2 (U1, 0x4D) + DAC3 (U4, 0x4F)
+
+| Señal | STM32 pin | GPIO | AF | Nota |
+|-------|-----------|------|----|------|
+| SCK_A | 60 | PD13 | AF10 | SAI2 master clock |
+| FS_A | 59 | PD12 | AF10 | Frame sync para DAC2+DAC3 |
+| SD_A | 58 | PD11 | AF10 | Data → DAC2 (U1) |
+| SD_B | 41 | PE11 | AF10 | Data → DAC3 (U4) |
+
+#### SAI3_B → AK5538VN ADC (IC3, 0x14)
+
+| Señal | STM32 pin | GPIO | AF | AK5538 pin | Nombre AK5538 |
+|-------|-----------|------|----|------------|---------------|
+| SCK_B | 55 | PD8 | AF6 | 33 | BICK/DCLK |
+| SD_B (RX) | 56 | PD9 | AF6 | 36 | SDTO1/DSDOL2 |
+| FS_B | 57 | PD10 | AF6 | 34 | LRCK/DSDOL1 |
+
+SAI3 en **modo esclavo** (MSN=GND). AK5538 genera LRCK y BICK internamente sincronizado a MCLK. Configurar SAI3 en modo TDM256 (256 bits/frame @ 48kHz = BICK 12.288MHz).
+
+#### Resumen TDM por DAC
+
+Cada PCM1690 recibe TDM8 (8 canales × 32-bit) por su SD pin. SAI1_A y SAI1_B transportan DAC0 y DAC1 en paralelo → 16 canales. SAI2_A y SAI2_B igual → 32 canales totales.
+
+---
+
+### 11.3 I2C — Mapa completo
+
+| Bus | STM32 pin SCL | GPIO SCL | STM32 pin SDA | GPIO SDA | AF | Dispositivos | Pull-ups |
+|-----|--------------|----------|--------------|----------|----|-------------|----------|
+| I2C1 | 95 | PB8 | 96 | PB9 | AF4 | 4× PCM1690 (0x4C–0x4F) | RN5 (4.7kΩ) |
+| I2C2 | 46 | PB10 | 47 | PB11 | AF4 | J5 expansion | RN6 (4.7kΩ) |
+| I2C3 | 67 | PA8 | 66 | PC9 | AF4 | AK5538VN (0x14) | RN6 (4.7kΩ) |
+| I2C4 | 92 | PB6 | 93 | PB7 | AF11 | EEPROM CAT24C256 (0x50) | RN5 (4.7kΩ) |
+
+**Notas:**
+- I2C1: DAC addresses 0x4C-0x4F son 7-bit. 8-bit write: 0x98/0x9A/0x9C/0x9E
+- I2C3: AK5538VN address 0x14 (7-bit, verificar con datasheet sección "I2C slave address")
+- I2C4: EEPROM A0=A1=A2=GND → 7-bit address 0x50 (8-bit write 0xA0)
+
+#### DAC PCM1690 — Mapa de direcciones I2C
+
+| Ref | ADR0 (pin 22) | ADR1 (pin 23) | I2C addr (7-bit) | SAI SD |
+|-----|--------------|--------------|-----------------|--------|
+| U2 | GND | GND | **0x4C** | SAI1_SD_A |
+| U1 | +3V3 | GND | **0x4D** | SAI2_SD_A |
+| U3 | GND | +3V3 | **0x4E** | SAI1_SD_B |
+| U4 | +3V3 | +3V3 | **0x4F** | SAI2_SD_B |
+
+---
+
+### 11.4 UART
+
+| Periférico | STM32 pin TX | GPIO TX | STM32 pin RX | GPIO RX | AF | Destino |
+|------------|-------------|---------|-------------|---------|----|----|
+| UART4 | 22 | PA0 | 23 | PA1 | AF8 | ESP32-C3-Mini (U5) |
+| USART2 | 24 | PA2 | 25 | PA3 | AF7 | J6/7 + J6/6 (expansion) |
+| UART7 | 38 | PE8 | 37 | PE7 | AF7 | J7/8 + J7/7 (SWD header, debug) |
+
+**UART4 ↔ ESP32**: PA0=STM32_TX→U5/13(ESP32_RX), PA1=STM32_RX→U5/12(ESP32_TX). Conexión directa sin resistencias (no es RS-485).
+
+---
+
+### 11.5 GPIO — Mapa completo
+
+#### Salidas de control
+
+| Función | STM32 pin | GPIO | Estado seguro | Descripción |
+|---------|-----------|------|--------------|-------------|
+| DAC_RST | 79 | PC11 | HIGH (activo bajo) | ~RST de los 4 PCM1690 |
+| DAC_MUTE_IN | 80 | PC12 | LOW | AMUTEI de los 4 PCM1690 |
+| PAM_SD | 84 | PD3 | LOW (amps off) | SD de los 32 PAM8302A vía R20 |
+| AK_PDN | 64 | PC7 | LOW (apagado) | Power-down AK5538VN (activo bajo) |
+| AK_DIF1 | 65 | PC8 | — | Interface select AK5538VN (ver datasheet) |
+| EEPROM_WP | 91 | PB5 | HIGH | Write-protect CAT24C256 (HIGH=protegido) |
+
+#### Entradas de estado
+
+| Función | STM32 pin | GPIO | Descripción |
+|---------|-----------|------|-------------|
+| DAC_MUTE_OUT | 78 | PC10 | AMUTEO wire-OR de los 4 PCM1690 (via 4× 1kΩ R107-R110) |
+| AK_OVF | 77 | PA15 | Overflow del AK5538VN (IC3/42) |
+| OPT_SW (K2) | 28 | PA4 | Botón usuario (pull-down externo, activo alto cuando presionado? verificar) |
+
+#### LEDs — TIM3 PWM (AF2)
+
+| LED | Color | STM32 pin | GPIO | TIM3 canal |
+|-----|-------|-----------|------|-----------|
+| D4 | Amarillo | 30 | PA6 | CH1 |
+| D5 | Rojo | 31 | PA7 | CH2 |
+| D6 | Verde | 34 | PB0 | CH3 |
+| D7 | Blanco | 35 | PB1 | CH4 |
+
+> D1 (Rojo) está conectado a ESP32 U5/16 — no al STM32.
+
+#### Botones
+
+| Botón | Función | Conexión | Comportamiento |
+|-------|---------|----------|----------------|
+| K1 | ESP32 GPIO8 | U5/22 + R8(pull-up) | Press → GPIO8 LOW (ESP32 boot mode) |
+| K2 | STM32 PA4 | U7/28 + R17 | Press → PA4 activo |
+| K3 | STM32 BOOT0 | U7/94, K3/1=+3V3 | Press → BOOT0 HIGH → bootloader en próximo reset |
+| K4 | STM32 NRST | U7/14, K4/2=GND | Press → NRST LOW → reset STM32 |
+
+**Secuencia DFU**: K3 presionado (BOOT0=H) → K4 presionado y soltado (reset) → K3 suelto → STM32 entra en bootloader.
+
+#### SWD / Debug
+
+| Señal | STM32 pin | GPIO | J7 pin |
+|-------|-----------|------|--------|
+| SWDIO | 72 | PA13 | J7/2 |
+| SWCLK | 76 | PA14 | J7/3 |
+| SWO | 89 | PB3 | J7/5 |
+| NRST | 14 | — | J7/6 |
+| UART7_RX | 37 | PE7 | J7/7 |
+| UART7_TX | 38 | PE8 | J7/8 |
+
+---
+
+### 11.6 Secuencia de inicialización — PCM1690 (I2C1)
+
+1. Mantener DAC_RST (PC11) LOW durante boot
+2. Configurar SAI1 y SAI2 en modo master TDM
+3. Arrancar PLL3 → MCLK 12.288MHz en PE2
+4. Esperar ≥5ms (estabilización MCLK)
+5. Subir DAC_RST HIGH → salida de reset PCM1690
+6. Esperar ≥10ms (PCM1690 power-on reset interno)
+7. Por I2C1, configurar cada DAC (0x4C, 0x4D, 0x4E, 0x4F):
+   - Reset de registros (PWR_DN = 1 → 0)
+   - Configurar modo TDM/SAI (registro 0x01)
+   - Audio format: 32-bit TDM, MCLK/BCK ratio
+   - Unmute (AMUTEI LOW via PC12)
+8. Configurar PAM_SD (PD3) HIGH → habilitar amplificadores
+
+**Secuencia de mute segura**: AMUTEI (PC12) HIGH → esperar fin de frame → PAM_SD (PD3) LOW.
+
+---
+
+### 11.7 Configuración AK5538VN (I2C3)
+
+Strapping hardware en la placa (no modificar por software):
+
+| Pin AK5538 | Función | Conexión | Valor |
+|-----------|---------|----------|-------|
+| 51 | TDM0 | GND | L → TDM256 |
+| 52 | TDM1 | +3V3 | H → TDM256 |
+| 54 | I2C/SPI sel | +3V3 | I2C mode |
+| 29-31 | PW0-PW2 | +3V3 | 32-bit |
+| 32 | MSN | GND | Slave |
+| 57 | LDOE | +3V3 | LDO interno ON |
+
+Inicialización vía I2C3 (dirección 0x14):
+1. PDN_AK (PC7) HIGH → AK5538VN en power-down
+2. Configurar SAI3_B como receptor TDM256 esclavo
+3. PDN_AK LOW → salida de power-down
+4. Esperar ≥10ms
+5. Configurar registros AK5538VN: sample rate 48kHz, TDM256, 32-bit
+6. OVF (PA15): monitorear overflow por interrupción EXTI
+
+**ADC channels en RJ45**: AIN1-AIN8 llegan via J27/J28/J29/J30 (pares diferenciales T568B sobre Cat5e).
+
+---
+
+### 11.8 PAM8302A — Control
+
+- **SD pin (todos los 32 amplificadores)**: red `/ALL_AMPS/SD` → R20/2
+- **STM32 control**: PD3 (pin 84) → R19 (pull-down a GND) + R20 (serie a /ALL_AMPS/SD)
+  - R19 mantiene amps en shutdown durante reset STM32 (seguro)
+  - R20 limita corriente GPIO
+- **Activar amps**: PD3 = HIGH
+- **Silenciar amps**: PD3 = LOW (antes de apagar para evitar pop)
+
+---
+
+### 11.9 ESP32-C3-Mini — Configuración
+
+| ESP32 pin | Función | Conexión |
+|-----------|---------|----------|
+| U5/12 (UART0_TX) | UART TX | → STM32 PA1 (UART4_RX) |
+| U5/13 (UART0_RX) | UART RX | ← STM32 PA0 (UART4_TX) |
+| U5/16 | LED D1 (Rojo) | → D1 cátodo vía R6 |
+| U5/22 (GPIO8) | Boot mode + K1 | Pull-up R8 a +3V3, K1 a GND |
+| U5/23 (GPIO9) | — | Pull-up R106 a +3V3 |
+| U5/26 (D+) | USB | → U6 (ESD) → J3 USB-C |
+| U5/27 (D-) | USB | → U6 (ESD) → J3 USB-C |
+| U5/8 (EN) | Chip enable | R5 pull-up + C25 (RC reset) |
+
+**Boot normal**: GPIO8=H (R8 pull-up), GPIO9=H (R106 pull-up). K1 presionado = GPIO8 LOW = enter download mode si EN también cicla.
+
+---
+
+### 11.10 Headers de expansión
+
+#### J5 (JST-SH 1×10, 1mm pitch)
+
+| Pin | Señal | GPIO | Descripción |
+|-----|-------|------|-------------|
+| 1 | I2C2_SCL | PB10 (AF4) | I2C2 |
+| 2 | I2C2_SDA | PB11 (AF4) | I2C2 |
+| 3 | SAI3_SCK_A | PD0 (AF6) | SAI3 expansion |
+| 4 | SAI3_SD_A | PD1 (AF6) | SAI3 expansion |
+| 5 | I2S2_SDI | PB14 (AF5) | I2S2 |
+| 6 | SAI3_FS_A | PD4 (AF6) | SAI3 expansion |
+| 7 | MCLK* | PE2 vía JP2 | *JP2 normalmente ABIERTO |
+| 8 | GND | — | |
+| 9 | +3V3 | — | |
+| 10 | +5V | — | |
+
+#### J6 (JST-SH 1×10, 1mm pitch)
+
+| Pin | Señal | GPIO | Descripción |
+|-----|-------|------|-------------|
+| 1 | I2S2_WS | PB12 (AF5) | I2S2 |
+| 2 | I2S2_CK | PB13 (AF5) | I2S2 |
+| 3 | SPDIFRX_IN3 | PC5 (AF9) | S/PDIF input 3 |
+| 4 | SPDIFRX_IN2 | PC4 (AF9) | S/PDIF input 2 |
+| 5 | SPDIFRX_IN0 | PD7 (AF9) | S/PDIF input 0 |
+| 6 | USART2_RX | PA3 (AF7) | Debug serial |
+| 7 | USART2_TX | PA2 (AF7) | Debug serial |
+| 8 | GND | — | |
+| 9 | +3V3 | — | |
+| 10 | +5V | — | |
+
+---
+
+### 11.11 GPIOs sin usar en STM32 (configurar como Analog en firmware)
+
+Para minimizar consumo y EMI, configurar como `GPIO_MODE_ANALOG` sin pull-up/down:
+
+`PE0, PE1, PE9, PE10, PE12, PE13, PE14, PE15, PB2, PB4, PB15, PC0, PC1, PC2, PC3, PC6, PD2, PD5, PD6, PD14, PD15, PA5, PA9, PA10`
+
+---
+
+### 11.12 Archivos para la sesión de firmware
+
+**Prioridad 1 — Configuración de puertos (este documento)**:
+- [DS10_DESIGN_REVIEW.md](DS10_DESIGN_REVIEW.md) — Secciones 8 y 11 (netlist verification + firmware reference)
+
+**Prioridad 2 — Arquitectura del sistema**:
+- [README.md](README.md) — Descripción de la instalación y objetivos de beamforming
+- [DS10_PRE_PRODUCTION_CHECKLIST.md](DS10_PRE_PRODUCTION_CHECKLIST.md) — Sección 1 (verificación completa de conexiones por netlist)
+
+**Prioridad 3 — Netlist completo (ground truth)**:
+- [librerias/netlist.md](librerias/netlist.md) — 574 nets verificados (generado antes de agregar R107-R110)
+
+**No compartir**:
+- Archivos KiCad (.kicad_sch, .kicad_pcb) — demasiado voluminosos y no procesables por firmware
+- [librerias/DRC.rpt](librerias/DRC.rpt) y [librerias/ERC.rpt](librerias/ERC.rpt) — solo relevantes para EDA
+
+---
+
+**Last updated**: 2026-04-29
+**Branch**: main
+**Status**: PCBs recibidos de JLCPCB — fase de bring-up
