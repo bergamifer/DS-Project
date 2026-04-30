@@ -43,7 +43,7 @@
 
 #define CPU_FREQ_MHZ         480      // CPU clock after PLL1 config
 
-#define ADC_CHANNELS         2        // PCM1802 stereo input
+#define ADC_CHANNELS         8        // AK5538VN 8ch TDM256 input
 #define ADC_BUFFER_SAMPLES   AUDIO_BUFFER_SAMPLES  // 480 samples = 10ms
 #define ADC_BUFFER_SIZE      (ADC_BUFFER_SAMPLES * ADC_CHANNELS)   // 960 samples
 
@@ -71,6 +71,7 @@ typedef struct {
 /* Private variables ---------------------------------------------------------*/
 
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c3;
 
 SAI_HandleTypeDef hsai_BlockA1;
 SAI_HandleTypeDef hsai_BlockB1;
@@ -82,7 +83,6 @@ DMA_HandleTypeDef hdma_sai1_b;
 DMA_HandleTypeDef hdma_sai2_a;
 DMA_HandleTypeDef hdma_sai2_b;
 DMA_HandleTypeDef hdma_sai3_b;
-
 UART_HandleTypeDef huart7;
 UART_HandleTypeDef huart4;
 
@@ -106,21 +106,34 @@ static int32_t audio_buffer_2a[AUDIO_BUFFER_SIZE * 2] __attribute__((section(".d
 static int32_t audio_buffer_2b[AUDIO_BUFFER_SIZE * 2] __attribute__((section(".dma_buffer"), aligned(32)));
 static int32_t audio_buffer_3b_rx[ADC_BUFFER_SIZE * 2] __attribute__((section(".dma_buffer"), aligned(32)));
 
-// Circular delay lines for beamforming (one per beam/ADC channel)
-static int32_t delay_line_L[DELAY_LINE_SIZE] __attribute__((section(".dma_buffer"), aligned(32)));
-static int32_t delay_line_R[DELAY_LINE_SIZE] __attribute__((section(".dma_buffer"), aligned(32)));
-static uint32_t delay_write_pos = 0;  // Current write index into delay lines
+// Circular delay lines for beamforming — 8 independent channels (AK5538VN 8ch)
+// delay_line[0] = ADC ch0 (main beam source); [1]-[7] stubs for future expansion
+static int32_t delay_line[8][DELAY_LINE_SIZE] __attribute__((section(".dma_buffer"), aligned(32)));
+static uint32_t delay_write_pos = 0;
 
 // Active beamforming config (copied from ESP32 ds_config_t on update)
 static beam_config_t beam_config;
 
-// PCM1690 DAC pin configs (DS9 v2.0 — from pin_definitions.h)
-static const PCM1690_Pins dac_pins[4] = {
-    { DAC0_RST_PORT, DAC0_RST_PIN, DAC0_AMUTEI_PORT, DAC0_AMUTEI_PIN }, // DAC0 U3
-    { DAC1_RST_PORT, DAC1_RST_PIN, DAC1_AMUTEI_PORT, DAC1_AMUTEI_PIN }, // DAC1 U4
-    { DAC2_RST_PORT, DAC2_RST_PIN, DAC2_AMUTEI_PORT, DAC2_AMUTEI_PIN }, // DAC2 U2
-    { DAC3_RST_PORT, DAC3_RST_PIN, DAC3_AMUTEI_PORT, DAC3_AMUTEI_PIN }, // DAC3 U8
+/* ===== Test Tone: 1kHz sine @ 48kHz sample rate =====
+ * 48 samples per period (48000/1000 = 48), amplitude = -6dBFS (0x400000 peak)
+ * 480 samples per half-buffer = exactly 10 periods → no phase error across calls
+ * SET test_tone_enabled = 0 to restore normal beamforming mode
+ */
+static const int32_t sine_table_1khz[48] = {
+         0,   547466,  1085575,  1605080,  2097152,  2553318,
+   2965812,  3327563,  3632372,  3875034,  4051387,  4158422,
+   4194304,  4158422,  4051387,  3875034,  3632372,  3327563,
+   2965812,  2553318,  2097152,  1605080,  1085575,   547466,
+         0,  -547466, -1085575, -1605080, -2097152, -2553318,
+  -2965812, -3327563, -3632372, -3875034, -4051387, -4158422,
+  -4194304, -4158422, -4051387, -3875034, -3632372, -3327563,
+  -2965812, -2553318, -2097152, -1605080, -1085575,  -547466
 };
+static volatile uint8_t test_tone_enabled = 1; /* SET TO 0 FOR BEAMFORMING MODE */
+static uint32_t test_tone_phase = 0;
+
+// DS10: RST and AMUTEI are shared bus signals (PC11/PC12) — no per-chip GPIO.
+// PCM1690_Init receives NULL pins; RST/MUTE are controlled before calling Init.
 static const uint8_t dac_addrs[4] = {
     PCM1690_ADDR_DAC0, PCM1690_ADDR_DAC1, PCM1690_ADDR_DAC2, PCM1690_ADDR_DAC3
 };
@@ -192,6 +205,7 @@ void PeriphCommonClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_I2C3_Init(void);
 static void MX_UART7_Init(void);
 static void MX_SAI1_Init(void);
 static void MX_UART4_Init(void);
@@ -246,40 +260,20 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_I2C1_Init();
-  MX_UART4_Init();   /* UART4 (PA0/PA1) first — debug output on DS9 */
+  MX_I2C3_Init();
+  MX_UART4_Init();   /* UART4 (PA0/PA1) — ESP32 link + debug serial */
   MX_UART7_Init();
   MX_SAI1_Init();
   MX_SAI2_Init();
   MX_SAI3_Init();
   /* USER CODE BEGIN 2 */
 
-  // === LED diagnostics init: D6=PC4 (boot), D7=PC5 (TX), D11=PB0 (RX) ===
-  // GPIOC and GPIOB clocks already enabled in MX_GPIO_Init.
-  {
-    GPIO_InitTypeDef gpio_led = {0};
-    gpio_led.Mode  = GPIO_MODE_OUTPUT_PP;
-    gpio_led.Pull  = GPIO_NOPULL;
-    gpio_led.Speed = GPIO_SPEED_FREQ_LOW;
-    // D6 (PC4) + D7 (PC5) on GPIOC
-    HAL_GPIO_WritePin(LED1_PORT, LED1_PIN | LED2_PIN, GPIO_PIN_RESET);
-    gpio_led.Pin = LED1_PIN | LED2_PIN;
-    HAL_GPIO_Init(LED1_PORT, &gpio_led);
-    // D11 (PB0) and D10 (PB1) owned by TIM3 PWM — not configured as GPIO output
-    // Brief D6 flash: confirms we reached this point in init
-    // Use software busy-wait — HAL_Delay() depends on SysTick which can be starved
-    // by priority-0 SAI/I2C ISRs enabled in MspInit. ~200ms @ 480MHz.
-    HAL_GPIO_WritePin(LED1_PORT, LED1_PIN, GPIO_PIN_SET);
-    for (volatile uint32_t i = 0; i < 24000000UL; i++) { __NOP(); }
-    HAL_GPIO_WritePin(LED1_PORT, LED1_PIN, GPIO_PIN_RESET);
-  }
-
-  // PE3 is SAI1_SD_B — shared with DAC1_RST, resolved in init sequence
-
   // Startup message
-  UART_Print("\r\n=== DS9 Beamforming Audio ===\r\n");
+  UART_Print("\r\n=== DS10 Beamforming Audio ===\r\n");
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
-  UART_Print("SAI1_A+B: TDM8 ch0-15, SAI2_A+B: TDM8 ch16-31, SAI3_B: RX 2ch\r\n");
-  UART_Print("Mode: Beamforming (ADC L -> delay lines -> 32ch DAC)\r\n\r\n");
+  UART_Print("PLL3: 24.576MHz MCLK (512xfS) — MckOverSampling=ENABLE\r\n");
+  UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");
+  UART_Print("Test tone: 1kHz -6dBFS on all 32 channels\r\n\r\n");
 
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();
@@ -289,8 +283,7 @@ int main(void)
 
   // === Beamforming init ===
   // Zero delay lines
-  memset(delay_line_L, 0, sizeof(delay_line_L));
-  memset(delay_line_R, 0, sizeof(delay_line_R));
+  memset(delay_line, 0, sizeof(delay_line));
   delay_write_pos = 0;
 
   // Default beam config: all gains max, no delays, unmuted
@@ -328,131 +321,103 @@ int main(void)
     }
   }
 
-  // Pre-fill TX buffers with silence (zeros)
-  UART_Print("DBG: memset audio_buffer...\r\n");
+  // === STEP 1: Pre-fill all TX buffers with silence, start SAI DMA (brings MCLK up) ===
   memset(audio_buffer, 0, sizeof(audio_buffer));
-  __DSB();  /* D-cache not enabled — DSB ensures DMA sees writes */
-  UART_Print("DBG: memset audio_buffer_1b...\r\n");
   memset(audio_buffer_1b, 0, sizeof(audio_buffer_1b));
-  __DSB();
-  UART_Print("TX buffers pre-filled (silence)\r\n");
-
-  // Start SAI1_B (slave) BEFORE SAI1_A (master) - slave must be ready when master clocks
-  HAL_StatusTypeDef status;
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI1_B DMA Started OK (slave, waiting for master)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI1_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockB1));
-    UART_Print(uart_buf);
-  }
-
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_buffer, AUDIO_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI1_A DMA Started OK (master)\r\n");
-    Print_DMA_Config();
-  } else {
-    sprintf(uart_buf, "SAI1_A DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockA1));
-    UART_Print(uart_buf);
-  }
-
-  // === PCM1690 DAC initialization via I2C ===
-  // MCLK is now running on PE2 (SAI1_A master started above).
-  // PCM1690 needs SCKI after RST release to complete POR (3846 cycles).
-  {
-    // Configure RST/AMUTEI GPIOs as output push-pull (drive LOW initially)
-    GPIO_InitTypeDef gpio_dac = {0};
-    gpio_dac.Mode  = GPIO_MODE_OUTPUT_PP;
-    gpio_dac.Pull  = GPIO_NOPULL;
-    gpio_dac.Speed = GPIO_SPEED_FREQ_LOW;
-
-    // GPIOE: PE10(RST0), PE3(RST1), PE11(AMUTEI0), PE1(AMUTEI1)
-    HAL_GPIO_WritePin(GPIOE, DAC0_RST_PIN | DAC1_RST_PIN | DAC0_AMUTEI_PIN | DAC1_AMUTEI_PIN, GPIO_PIN_RESET);
-    gpio_dac.Pin = DAC0_RST_PIN | DAC1_RST_PIN | DAC0_AMUTEI_PIN | DAC1_AMUTEI_PIN;
-    HAL_GPIO_Init(GPIOE, &gpio_dac);
-
-    // GPIOC: PC10(RST2), PC11(AMUTEI2)
-    HAL_GPIO_WritePin(GPIOC, DAC2_RST_PIN | DAC2_AMUTEI_PIN, GPIO_PIN_RESET);
-    gpio_dac.Pin = DAC2_RST_PIN | DAC2_AMUTEI_PIN;
-    HAL_GPIO_Init(GPIOC, &gpio_dac);
-
-    // GPIOB: PB15(RST3), PB14(AMUTEI3)
-    HAL_GPIO_WritePin(GPIOB, DAC3_RST_PIN | DAC3_AMUTEI_PIN, GPIO_PIN_RESET);
-    gpio_dac.Pin = DAC3_RST_PIN | DAC3_AMUTEI_PIN;
-    HAL_GPIO_Init(GPIOB, &gpio_dac);
-
-    UART_Print("\r\nInitializing PCM1690 DACs via I2C (MCLK running)...\r\n");
-    const char *dac_names[4] = { "DAC0 U3", "DAC1 U4", "DAC2 U2", "DAC3 U8" };
-    uint8_t dacs_ok = 0;
-    for (int i = 0; i < 4; i++) {
-      PCM1690_Status ds = PCM1690_Init(&hi2c1, dac_addrs[i], &dac_pins[i]);
-      sprintf(uart_buf, "  %s (0x%02X): %s\r\n", dac_names[i], dac_addrs[i],
-              ds == PCM1690_OK ? "OK" : "FAIL");
-      UART_Print(uart_buf);
-      if (ds == PCM1690_OK) dacs_ok++;
-    }
-    sprintf(uart_buf, "PCM1690: %d/4 initialized\r\n", dacs_ok);
-    UART_Print(uart_buf);
-
-    // Handle pin conflicts: reconfigure shared pins for SAI after DAC init
-    // PE3 (DAC1_RST) → SAI1_SD_B (AF6) — RST already released, no longer needed
-    gpio_dac.Pin       = GPIO_PIN_3;
-    gpio_dac.Mode      = GPIO_MODE_AF_PP;
-    gpio_dac.Pull      = GPIO_NOPULL;
-    gpio_dac.Speed     = GPIO_SPEED_FREQ_HIGH;
-    gpio_dac.Alternate = GPIO_AF6_SAI1;
-    HAL_GPIO_Init(GPIOE, &gpio_dac);
-
-    // PE11 (DAC0_AMUTEI) → SAI2_SD_B (AF10) — DAC0 unmuted via soft-mute register
-    gpio_dac.Pin       = GPIO_PIN_11;
-    gpio_dac.Alternate = GPIO_AF10_SAI2;
-    HAL_GPIO_Init(GPIOE, &gpio_dac);
-
-    UART_Print("PE3→SAI1_SD_B, PE11→SAI2_SD_B (pin conflicts resolved)\r\n");
-  }
-
-  // === SAI2 (DAC2 + DAC3) DMA start ===
-  // Pre-fill SAI2 buffers with silence
   memset(audio_buffer_2a, 0, sizeof(audio_buffer_2a));
-  __DSB();
   memset(audio_buffer_2b, 0, sizeof(audio_buffer_2b));
   __DSB();
 
-  // Start SAI2_B (slave) BEFORE SAI2_A (master) - slave must be ready when master clocks
+  // Slaves must start before masters (SAI sync requirement)
+  HAL_StatusTypeDef status;
+  status = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
+  sprintf(uart_buf, "SAI1_B DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
+  UART_Print(uart_buf);
+
   status = HAL_SAI_Transmit_DMA(&hsai_BlockB2, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI2_B DMA Started OK (slave, waiting for master)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI2_B DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockB2));
-    UART_Print(uart_buf);
-  }
+  sprintf(uart_buf, "SAI2_B DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
+  UART_Print(uart_buf);
+
+  // Masters — SAI1_A generates MCLK (PE2) which PCM1690 needs for POR
+  status = HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_buffer, AUDIO_BUFFER_SIZE * 2);
+  sprintf(uart_buf, "SAI1_A DMA: %s (MCLK 24.576MHz running)\r\n", status == HAL_OK ? "OK" : "FAIL");
+  UART_Print(uart_buf);
 
   status = HAL_SAI_Transmit_DMA(&hsai_BlockA2, (uint8_t*)audio_buffer_2a, AUDIO_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI2_A DMA Started OK (master)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI2_A DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockA2));
+  sprintf(uart_buf, "SAI2_A DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
+  UART_Print(uart_buf);
+
+  // === STEP 2: AK5538VN — configure SAI3_B and release power-down ===
+  UART_Print("AK5538VN: starting SAI3_B RX DMA...\r\n");
+  memset(audio_buffer_3b_rx, 0, sizeof(audio_buffer_3b_rx));
+  __DSB();
+  status = HAL_SAI_Receive_DMA(&hsai_BlockB3, (uint8_t*)audio_buffer_3b_rx, ADC_BUFFER_SIZE * 2);
+  sprintf(uart_buf, "SAI3_B RX DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
+  UART_Print(uart_buf);
+
+  // Release AK5538 from power-down — hardware strapping configures TDM256/slave/32-bit/LDO
+  HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_RESET);
+  HAL_Delay(15);  // ≥10ms POR time
+  UART_Print("AK5538VN: power-down released — TDM256 slave active\r\n");
+  sprintf(uart_buf, "AK5538VN OVF=%d (0=OK)\r\n",
+          HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN));
+  UART_Print(uart_buf);
+
+  // === STEP 3: PCM1690 init (shared RST/MUTE bus, DS10 style) ===
+  // DAC_RST (PC11) was held LOW since GPIO init — MCLK now running ≥5ms
+  HAL_Delay(5);
+  UART_Print("\r\nPCM1690: releasing shared RST (PC11)...\r\n");
+  HAL_GPIO_WritePin(DAC_RST_PORT, DAC_RST_PIN, GPIO_PIN_SET);
+  HAL_Delay(12);  // ≥10ms PCM1690 internal POR after RST release
+
+  uint32_t dac_ok = 0;
+  for (uint32_t d = 0; d < 4; d++) {
+    PCM1690_Status ds = PCM1690_Init(&hi2c1, dac_addrs[d], NULL);
+    sprintf(uart_buf, "  DAC%lu (0x%02X): %s\r\n", d, dac_addrs[d],
+            ds == PCM1690_OK ? "OK" : "FAIL");
+    UART_Print(uart_buf);
+    if (ds == PCM1690_OK) dac_ok++;
+
+    // Register readback on first DAC for verification
+    if (d == 0 && ds == PCM1690_OK) {
+      uint8_t regval;
+      const uint8_t regs[] = {64, 65, 66, 68, 70, 72, 73, 74, 75, 76, 77, 78, 79};
+      const char *names[] = {"SYSTEM","FORMAT","OPER","MUTE","DEEMPH",
+                              "ATT1","ATT2","ATT3","ATT4","ATT5","ATT6","ATT7","ATT8"};
+      UART_Print("  DAC0 register readback:\r\n");
+      for (uint32_t r = 0; r < 13; r++) {
+        if (PCM1690_ReadReg(&hi2c1, dac_addrs[0], regs[r], &regval) == PCM1690_OK) {
+          sprintf(uart_buf, "    Reg%u (%s) = 0x%02X\r\n", regs[r], names[r], regval);
+        } else {
+          sprintf(uart_buf, "    Reg%u (%s) = READ FAIL\r\n", regs[r], names[r]);
+        }
+        UART_Print(uart_buf);
+      }
+    }
+  }
+  sprintf(uart_buf, "PCM1690: %lu/4 DACs initialized OK\r\n", dac_ok);
+  UART_Print(uart_buf);
+
+  // Unmute all DACs (AMUTEI HIGH = unmuted)
+  HAL_GPIO_WritePin(DAC_MUTE_IN_PORT, DAC_MUTE_IN_PIN, GPIO_PIN_SET);
+  UART_Print("PCM1690: AMUTEI HIGH — DACs unmuted\r\n");
+
+  // === STEP 4: Verify SAI1_A ===
+  {
+    uint32_t cr1 = SAI1_Block_A->CR1;
+    uint32_t sr = SAI1_Block_A->SR;
+    sprintf(uart_buf, "SAI1_A: SAIEN=%lu SR=0x%08lX OVRUDR=%lu WCKCFG=%lu\r\n",
+            (cr1 >> 16) & 1, sr, (sr >> 0) & 1, (sr >> 2) & 1);
     UART_Print(uart_buf);
   }
 
-  // === SAI3_B RX DMA start (ADC input) ===
-  __DSB();
-  status = HAL_SAI_Receive_DMA(&hsai_BlockB3, (uint8_t*)audio_buffer_3b_rx, ADC_BUFFER_SIZE * 2);
-  if (status == HAL_OK) {
-    UART_Print("SAI3_B RX DMA Started OK (ADC master)\r\n");
-  } else {
-    sprintf(uart_buf, "SAI3_B RX DMA FAILED! Status: %d, Error: 0x%08lX\r\n",
-            status, HAL_SAI_GetError(&hsai_BlockB3));
-    UART_Print(uart_buf);
-  }
+  // === STEP 5: Enable amplifier bank ===
+  HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_SET);
+  UART_Print("PAM8302A: SD HIGH — 32 amplifiers enabled\r\n");
 
   // === ESP32 UART protocol init ===
   UART_Protocol_Init(&huart4, &huart7);
-  HAL_GPIO_WritePin(LED1_PORT, LED1_PIN, GPIO_PIN_SET);  // D6 ON: full init complete
+  /* D6 (PB0/TIM3_CH3) brightness will ramp via dimmer — no separate GPIO toggle needed */
 
   // Reset counters + flags (underruns during init are expected)
   need_fill_first_half = 0;
@@ -552,47 +517,7 @@ int main(void)
       __DSB();
     }
 
-    // SAI2_A: channels 16-23
-    if (need_fill_2a_first_half) {
-      need_fill_2a_first_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
-      __DSB();
-    }
-    if (need_fill_2a_second_half) {
-      need_fill_2a_second_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
-      __DSB();
-    }
-
-    // SAI2_B: channels 24-31
-    if (need_fill_2b_first_half) {
-      need_fill_2b_first_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
-      __DSB();
-    }
-    if (need_fill_2b_second_half) {
-      need_fill_2b_second_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
-      __DSB();
-    }
-
-    // ===== SAI3_B RX → feed delay lines (MUST run before TX fills) =====
-    if (rx_3b_first_half_ready) {
-      rx_3b_first_half_ready = 0;
-      __DSB();
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
-    }
-    if (rx_3b_second_half_ready) {
-      rx_3b_second_half_ready = 0;
-      __DSB();
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
-    }
+    // SAI1_B/SAI2/SAI3 fills DISABLED for U4-only I2S test
 
     // ===== Check for new ESP32 config → apply to beam_config =====
     if (UART_Protocol_HasNewConfig()) {
@@ -689,6 +614,18 @@ int main(void)
       if (temp != -999) {
         int32_t t_abs = temp >= 0 ? temp : -temp;
         sprintf(uart_buf, "     Temp: %ld.%ld C\r\n", temp / 10, t_abs % 10);
+        UART_Print(uart_buf);
+      }
+
+      // Buffer dump: frame 2 (indices 16-23) to avoid sine(0)=0 and sine(1) edge cases
+      {
+        sprintf(uart_buf, "     Slots0-3: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
+                (uint32_t)audio_buffer[16], (uint32_t)audio_buffer[17],
+                (uint32_t)audio_buffer[18], (uint32_t)audio_buffer[19]);
+        UART_Print(uart_buf);
+        sprintf(uart_buf, "     Slots4-7: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
+                (uint32_t)audio_buffer[20], (uint32_t)audio_buffer[21],
+                (uint32_t)audio_buffer[22], (uint32_t)audio_buffer[23]);
         UART_Print(uart_buf);
       }
 
@@ -907,12 +844,12 @@ void PeriphCommonClock_Config(void)
   PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_SAI1|RCC_PERIPHCLK_SAI2|RCC_PERIPHCLK_UART7;
   PeriphClkInitStruct.PLL3.PLL3M = 5;
   PeriphClkInitStruct.PLL3.PLL3N = 68;
-  PeriphClkInitStruct.PLL3.PLL3P = 28;
+  PeriphClkInitStruct.PLL3.PLL3P = 14;  // 24.576 MHz MCLK (512×fS) for PCM1690 single-rate TDM
   PeriphClkInitStruct.PLL3.PLL3Q = 3;
   PeriphClkInitStruct.PLL3.PLL3R = 2;
   PeriphClkInitStruct.PLL3.PLL3RGE = RCC_PLL3VCIRANGE_2;
   PeriphClkInitStruct.PLL3.PLL3VCOSEL = RCC_PLL3VCOWIDE;
-  PeriphClkInitStruct.PLL3.PLL3FRACN = 6660;  // For exact 12.288 MHz MCLK (was 6329)
+  PeriphClkInitStruct.PLL3.PLL3FRACN = 6660;  // VCO=344.0625MHz, /14 = 24.576 MHz MCLK (512×fS)
   PeriphClkInitStruct.Sai1ClockSelection = RCC_SAI1CLKSOURCE_PLL3;
   PeriphClkInitStruct.Sai23ClockSelection = RCC_SAI23CLKSOURCE_PLL3;
   PeriphClkInitStruct.Usart234578ClockSelection = RCC_USART234578CLKSOURCE_PLL3;
@@ -988,13 +925,13 @@ static void MX_SAI1_Init(void)
   hsai_BlockA1.Instance = SAI1_Block_A;
   hsai_BlockA1.Init.Protocol = SAI_FREE_PROTOCOL;
   hsai_BlockA1.Init.AudioMode = SAI_MODEMASTER_TX;
-  hsai_BlockA1.Init.DataSize = SAI_DATASIZE_24;
+  hsai_BlockA1.Init.DataSize = SAI_DATASIZE_24;  // 24-bit: SAI uses bits[31:8] of DMA word
   hsai_BlockA1.Init.FirstBit = SAI_FIRSTBIT_MSB;
   hsai_BlockA1.Init.ClockStrobing = SAI_CLOCKSTROBING_FALLINGEDGE;
   hsai_BlockA1.Init.Synchro = SAI_ASYNCHRONOUS;
   hsai_BlockA1.Init.OutputDrive = SAI_OUTPUTDRIVE_DISABLE;
   hsai_BlockA1.Init.NoDivider = SAI_MCK_OVERSAMPLING_DISABLE;
-  hsai_BlockA1.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_DISABLE;
+  hsai_BlockA1.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_ENABLE;  // MCLK=2×BCK → 512×fS for single-rate TDM
   hsai_BlockA1.Init.FIFOThreshold = SAI_FIFOTHRESHOLD_EMPTY;
   hsai_BlockA1.Init.AudioFrequency = SAI_AUDIO_FREQUENCY_48K;
   hsai_BlockA1.Init.SynchroExt = SAI_SYNCEXT_DISABLE;
@@ -1004,15 +941,15 @@ static void MX_SAI1_Init(void)
   hsai_BlockA1.Init.PdmInit.Activation = DISABLE;
   hsai_BlockA1.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockA1.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
-  hsai_BlockA1.FrameInit.FrameLength = 256;           // TDM8: 8 slots × 32 bits
-  hsai_BlockA1.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockA1.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai_BlockA1.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockA1.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockA1.FrameInit.FrameLength = 256;            // TDM8: 8 slots × 32 bits
+  hsai_BlockA1.FrameInit.ActiveFrameLength = 1;        // Short pulse: 1 BCK at frame start
+  hsai_BlockA1.FrameInit.FSDefinition = SAI_FS_STARTFRAME; // Pulse marks frame start (not L/R split)
+  hsai_BlockA1.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;   // Negative pulse: falling edge = I2S frame start
+  hsai_BlockA1.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT; // I2S timing: data 1 BCK after FS
   hsai_BlockA1.SlotInit.FirstBitOffset = 0;
   hsai_BlockA1.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
-  hsai_BlockA1.SlotInit.SlotNumber = 8;                // TDM8: 8 slots (was 2)
-  hsai_BlockA1.SlotInit.SlotActive = 0x000000FF;       // All 8 slots active (was 0x03)
+  hsai_BlockA1.SlotInit.SlotNumber = 8;                // TDM8: 8 slots
+  hsai_BlockA1.SlotInit.SlotActive = 0x000000FF;       // All 8 slots active
   if (HAL_SAI_Init(&hsai_BlockA1) != HAL_OK)
   {
     Error_Handler();
@@ -1023,7 +960,7 @@ static void MX_SAI1_Init(void)
   hsai_BlockB1.Instance = SAI1_Block_B;
   hsai_BlockB1.Init.Protocol = SAI_FREE_PROTOCOL;
   hsai_BlockB1.Init.AudioMode = SAI_MODESLAVE_TX;
-  hsai_BlockB1.Init.DataSize = SAI_DATASIZE_24;
+  hsai_BlockB1.Init.DataSize = SAI_DATASIZE_24;  // match master
   hsai_BlockB1.Init.FirstBit = SAI_FIRSTBIT_MSB;
   hsai_BlockB1.Init.ClockStrobing = SAI_CLOCKSTROBING_FALLINGEDGE;
   hsai_BlockB1.Init.Synchro = SAI_SYNCHRONOUS;
@@ -1037,10 +974,10 @@ static void MX_SAI1_Init(void)
   hsai_BlockB1.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockB1.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
   hsai_BlockB1.FrameInit.FrameLength = 256;
-  hsai_BlockB1.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockB1.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai_BlockB1.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockB1.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockB1.FrameInit.ActiveFrameLength = 1;        // Match master: short pulse
+  hsai_BlockB1.FrameInit.FSDefinition = SAI_FS_STARTFRAME;
+  hsai_BlockB1.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;   // Match master: negative pulse
+  hsai_BlockB1.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT;
   hsai_BlockB1.SlotInit.FirstBitOffset = 0;
   hsai_BlockB1.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
   hsai_BlockB1.SlotInit.SlotNumber = 8;
@@ -1155,7 +1092,7 @@ static void MX_SAI2_Init(void)
   hsai_BlockA2.Init.Synchro = SAI_ASYNCHRONOUS;
   hsai_BlockA2.Init.OutputDrive = SAI_OUTPUTDRIVE_DISABLE;
   hsai_BlockA2.Init.NoDivider = SAI_MCK_OVERSAMPLING_DISABLE;
-  hsai_BlockA2.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_DISABLE;
+  hsai_BlockA2.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_ENABLE;  // MCLK=2×BCK → 512×fS for single-rate TDM
   hsai_BlockA2.Init.FIFOThreshold = SAI_FIFOTHRESHOLD_EMPTY;
   hsai_BlockA2.Init.AudioFrequency = SAI_AUDIO_FREQUENCY_48K;
   hsai_BlockA2.Init.SynchroExt = SAI_SYNCEXT_DISABLE;
@@ -1166,10 +1103,10 @@ static void MX_SAI2_Init(void)
   hsai_BlockA2.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockA2.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
   hsai_BlockA2.FrameInit.FrameLength = 256;
-  hsai_BlockA2.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockA2.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai_BlockA2.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockA2.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockA2.FrameInit.ActiveFrameLength = 1;        // Short pulse: 1 BCK at frame start
+  hsai_BlockA2.FrameInit.FSDefinition = SAI_FS_STARTFRAME;
+  hsai_BlockA2.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;   // Negative pulse
+  hsai_BlockA2.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT; // I2S timing: data 1 BCK after FS
   hsai_BlockA2.SlotInit.FirstBitOffset = 0;
   hsai_BlockA2.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
   hsai_BlockA2.SlotInit.SlotNumber = 8;
@@ -1197,10 +1134,10 @@ static void MX_SAI2_Init(void)
   hsai_BlockB2.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockB2.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
   hsai_BlockB2.FrameInit.FrameLength = 256;
-  hsai_BlockB2.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockB2.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai_BlockB2.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockB2.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockB2.FrameInit.ActiveFrameLength = 1;        // Match master: short pulse
+  hsai_BlockB2.FrameInit.FSDefinition = SAI_FS_STARTFRAME;
+  hsai_BlockB2.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;   // Match master: negative pulse
+  hsai_BlockB2.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT;
   hsai_BlockB2.SlotInit.FirstBitOffset = 0;
   hsai_BlockB2.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
   hsai_BlockB2.SlotInit.SlotNumber = 8;
@@ -1212,17 +1149,17 @@ static void MX_SAI2_Init(void)
 }
 
 /**
-  * @brief SAI3 Initialization Function (ADC input)
-  * @note  SAI3_B: Master RX, I2S stereo (2 channels), PD8(SCK)/PD9(SD)/PD10(FS)
-  *        Uses PLL3 via Sai23ClockSelection (shared with SAI2)
+  * @brief SAI3 Initialization Function (ADC input — AK5538VN)
+  * @note  SAI3_B: Master RX, TDM256 8ch 32-bit, PD8(SCK)/PD9(SD)/PD10(FS) AF6
+  *        STM32 generates BICK (12.288MHz) and LRCK (48kHz). AK5538 is slave (MSN=GND).
+  *        TDM256: FrameLength=256 (8 slots × 32 bit), BICK = 256×48kHz = 12.288MHz
   */
 static void MX_SAI3_Init(void)
 {
-  /* SAI3_B: Master RX - ADC input (2 channels) */
   hsai_BlockB3.Instance = SAI3_Block_B;
   hsai_BlockB3.Init.Protocol = SAI_FREE_PROTOCOL;
   hsai_BlockB3.Init.AudioMode = SAI_MODEMASTER_RX;
-  hsai_BlockB3.Init.DataSize = SAI_DATASIZE_24;
+  hsai_BlockB3.Init.DataSize = SAI_DATASIZE_32;          // AK5538VN: 32-bit word
   hsai_BlockB3.Init.FirstBit = SAI_FIRSTBIT_MSB;
   hsai_BlockB3.Init.ClockStrobing = SAI_CLOCKSTROBING_FALLINGEDGE;
   hsai_BlockB3.Init.Synchro = SAI_ASYNCHRONOUS;
@@ -1238,15 +1175,15 @@ static void MX_SAI3_Init(void)
   hsai_BlockB3.Init.PdmInit.Activation = DISABLE;
   hsai_BlockB3.Init.PdmInit.MicPairsNbr = 1;
   hsai_BlockB3.Init.PdmInit.ClockEnable = SAI_PDM_CLOCK1_ENABLE;
-  hsai_BlockB3.FrameInit.FrameLength = 64;              // 2 slots x 32 bits
-  hsai_BlockB3.FrameInit.ActiveFrameLength = 32;
-  hsai_BlockB3.FrameInit.FSDefinition = SAI_FS_CHANNEL_IDENTIFICATION;
+  hsai_BlockB3.FrameInit.FrameLength = 256;              // TDM256: 8 slots × 32 bits
+  hsai_BlockB3.FrameInit.ActiveFrameLength = 1;          // Short FS pulse (TDM start-frame)
+  hsai_BlockB3.FrameInit.FSDefinition = SAI_FS_STARTFRAME;
   hsai_BlockB3.FrameInit.FSPolarity = SAI_FS_ACTIVE_LOW;
-  hsai_BlockB3.FrameInit.FSOffset = SAI_FS_FIRSTBIT;
+  hsai_BlockB3.FrameInit.FSOffset = SAI_FS_BEFOREFIRSTBIT;
   hsai_BlockB3.SlotInit.FirstBitOffset = 0;
   hsai_BlockB3.SlotInit.SlotSize = SAI_SLOTSIZE_32B;
-  hsai_BlockB3.SlotInit.SlotNumber = 2;
-  hsai_BlockB3.SlotInit.SlotActive = 0x00000003;
+  hsai_BlockB3.SlotInit.SlotNumber = 8;                  // 8 ADC channels
+  hsai_BlockB3.SlotInit.SlotActive = 0x000000FF;         // All 8 slots
   if (HAL_SAI_Init(&hsai_BlockB3) != HAL_OK)
   {
     Error_Handler();
@@ -1314,6 +1251,34 @@ static int32_t Read_CPU_Temperature(void)
   return temp_x10;
 }
 
+/**
+  * @brief I2C3 Initialization Function (AK5538VN ADC — PA8/PC9 AF4)
+  */
+static void MX_I2C3_Init(void)
+{
+  hi2c3.Instance = I2C3;
+  hi2c3.Init.Timing = 0x307075B1;   // 100kHz SM @ 120MHz APB1 (same as I2C1)
+  hi2c3.Init.OwnAddress1 = 0;
+  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c3.Init.OwnAddress2 = 0;
+  hi2c3.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c3, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c3, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
 static void MX_TIM3_Init(void)
 {
   TIM_OC_InitTypeDef sConfigOC = {0};
@@ -1335,15 +1300,19 @@ static void MX_TIM3_Init(void)
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK ||
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK ||
+      HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK ||
+      HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK ||
       HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_4) != HAL_OK) {
-    UART_Print("TIM3 CH3/CH4 config FAILED\r\n");
+    UART_Print("TIM3 CH1-4 config FAILED\r\n");
     return;
   }
 
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);  // D11 PB0
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  // D10 PB1
-  UART_Print("TIM3 PWM started — LED dimmer active (1kHz, 300 steps, 3s cycle)\r\n");
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  // D4 PA6 Yellow
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  // D5 PA7 Red
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);  // D6 PB0 Green
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  // D7 PB1 White
+  UART_Print("TIM3 PWM started — 4 LEDs active (1kHz, 300 steps, 3s cycle)\r\n");
 }
 
 /**
@@ -1385,44 +1354,88 @@ static void MX_DMA_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
 
-  /* USER CODE END MX_GPIO_Init_1 */
-
-  /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOE_CLK_ENABLE();
-  __HAL_RCC_GPIOH_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
+  /* Enable all port clocks */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(ADC_BYPASS_GPIO_Port, ADC_BYPASS_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOB, ADC_OSR_Pin|LED_STATUS_Pin, GPIO_PIN_RESET);
+  /* ---- Safe pre-init output levels ---- */
+  /* DAC_RST LOW (all 4 PCM1690 held in reset until MCLK is running) */
+  HAL_GPIO_WritePin(DAC_RST_PORT, DAC_RST_PIN, GPIO_PIN_RESET);
+  /* DAC_MUTE_IN LOW (AMUTEI LOW = muted, safe during power-up) */
+  HAL_GPIO_WritePin(DAC_MUTE_IN_PORT, DAC_MUTE_IN_PIN, GPIO_PIN_RESET);
+  /* PAM_SD LOW (all 32 amps off until audio is ready) */
+  HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
+  /* AK_PDN HIGH (power-down mode until SAI3 is configured) */
+  HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_SET);
+  /* EEPROM_WP LOW (write enabled — needed for config save) */
+  HAL_GPIO_WritePin(EEPROM_WP_PORT, EEPROM_WP_PIN, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : ADC_BYPASS_Pin */
-  GPIO_InitStruct.Pin = ADC_BYPASS_Pin;
+  /* ---- Output: DAC shared control ---- */
+  GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull  = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+
+  GPIO_InitStruct.Pin = DAC_RST_PIN | DAC_MUTE_IN_PIN;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);    // PC11=DAC_RST, PC12=DAC_MUTE_IN
+
+  /* ---- Input: DAC_MUTE_OUT (AMUTEO wire-OR) ---- */
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pin  = DAC_MUTE_OUT_PIN;
+  HAL_GPIO_Init(DAC_MUTE_OUT_PORT, &GPIO_InitStruct);    // PC10
+
+  /* ---- Output: PAM amp bank shutdown ---- */
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(ADC_BYPASS_GPIO_Port, &GPIO_InitStruct);
+  GPIO_InitStruct.Pin  = PAM_SD_PIN;
+  HAL_GPIO_Init(PAM_SD_PORT, &GPIO_InitStruct);           // PD3
 
-  /*Configure GPIO pins : ADC_OSR_Pin LED_STATUS_Pin */
-  GPIO_InitStruct.Pin = ADC_OSR_Pin|LED_STATUS_Pin;
+  /* ---- Output: AK5538 control ---- */
+  GPIO_InitStruct.Pin = AK_PDN_PIN | AK_DIF1_PIN;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);                 // PC7=AK_PDN, PC8=AK_DIF1
+  HAL_GPIO_WritePin(AK_DIF1_PORT, AK_DIF1_PIN, GPIO_PIN_RESET); // DIF1=LOW (normal)
+
+  /* ---- Input: AK5538 overflow flag ---- */
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pin  = AK_OVF_PIN;
+  HAL_GPIO_Init(AK_OVF_PORT, &GPIO_InitStruct);           // PA15
+
+  /* ---- Input: User button K2 ---- */
+  GPIO_InitStruct.Pin = OPT_SW_K2_PIN;
+  HAL_GPIO_Init(OPT_SW_K2_PORT, &GPIO_InitStruct);        // PA4
+
+  /* ---- Output: EEPROM write protect ---- */
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  GPIO_InitStruct.Pin  = EEPROM_WP_PIN;
+  HAL_GPIO_Init(EEPROM_WP_PORT, &GPIO_InitStruct);        // PB5
 
-  /* NOTE: DAC RST/AMUTEI GPIO init moved to after SAI1_A DMA start (needs MCLK) */
+  /* ---- Analog: unused pins (EMI reduction, per DS10_DESIGN_REVIEW §11.11) ---- */
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pin  = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_9 | GPIO_PIN_10
+                       | GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);   // PE0,PE1,PE9,PE10,PE12-PE15
 
-  /*AnalogSwitch Config */
-  HAL_SYSCFG_AnalogSwitchConfig(SYSCFG_SWITCH_PC3, SYSCFG_SWITCH_PC3_CLOSE);
+  GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_4 | GPIO_PIN_15;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);   // PB2,PB4,PB15
 
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3
+                       | GPIO_PIN_6;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);   // PC0,PC1,PC2,PC3,PC6
 
-  /* USER CODE END MX_GPIO_Init_2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_5 | GPIO_PIN_6
+                       | GPIO_PIN_14 | GPIO_PIN_15;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);   // PD2,PD5,PD6,PD14,PD15
+
+  GPIO_InitStruct.Pin = GPIO_PIN_5 | GPIO_PIN_9 | GPIO_PIN_10;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);   // PA5,PA9,PA10
 }
 
 /* USER CODE BEGIN 4 */
@@ -1546,18 +1559,19 @@ static void Print_DMA_Config(void) {
 }
 
 /**
- * @brief Process ADC half-buffer: deinterleave stereo into delay lines
- * @param rx_buf  Pointer to received interleaved L,R,L,R... samples
- * @param samples Number of mono samples (half of ADC_BUFFER_SAMPLES = 240)
+ * @brief Process ADC half-buffer: deinterleave 8ch TDM into delay lines
+ * @param rx_buf  Pointer to received interleaved ch0..7 samples (AK5538VN TDM256)
+ * @param samples Number of frames (half of ADC_BUFFER_SAMPLES)
  *
- * Feeds the circular delay lines from ADC input.
+ * Feeds all 8 circular delay lines from ADC input.
  * Must be called BEFORE Fill_Audio_Beamform in the same processing cycle.
  */
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
   uint32_t wp = delay_write_pos;
   for (uint32_t i = 0; i < samples; i++) {
-    delay_line_L[(wp + i) & DELAY_LINE_MASK] = rx_buf[i * ADC_CHANNELS];
-    delay_line_R[(wp + i) & DELAY_LINE_MASK] = rx_buf[i * ADC_CHANNELS + 1];
+    for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
+      delay_line[ch][(wp + i) & DELAY_LINE_MASK] = rx_buf[i * ADC_CHANNELS + ch];
+    }
   }
   delay_write_pos = (wp + samples) & DELAY_LINE_MASK;
 }
@@ -1572,6 +1586,21 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
  * per-channel delay offset, applies gain and mute. Single beam (L only) for now.
  */
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset) {
+  /* Test tone mode: 1kHz sine on all 8 channels, bypasses beamforming */
+  if (test_tone_enabled) {
+    uint32_t phase = test_tone_phase % 48;
+    for (uint32_t i = 0; i < samples; i++) {
+      int32_t s = sine_table_1khz[phase];
+      if (++phase >= 48) phase = 0;
+      int32_t out = s << 8;
+      for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+        buffer[i * AUDIO_CHANNELS + ch] = out;
+      }
+    }
+    test_tone_phase += samples;
+    return;
+  }
+
   uint32_t wp = delay_write_pos;
   uint8_t master = beam_config.mute_global ? 0 : beam_config.master_gain;
 
@@ -1585,7 +1614,8 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
       // so the most recent sample is at wp-1. We want sample that is
       // 'delay' samples old, offset by buffer position.
       uint32_t read_pos = (wp - delay - samples + i) & DELAY_LINE_MASK;
-      int32_t sample = delay_line_L[read_pos];
+      uint32_t src_ch = (gch < 8) ? gch : 0;  // map global ch to ADC ch; clamp to 0-7
+      int32_t sample = delay_line[src_ch][read_pos];
 
       // Apply per-channel gain (fixed-point: * gain >> 8)
       uint8_t gain = beam_config.gains[gch];

@@ -1,8 +1,13 @@
-# DS9 v2.0 Pin Audit - SAI Errors & Bodge Wires
+# DS9 v2.0 Pin Audit — SAI Errors & Bodge Wires
 
-**Date**: 2026-02-12 (bringup results added 2026-02-18)
-**Source**: STM32H743VI datasheet DS12110 Rev 10, Tables 13-14 (pages 93-94)
-**PCB**: DS9 v2.0 - 5 boards fabricated (JLCPCB, received 2026-02-18)
+> **HISTÓRICO — DS9 únicamente.** Los errores documentados aquí fueron corregidos en el diseño DS10.
+> DS10 usa los mismos pines SAI correctos (PE2-PE6/SAI1, PD11-PD13/PE11/SAI2, PD8-PD10/SAI3_B),
+> con la diferencia de que el ADC es AK5538VN en SAI3_B (no PCM1802/SAI4_B).
+> Ver [ds10_pin_map.md](ds10_pin_map.md) para el mapa actual.
+
+**Fecha**: 2026-02-12 (resultados bringup agregados 2026-02-18)
+**Source**: STM32H743VI datasheet DS12110 Rev 10, Tables 13-14 (páginas 93-94)
+**PCB**: DS9 v2.0 — 5 boards fabricadas (JLCPCB, recibidas 2026-02-18)
 
 ## Summary
 

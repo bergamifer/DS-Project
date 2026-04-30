@@ -78,12 +78,15 @@ PCM1690_Status PCM1690_ConfigTDM(I2C_HandleTypeDef *hi2c, uint8_t dev_addr)
 {
     HAL_StatusTypeDef status;
 
-    // Reg 64: Auto sample rate, normal operation
+    // Reg 64: Force SINGLE RATE — with SCKI=256×fS, auto-detect picks DUAL
+    // rate which splits TDM across DIN1/DIN2 (4ch each). Force single rate
+    // so all 8 TDM channels come from DIN1 only.
     status = PCM1690_WriteReg_Internal(hi2c, dev_addr, PCM1690_REG_SYSTEM,
-                                        PCM1690_SRDA_AUTO);
+                                        PCM1690_SRDA_SINGLE);
     if (status != HAL_OK) return PCM1690_ERR_I2C;
 
-    // Reg 65: TDM I2S mode (FMTDA[3:0] = 0110)
+    // Reg 65: TDM I2S mode (FMTDA[3:0] = 0110) — all 8 channels active
+    // SAI FSOffset=BEFOREFIRSTBIT → FS 1 BCK before data (I2S timing)
     status = PCM1690_WriteReg_Internal(hi2c, dev_addr, PCM1690_REG_FORMAT,
                                         PCM1690_FMT_TDM_I2S);
     if (status != HAL_OK) return PCM1690_ERR_I2C;

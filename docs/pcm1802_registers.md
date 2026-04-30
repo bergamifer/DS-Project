@@ -1,8 +1,12 @@
-# PCM1802 ADC - Guía de Integración con STM32H743
+# PCM1802 ADC — Guía de Integración con STM32H743
+
+> **LEGACY DS9 — Este IC no está en DS10.**
+> DS10 reemplaza el PCM1802 (2ch estéreo) por el **AK5538VN (8ch TDM256)**.
+> Ver [ak5538vn_ref.md](ak5538vn_ref.md) para el ADC actual.
 
 **Documento:** Texas Instruments PCM1802 (SLES023D)
 **Tipo:** ADC Stereo 24-bit Delta-Sigma
-**Aplicación:** Digitalización de audio para DS Beamforming
+**Aplicación:** DS9 — digitalización de audio 2ch para beamforming
 
 ---
 

@@ -1,8 +1,19 @@
-# PCM1690 - Referencia de Configuración
+# PCM1690 — Referencia de Configuración
 
-**Fecha:** 2026-01-23
 **Dispositivo:** Texas Instruments PCM1690
-**Proyecto:** Domosonica DS Audio Processor
+**Proyecto:** Domosonica DS10 (4× chips = 32 canales)
+**Última revisión:** Abril 2026 — designadores actualizados a DS10
+
+## Instancias en DS10
+
+| DAC | Ref DS10 | Ref DS9 | I2C (8-bit) | SAI | Canales |
+|-----|---------|---------|-------------|-----|---------|
+| DAC0 | **U2** | U3 | 0x98 | SAI1_A | ch 0-7 |
+| DAC1 | **U3** | U4 | 0x9C | SAI1_B | ch 8-15 |
+| DAC2 | **U1** | U2 | 0x9A | SAI2_A | ch 16-23 |
+| DAC3 | **U4** | U8 | 0x9E | SAI2_B | ch 24-31 |
+
+**DS10 simplifica control:** RST y AMUTEI son buses compartidos (PC11, PC12). No hay GPIO por-chip. Llamar `PCM1690_Init()` con `pins=NULL`.
 
 ---
 

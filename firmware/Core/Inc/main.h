@@ -58,14 +58,7 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-/* NOTE: Old CubeMX-generated pin defines removed — they were for DS v1.0.
- * DS9 v2.0 correct pin definitions are in pin_definitions.h */
-#define ADC_BYPASS_Pin GPIO_PIN_3
-#define ADC_BYPASS_GPIO_Port GPIOC
-#define ADC_OSR_Pin GPIO_PIN_0
-#define ADC_OSR_GPIO_Port GPIOB
-#define LED_STATUS_Pin GPIO_PIN_5
-#define LED_STATUS_GPIO_Port GPIOB
+/* DS10: all pin definitions are in pin_definitions.h (DS10 netlist 2026-04-02) */
 
 /* USER CODE BEGIN Private defines */
 

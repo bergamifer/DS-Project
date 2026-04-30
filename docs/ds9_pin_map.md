@@ -1,7 +1,10 @@
 # DS9 Board Pin Map — STM32H743VI LQFP100
 
-> **Status**: 5 boards fabricated (JLCPCB). 6 SAI pin errors found vs DS10.
-> See [ds9_pin_audit.md](ds9_pin_audit.md) for SAI errors. This file covers all confirmed DS9 connections.
+> **HISTÓRICO — DS9 únicamente.** Para el mapa del hardware actual (DS10) ver [ds10_pin_map.md](ds10_pin_map.md).
+>
+> **Status DS9**: 5 boards fabricadas (JLCPCB). 6 errores SAI encontrados en bringup.
+> Ver [ds9_pin_audit.md](ds9_pin_audit.md) para detalle de errores SAI.
+> Este archivo cubre las conexiones confirmadas del PCB DS9.
 
 ---
 
