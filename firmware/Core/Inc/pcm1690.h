@@ -5,11 +5,11 @@
  * Texas Instruments PCM1690: 8-ch, 24-bit, 192kHz DAC
  * Interface: I2C control + TDM8 audio data via SAI
  *
- * DS9 board has 4x PCM1690 (32 channels total):
- *   DAC0 (0x94) → SAI1_A channels 0-7
- *   DAC1 (0x96) → SAI1_B channels 8-15
- *   DAC2 (0x98) → SAI2_A channels 16-23
- *   DAC3 (0x9A) → SAI2_B channels 24-31
+ * DS10 board has 4x PCM1690 (32 channels total):
+ *   DAC0 U2 (0x98) → SAI1_A channels 0-7
+ *   DAC1 U3 (0x9C) → SAI1_B channels 8-15
+ *   DAC2 U1 (0x9A) → SAI2_A channels 16-23
+ *   DAC3 U4 (0x9E) → SAI2_B channels 24-31
  */
 
 #ifndef __PCM1690_H
@@ -22,10 +22,10 @@
  * ============================================================================ */
 /* Base address 0x4C (7-bit). ADR1=pin23, ADR0=pin22 of PCM1690.
  * 8-bit write address = (7-bit << 1) */
-#define PCM1690_ADDR_DAC0       0x98    // U3: ADR1=0,ADR0=0 → 7-bit 0x4C
-#define PCM1690_ADDR_DAC1       0x9C    // U4: ADR1=1,ADR0=0 → 7-bit 0x4E
-#define PCM1690_ADDR_DAC2       0x9A    // U2: ADR1=0,ADR0=1 → 7-bit 0x4D
-#define PCM1690_ADDR_DAC3       0x9E    // U8: ADR1=1,ADR0=1 → 7-bit 0x4F
+#define PCM1690_ADDR_DAC0       0x98    // U2: ADR1=0,ADR0=0 → 7-bit 0x4C
+#define PCM1690_ADDR_DAC1       0x9C    // U3: ADR1=1,ADR0=0 → 7-bit 0x4E
+#define PCM1690_ADDR_DAC2       0x9A    // U1: ADR1=0,ADR0=1 → 7-bit 0x4D
+#define PCM1690_ADDR_DAC3       0x9E    // U4: ADR1=1,ADR0=1 → 7-bit 0x4F
 
 /* ============================================================================
  * Register Addresses
@@ -113,7 +113,7 @@ typedef struct {
 /**
  * @brief Full power-up sequence for one PCM1690
  * @param hi2c I2C handle (e.g. &hi2c1)
- * @param dev_addr 8-bit I2C address (0x94, 0x96, 0x98, 0x9A)
+ * @param dev_addr 8-bit I2C address (0x98, 0x9A, 0x9C, 0x9E)
  * @param pins Hardware pin config (RST, AMUTEI). NULL to skip GPIO control.
  * @return PCM1690_OK on success
  *
@@ -128,7 +128,7 @@ PCM1690_Status PCM1690_Init(I2C_HandleTypeDef *hi2c, uint8_t dev_addr,
 /**
  * @brief Configure PCM1690 for TDM8 I2S mode
  * @param hi2c I2C handle (e.g. &hi2c1)
- * @param dev_addr 8-bit I2C address (0x94, 0x96, 0x98, 0x9A)
+ * @param dev_addr 8-bit I2C address (0x98, 0x9A, 0x9C, 0x9E)
  * @return PCM1690_OK on success
  *
  * Configures: auto sample rate, TDM I2S format, all DACs enabled,

@@ -79,53 +79,11 @@ void SystemClock_Config(void)
     }
 }
 
-/**
- * @brief Configure PLL3 for audio (12.288 MHz MCLK)
- *
- * Target: 12.288 MHz = 256 × 48 kHz
- *
- * PLL3 Configuration:
- *   HSE 25 MHz -> DIVM3=5 -> 5 MHz VCO input
- *   5 MHz × DIVN3=68 = 340 MHz VCO output (fractional for precision)
- *   340 MHz / DIVP3=28 ≈ 12.142857 MHz
- *
- * For exact 12.288 MHz, use fractional:
- *   VCO = 5 MHz × (68 + 1228/8192) = 344.064 MHz
- *   MCLK = 344.064 / 28 = 12.288 MHz ✓
- *
- * FRACN = (0.1228 × 8192) ≈ 1006
+/* Audio_PLL3_Config() removed — PLL3 is configured in PeriphCommonClock_Config()
+ * in main.c with the correct DS10 values:
+ *   M=5, N=68, P=14, FRACN=6660 → 24.576 MHz (512×fS, MckOverSampling=ENABLE)
+ * PLL3P=28 (256×fS) caused PCM1690 dual-rate mode (ch5-8 on DIN2 = silence).
  */
-void Audio_PLL3_Config(void)
-{
-    RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
-
-    // Configure PLL3 for SAI clock
-    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_SAI1 | RCC_PERIPHCLK_SAI4B;
-    PeriphClkInitStruct.PLL3.PLL3M = 5;       // VCO input = 25/5 = 5 MHz
-    PeriphClkInitStruct.PLL3.PLL3N = 68;      // Integer part
-    PeriphClkInitStruct.PLL3.PLL3P = 28;      // MCLK divider
-    PeriphClkInitStruct.PLL3.PLL3Q = 28;      // Not used
-    PeriphClkInitStruct.PLL3.PLL3R = 28;      // Not used
-    PeriphClkInitStruct.PLL3.PLL3RGE = RCC_PLL3VCIRANGE_2;  // 4-8 MHz
-    PeriphClkInitStruct.PLL3.PLL3VCOSEL = RCC_PLL3VCOMEDIUM;
-    PeriphClkInitStruct.PLL3.PLL3FRACN = 1006; // Fractional for exact 12.288 MHz
-
-    // SAI1 and SAI4 use PLL3P
-    PeriphClkInitStruct.Sai1ClockSelection = RCC_SAI1CLKSOURCE_PLL3;
-    PeriphClkInitStruct.Sai4BClockSelection = RCC_SAI4BCLKSOURCE_PLL3;
-
-    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
-    {
-        Error_Handler();
-    }
-
-    // Enable PLL3
-    __HAL_RCC_PLL3_ENABLE();
-    while (__HAL_RCC_GET_FLAG(RCC_FLAG_PLL3RDY) == 0) {}
-
-    // Enable PLL3 fractional divider
-    __HAL_RCC_PLL3FRACN_ENABLE();
-}
 
 /**
  * @brief Get current system clock frequencies (for debug)

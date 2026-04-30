@@ -1,494 +1,208 @@
-# DS Beamforming - GPIO Control y Funciones del Sistema
+# DS10 — GPIO Control y Señales de Sistema
 
-**Estado:** Planificado (No implementado)
-**Fecha:** Enero 2026
+**Placa:** DS10 (STM32H743VIT6)
+**Última revisión:** Abril 2026 — reescrito para DS10
 
----
-
-## 1. GPIOs Reservados para Control de Sistema
-
-### 1.1 GPIOs Disponibles
-
-Los siguientes pines están reservados para funciones de control futuro:
-
-| GPIO | Disponible | Función Propuesta |
-|------|------------|-------------------|
-| **PC7** | ✅ | Power Button (entrada con pull-up) |
-| **PD15** | ✅ | Error LED Red (salida) |
-| **PB13** | ✅ | Audio Activity LED (salida) |
-| **PB15** | ✅ | Mute Button (entrada con pull-up) |
-| **PD9** | ✅ | Calibration/Test Mode (entrada con pull-up) |
-| **PD11** | ✅ | Speaker Amplifier Enable (salida) |
-
-### 1.2 LEDs Existentes en el PCB
-
-| LED | Ref | GPIO | Función | Estado |
-|-----|-----|------|---------|--------|
-| Green | D1 | PB5 | Status LED | ✅ Implementado |
-| Power | D5 | — | Conectado a 3.3V directo | ✅ Siempre ON |
+> **Cambio mayor DS9→DS10:** DS9 tenía 12 pines GPIO de control por-chip para los 4 PCM1690 (RST×4, AMUTEI×4, AMUTEO×4). DS10 simplifica a un bus compartido de 3 señales. PCM1802 (ADC 2ch) reemplazado por AK5538VN (ADC 8ch) con su propia señal PDN.
 
 ---
 
-## 2. Funciones Propuestas (Futuro)
+## 1. Señales de Control Implementadas
 
-### 2.1 Power Button (PC7)
+### 1.1 Control DAC Compartido (4× PCM1690)
 
-**Función:** Control de encendido/apagado del sistema de audio
+DS10 conecta RST y AMUTEI de los 4 PCM1690 en bus — un solo GPIO controla todos.
 
-**Configuración:**
+| Señal | Pin | Dirección | Nivel activo | Función |
+|-------|-----|-----------|-------------|---------|
+| `DAC_RST` | PC11 | Output | LOW | ~RST a los 4 chips simultáneamente |
+| `DAC_MUTE_IN` | PC12 | Output | LOW | AMUTEI — silencia todos los DACs |
+| `DAC_MUTE_OUT` | PC10 | Input | LOW | AMUTEO wire-OR — cualquier DAC auto-silenciado |
+
 ```c
-GPIO_InitTypeDef GPIO_InitStruct = {0};
-GPIO_InitStruct.Pin = GPIO_PIN_7;
-GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-GPIO_InitStruct.Pull = GPIO_PULLUP;
-HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-```
+// Secuencia de init DAC (DS10)
+HAL_GPIO_WritePin(DAC_RST_PORT, DAC_RST_PIN, GPIO_PIN_RESET);   // PC11 LOW — en reset
+HAL_GPIO_WritePin(DAC_MUTE_IN_PORT, DAC_MUTE_IN_PIN, GPIO_PIN_RESET); // PC12 LOW — muted
 
-**Comportamiento:**
-- Presión corta (<2s): Toggle ON/OFF del sistema de audio
-- Presión larga (>2s): Shutdown completo con fade-out
+// ... SAI DMA running, MCLK corriendo ...
+HAL_Delay(10);  // MCLK time before RST release (PCM1690 POR requirement)
 
-**Secuencia de Power ON:**
-```c
-void System_PowerOn(void) {
-    // 1. Iniciar clocks (SAI1 MCLK)
-    Start_Audio_Clocks();
-    HAL_Delay(10);
+HAL_GPIO_WritePin(DAC_RST_PORT, DAC_RST_PIN, GPIO_PIN_SET);     // PC11 HIGH — release reset
+HAL_Delay(12);                                                   // Wait POR complete
 
-    // 2. Activar ADC (PDWN = HIGH)
-    ADC_PowerOn();
-    HAL_Delay(100);  // Esperar inicialización PCM1802
+for (uint32_t d = 0; d < 4; d++) {
+    PCM1690_Init(&hi2c1, dac_addrs[d], NULL);  // NULL = DS10 no per-chip GPIO
+}
 
-    // 3. Configurar DACs via I2C
-    DAC_Init();
-    HAL_Delay(10);
+HAL_GPIO_WritePin(DAC_MUTE_IN_PORT, DAC_MUTE_IN_PIN, GPIO_PIN_SET); // PC12 HIGH — unmute
 
-    // 4. Habilitar amplificadores (si está implementado)
-    if (SPEAKER_ENABLE_IMPLEMENTED) {
-        GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_SET);
-    }
-
-    // 5. Iniciar DMA para SAI
-    Start_Audio_Processing();
-
-    // 6. Encender LED de status
-    GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+// Diagnóstico: PC10 debe ser HIGH tras RST (si algún DAC sigue LOW → falla de MCLK/alimentación)
+if (HAL_GPIO_ReadPin(DAC_MUTE_OUT_PORT, DAC_MUTE_OUT_PIN) == GPIO_PIN_RESET) {
+    Debug_Print("WARN: DAC_MUTE_OUT LOW — check MCLK / supply\r\n");
 }
 ```
 
-**Secuencia de Power OFF:**
+### 1.2 PAM8302A Amplificadores (PD3)
+
+32× PAM8302A Class-D amps con shutdown compartido:
+
+| Señal | Pin | Dirección | Activo | Función |
+|-------|-----|-----------|--------|---------|
+| `PAM_SD` | PD3 | Output | LOW | Shutdown todos los amps (pull-down R19 en PCB) |
+
 ```c
-void System_PowerOff(void) {
-    // 1. Fade out en DACs (evitar clicks)
-    Audio_FadeOut(500);  // 500ms fade
+// Encender amps — DESPUÉS de inicializar DACs y unmute
+HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_SET);   // PD3 HIGH — amps on
 
-    // 2. Detener DMA
-    Stop_Audio_Processing();
+// Apagar amps — ANTES de reset del sistema
+HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET); // PD3 LOW — amps off
+```
 
-    // 3. Deshabilitar amplificadores
-    if (SPEAKER_ENABLE_IMPLEMENTED) {
-        GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
-    }
-    HAL_Delay(100);
+**Secuencia segura anti-pop:**
+1. `PAM_SD = LOW` (amps off)
+2. DACs inicializados y silenciados vía `DAC_MUTE_IN`
+3. `DAC_MUTE_IN = HIGH` (unmute)
+4. `PAM_SD = HIGH` (amps on)
 
-    // 4. Apagar ADC
-    ADC_PowerOff();
+### 1.3 AK5538VN ADC Control
 
-    // 5. Detener clocks
-    Stop_Audio_Clocks();
+| Señal | Pin | Dirección | Activo | Función |
+|-------|-----|-----------|--------|---------|
+| `AK_PDN` | PC7 | Output | LOW | Power-down AK5538VN — LOW=off, HIGH=running |
+| `AK_DIF1` | PC8 | Output | — | Interface mode (strapped LOW en PCB = TDM mode) |
+| `AK_OVF` | PA15 | Input | HIGH | Overflow flag output del AK5538VN |
 
-    // 6. Apagar LED de status
-    GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
+```c
+// Init ADC — PDN LOW durante init, liberar después de SAI3_B DMA running
+HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_RESET);  // PC7 LOW — power-down
+
+// ... SAI3_B DMA start ...
+HAL_Delay(5);
+
+HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_SET);    // PC7 HIGH — active
+HAL_Delay(10);   // AK5538 startup time
+
+// Verificar overflow (debería ser LOW normalmente)
+if (HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN) == GPIO_PIN_SET) {
+    Debug_Print("WARN: AK5538 OVF flag set\r\n");
 }
 ```
 
----
+**Nota:** El AK5538VN no requiere writes I2C para operación básica. El strapping de hardware (MSN=GND en PCB) configura: modo esclavo TDM256, 32-bit, LDO interno habilitado. I2C3 (0x28) está disponible para configuración avanzada (filtros, ganancia).
 
-### 2.2 Error LED (PD15) - Rojo
+### 1.4 EEPROM Write-Protect (PB5)
 
-**Función:** Indicar errores de sistema
-
-**Configuración:**
-```c
-GPIO_InitStruct.Pin = GPIO_PIN_15;
-GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-GPIO_InitStruct.Pull = GPIO_NOPULL;
-GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-```
-
-**Condiciones de error:**
-| Error | Código | LED Patrón |
-|-------|--------|-----------|
-| DMA Underrun/Overrun | 1 | Parpadeo rápido (5Hz) |
-| SAI Clock Lost | 2 | ON continuo |
-| I2C DAC Timeout | 3 | Parpadeo lento (1Hz) |
-| ADC No Data | 4 | Doble parpadeo |
+| Señal | Pin | Dirección | Activo | Función |
+|-------|-----|-----------|--------|---------|
+| `EEPROM_WP` | PB5 | Output | HIGH | Write-protect CAT24C256 (U8, 32KB) |
 
 ```c
-void Error_Handler_Audio(uint8_t error_code) {
-    system_error = error_code;
+// Guardar config beam — secuencia
+HAL_GPIO_WritePin(EEPROM_WP_PORT, EEPROM_WP_PIN, GPIO_PIN_RESET);  // WP off
+EEPROM_Save_Config(&hi2c4, &beam_config);  // bloquea ~12ms (2 page writes)
+HAL_GPIO_WritePin(EEPROM_WP_PORT, EEPROM_WP_PIN, GPIO_PIN_SET);    // WP on
 
-    switch(error_code) {
-        case ERROR_DMA_UNDERRUN:
-            // Parpadeo rápido
-            while(1) {
-                GPIO_TogglePin(GPIOD, GPIO_PIN_15);
-                HAL_Delay(100);
-            }
-            break;
-
-        case ERROR_CLOCK_LOST:
-            // ON continuo
-            GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
-            System_PowerOff();
-            break;
-
-        // ... otros casos
-    }
-}
+// NOTA: save bloquea ~12ms y causa ~6 underruns DMA — usar save diferido via flag
 ```
 
 ---
 
-### 2.3 Audio Activity LED (PB13)
+## 2. LEDs de Estado — TIM3 PWM
 
-**Función:** Indicar actividad de audio (alternativa: VU meter)
+4 LEDs con PWM 1kHz, 300 pasos de intensidad via TIM3.
 
-**Opción A: Simple ON cuando hay señal**
+| LED | Ref | Pin | Canal TIM3 | Color | Alias |
+|-----|-----|-----|-----------|-------|-------|
+| D4 | — | PA6 | CH1 AF2 | Amarillo | `LED_POWER` |
+| D5 | — | PA7 | CH2 AF2 | Rojo | `LED_AUDIO` |
+| D6 | — | PB0 | CH3 AF2 | Verde | `LED_COMM` |
+| D7 | — | PB1 | CH4 AF2 | Blanco | `LED_STATUS` |
+
 ```c
-void Audio_Activity_Update(void) {
-    // Calcular RMS de la señal de entrada
-    float rms = Calculate_RMS(adc_buffer, BUFFER_SIZE);
-
-    if (rms > THRESHOLD_SILENCE) {
-        GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
-    } else {
-        GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
-    }
-}
+// Control de brillo (0-299)
+__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, brightness);  // D4 Amarillo
+__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, brightness);  // D5 Rojo
+__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, brightness);  // D6 Verde
+__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, brightness);  // D7 Blanco
 ```
 
-**Opción B: PWM para VU meter**
+**Patrones de estado sugeridos:**
+
+| Estado del sistema | D4 Amarillo | D5 Rojo | D6 Verde | D7 Blanco |
+|-------------------|-------------|---------|----------|-----------|
+| Boot / init | Rampa | OFF | OFF | OFF |
+| Audio activo | ON | VU meter | OK comm | Heartbeat |
+| Error DMA | OFF | Parpadeo rápido | OFF | OFF |
+| Mute global | Dim | OFF | OFF | Parpadeo lento |
+| ESP32 desconectado | ON | OFF | Parpadeo | ON |
+
+**Dimmer sweep (loop principal actual):**
 ```c
-// Usar TIM para PWM en PB13
-void VU_Meter_Update(float level_db) {
-    // level_db: -60 dB a 0 dB
-    uint16_t pwm_duty = (uint16_t)((level_db + 60) / 60.0 * 1000);
-    __HAL_TIM_SET_COMPARE(&htim_vu, TIM_CHANNEL_1, pwm_duty);
+// Animación sweep 0..299..0 en todos los LEDs (implementado en main.c)
+static int dimmer = 0, dir = 1;
+if ((DWT->CYCCNT - last_dim) >= DIM_PERIOD) {
+    last_dim = DWT->CYCCNT;
+    dimmer += dir;
+    if (dimmer >= 299 || dimmer <= 0) dir = -dir;
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, dimmer);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, dimmer);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, dimmer);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, dimmer);
 }
 ```
 
 ---
 
-### 2.4 Mute Button (PB15)
+## 3. Botón de Usuario (PA4)
 
-**Función:** Silenciar salida sin detener procesamiento
+| Señal | Pin | Configuración | Función |
+|-------|-----|--------------|---------|
+| `OPT_SW_K2` | PA4 | Input, pull-up externo | Botón usuario K2 |
 
-**Configuración:**
+Uso actual: no implementado en firmware (disponible para futuro).
+
+---
+
+## 4. UART7 Debug Header (J7)
+
+| Señal | Pin | Función |
+|-------|-----|---------|
+| UART7_TX | PE8 AF7 | STM32 → J7/pin8 |
+| UART7_RX | PE7 AF7 | J7/pin7 → STM32 |
+
+Disponible para debug adicional o protocolo de expansión. No activo por defecto.
+
+---
+
+## 5. Pines Configurados como GPIO_ANALOG (sin usar)
+
+Para minimizar consumo y EMI, los pines sin función se configuran como Analog:
+
 ```c
-GPIO_InitStruct.Pin = GPIO_PIN_15;
-GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-GPIO_InitStruct.Pull = GPIO_PULLUP;
-HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-```
-
-**Implementación:**
-```c
-void Mute_Toggle(void) {
-    mute_active = !mute_active;
-
-    if (mute_active) {
-        // Fade out suave
-        for (uint8_t atten = 0; atten <= 255; atten++) {
-            PCM1690_SetAttenuation_All(atten);  // I2C command
-            HAL_Delay(2);  // 512ms total fade
-        }
-        // Parpadear LED de status para indicar mute
-        start_blink_status_led();
-    } else {
-        // Fade in
-        for (int16_t atten = 255; atten >= 0; atten--) {
-            PCM1690_SetAttenuation_All((uint8_t)atten);
-            HAL_Delay(2);
-        }
-        stop_blink_status_led();
-    }
-}
+// Pines sin función — GPIO_ANALOG para reducir EMI
+// PE0,PE1,PE9,PE10,PE12-PE15 (DS9: DAC RST/MUTE per-chip — obsoletos en DS10)
+// PB2, PB4, PB15
+// PC0, PC1, PC2, PC3, PC6
+// PD2, PD5, PD6, PD14, PD15
+// PA5, PA9, PA10
 ```
 
 ---
 
-### 2.5 Calibration/Test Mode (PD9)
+## 6. Resumen de Recursos de Control
 
-**Función:** Activar modo de prueba/calibración
-
-**Modos de test:**
-1. **Tone Generator:** Genera tono de 1kHz en todos los canales
-2. **Channel Test:** Reproduce tono rotando por cada canal
-3. **Beamforming Test:** Genera patrón de delays conocido
-
-```c
-typedef enum {
-    TEST_MODE_OFF = 0,
-    TEST_MODE_TONE_1KHZ,
-    TEST_MODE_CHANNEL_SCAN,
-    TEST_MODE_BEAMFORM_PATTERN
-} TestMode_t;
-
-void Enter_TestMode(TestMode_t mode) {
-    switch(mode) {
-        case TEST_MODE_TONE_1KHZ:
-            // Generar 1kHz a -20dB en todos los canales
-            Generate_SineWave(1000.0f, -20.0f);
-            break;
-
-        case TEST_MODE_CHANNEL_SCAN:
-            // Cada 1 segundo, encender un canal diferente
-            for (uint8_t ch = 0; ch < 16; ch++) {
-                Enable_Only_Channel(ch);
-                HAL_Delay(1000);
-            }
-            break;
-
-        case TEST_MODE_BEAMFORM_PATTERN:
-            // Aplicar patrón de delays conocido
-            Apply_Test_Delays();
-            break;
-    }
-}
-```
+| Recurso | Pines | Estado |
+|---------|-------|--------|
+| DAC control compartido | PC10, PC11, PC12 | Implementado |
+| Amp enable | PD3 | Implementado |
+| ADC control | PC7, PC8, PA15 | Implementado |
+| EEPROM WP | PB5 | Implementado |
+| LEDs PWM (4ch) | PA6, PA7, PB0, PB1 | Implementado |
+| Botón usuario | PA4 | Disponible |
+| UART7 debug | PE7, PE8 | Disponible |
+| I2C2 expansión | PB10, PB11 | Disponible |
 
 ---
 
-### 2.6 Speaker Amplifier Enable (PD11)
-
-**Función:** Control de relé o enable de amplificadores
-
-**Propósito:** Prevenir clicks/pops al encender/apagar
-
-**Configuración:**
-```c
-GPIO_InitStruct.Pin = GPIO_PIN_11;
-GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-GPIO_InitStruct.Pull = GPIO_NOPULL;
-GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-```
-
-**Secuencia segura:**
-```c
-void Audio_Start_Safe(void) {
-    // 1. Asegurar amplificadores deshabilitados
-    GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
-
-    // 2. Iniciar clocks y DACs
-    Start_Audio_Clocks();
-    DAC_Init();
-    HAL_Delay(100);
-
-    // 3. Iniciar audio con volumen mínimo
-    PCM1690_SetAttenuation_All(255);  // -127.5 dB
-    Start_Audio_Processing();
-    HAL_Delay(50);
-
-    // 4. Habilitar amplificadores
-    GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_SET);
-    HAL_Delay(100);  // Esperar estabilización
-
-    // 5. Fade in a volumen normal
-    Audio_FadeIn(1000);  // 1 segundo
-}
-
-void Audio_Stop_Safe(void) {
-    // 1. Fade out
-    Audio_FadeOut(500);
-
-    // 2. Deshabilitar amplificadores ANTES de detener audio
-    GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
-    HAL_Delay(100);
-
-    // 3. Detener procesamiento
-    Stop_Audio_Processing();
-    DAC_PowerDown();
-}
-```
-
-**Esquema de conexión externa:**
-```
-PD11 ────► Optoacoplador ────► Relé 12V ────► Amplifiers Power
-           (4N35)              (G5V-2)
-```
-
----
-
-## 3. Integración con Status LED Existente (PB5)
-
-### 3.1 Patrones de LED de Status
-
-El LED verde en PB5 puede indicar diferentes estados:
-
-| Estado | Patrón | Descripción |
-|--------|--------|-------------|
-| OFF | Apagado | Sistema apagado |
-| ON continuo | Encendido fijo | Audio activo normal |
-| Parpadeo lento (1Hz) | 500ms ON / 500ms OFF | Modo de espera |
-| Parpadeo rápido (5Hz) | 100ms ON / 100ms OFF | Modo calibración |
-| Doble parpadeo | 2 pulsos cada 2s | Mute activo |
-
-```c
-typedef enum {
-    LED_STATUS_OFF,
-    LED_STATUS_ON,
-    LED_STATUS_SLOW_BLINK,
-    LED_STATUS_FAST_BLINK,
-    LED_STATUS_DOUBLE_BLINK
-} LED_Pattern_t;
-
-void LED_Status_Set(LED_Pattern_t pattern) {
-    switch(pattern) {
-        case LED_STATUS_OFF:
-            HAL_TIM_Base_Stop_IT(&htim_led);
-            GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
-            break;
-
-        case LED_STATUS_ON:
-            HAL_TIM_Base_Stop_IT(&htim_led);
-            GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
-            break;
-
-        case LED_STATUS_SLOW_BLINK:
-            led_period = 500;
-            HAL_TIM_Base_Start_IT(&htim_led);
-            break;
-
-        // ... otros patrones
-    }
-}
-```
-
----
-
-## 4. Máquina de Estados del Sistema
-
-```
-    Power OFF
-        │
-        │ [Power Button Press]
-        ▼
-    ┌─────────────────┐
-    │ INITIALIZING    │
-    │ - Start clocks  │
-    │ - Init ADC/DAC  │
-    │ - LED: Slow blink│
-    └────────┬────────┘
-             │ (Success)
-             ▼
-    ┌─────────────────┐
-    │ ACTIVE          │◄──────────────────┐
-    │ - Audio running │                   │
-    │ - LED: ON       │ [Unmute]          │
-    └────────┬────────┘                   │
-             │                            │
-        [Mute Button]                     │
-             │                            │
-             ▼                            │
-    ┌─────────────────┐                   │
-    │ MUTED           │───────────────────┘
-    │ - Output = 0    │
-    │ - LED: Double   │
-    └────────┬────────┘
-             │
-        [Calib Button]
-             │
-             ▼
-    ┌─────────────────┐
-    │ CALIBRATION     │
-    │ - Test patterns │
-    │ - LED: Fast blink│
-    └────────┬────────┘
-             │
-        [Error Detected]
-             │
-             ▼
-    ┌─────────────────┐
-    │ ERROR           │
-    │ - Safe shutdown │
-    │ - Red LED ON    │
-    └─────────────────┘
-```
-
----
-
-## 5. Implementación Recomendada
-
-### 5.1 Inicialización de GPIOs
-
-```c
-void System_GPIO_Init(void) {
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-    __HAL_RCC_GPIOD_CLK_ENABLE();
-
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-    // Status LED (PB5) - Ya implementado
-    GPIO_InitStruct.Pin = GPIO_PIN_5;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-    // Future implementations:
-    // - Power Button (PC7)
-    // - Error LED (PD15)
-    // - Activity LED (PB13)
-    // - Mute Button (PB15)
-    // - Calibration (PD9)
-    // - Speaker Enable (PD11)
-}
-```
-
-### 5.2 Button Scanning con Timer
-
-```c
-// Timer cada 20ms para escanear botones (anti-debounce)
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-    if (htim == &htim_button_scan) {
-        Button_Scan_All();
-    }
-
-    if (htim == &htim_led_blink) {
-        LED_Update_Pattern();
-    }
-}
-```
-
----
-
-## 6. Resumen de Recursos Necesarios
-
-| Recurso | Uso | Cantidad |
-|---------|-----|----------|
-| GPIOs entrada | Botones | 3 (PC7, PB15, PD9) |
-| GPIOs salida | LEDs y control | 3 (PD15, PB13, PD11) |
-| GPIOs ya usados | Status LED | 1 (PB5) |
-| Timers | Button scan + LED blink | 2 |
-| Interrupciones | Opcional para botones | 0-3 (EXTI) |
-
----
-
-## 7. Próximos Pasos (Cuando se Implemente)
-
-- [ ] Definir configuración de GPIOs en STM32CubeMX
-- [ ] Implementar debounce de botones
-- [ ] Crear FSM (Finite State Machine) del sistema
-- [ ] Implementar patrones de LED
-- [ ] Diseñar circuito de relé para speaker enable (si es necesario)
-- [ ] Testing de secuencias de power on/off
-- [ ] Implementar modo calibración
-
----
-
-*Documento de planificación - No implementado*
-*Creado: Enero 2026*
+*DS10 GPIO Control — Abril 2026*
+*Ver [ds10_pin_map.md](ds10_pin_map.md) para mapa completo de todos los pines*
