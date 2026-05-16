@@ -57,7 +57,7 @@
 #define PCM1690_FMT_RJ16        0x03    // Right-justified 16-bit
 #define PCM1690_FMT_DSP_I2S     0x04    // DSP I2S mode
 #define PCM1690_FMT_DSP_LJ      0x05    // DSP Left-justified
-#define PCM1690_FMT_TDM_I2S     0x06    // TDM I2S mode (8-ch) ← DS9 config
+#define PCM1690_FMT_TDM_I2S     0x06    // TDM I2S mode (8-ch) ← DS10 config
 #define PCM1690_FMT_TDM_LJ      0x07    // TDM Left-justified (8-ch)
 
 /* ============================================================================

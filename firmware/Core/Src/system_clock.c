@@ -5,7 +5,7 @@
  * PLL1: System clock 480 MHz
  * PLL3: Audio clock 12.288 MHz (256 x 48 kHz)
  *
- * HSE = 25 MHz (DS9 board crystal)
+ * HSE = 25 MHz (DS10 board crystal Y2 PH0/PH1, same as DS9)
  */
 
 #include "main.h"

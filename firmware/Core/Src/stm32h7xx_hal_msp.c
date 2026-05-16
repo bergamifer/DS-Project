@@ -146,6 +146,36 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef* hi2c)
     HAL_NVIC_SetPriority(I2C3_ER_IRQn, 2, 0);
     HAL_NVIC_EnableIRQ(I2C3_ER_IRQn);
   }
+  else if(hi2c->Instance==I2C4)
+  {
+    /* DS10: I2C4 → EEPROM CAT24C256 (PB6=SCL AF11, PB7=SDA AF11)
+     * I2C4 lives on D3 domain — use D3PCLK1 (PCLK4 = 120 MHz). */
+    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_I2C4;
+    PeriphClkInitStruct.I2c4ClockSelection = RCC_I2C4CLKSOURCE_D3PCLK1;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+
+    /**I2C4 GPIO Configuration
+    PB6     ------> I2C4_SCL  (CAT24C256 U8/6)
+    PB7     ------> I2C4_SDA  (CAT24C256 U8/5)
+    */
+    GPIO_InitStruct.Pin = EEPROM_I2C_SCL_PIN | EEPROM_I2C_SDA_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;        // RN5 4.7k pull-ups on PCB
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStruct.Alternate = EEPROM_I2C_AF; // GPIO_AF11_I2C4
+    HAL_GPIO_Init(EEPROM_I2C_SCL_PORT, &GPIO_InitStruct);
+
+    __HAL_RCC_I2C4_CLK_ENABLE();
+    HAL_NVIC_SetPriority(I2C4_EV_IRQn, 2, 0);
+    HAL_NVIC_EnableIRQ(I2C4_EV_IRQn);
+    HAL_NVIC_SetPriority(I2C4_ER_IRQn, 2, 0);
+    HAL_NVIC_EnableIRQ(I2C4_ER_IRQn);
+  }
 
 }
 
@@ -171,6 +201,13 @@ void HAL_I2C_MspDeInit(I2C_HandleTypeDef* hi2c)
     HAL_GPIO_DeInit(GPIOC, GPIO_PIN_9);
     HAL_NVIC_DisableIRQ(I2C3_EV_IRQn);
     HAL_NVIC_DisableIRQ(I2C3_ER_IRQn);
+  }
+  else if(hi2c->Instance==I2C4)
+  {
+    __HAL_RCC_I2C4_CLK_DISABLE();
+    HAL_GPIO_DeInit(EEPROM_I2C_SCL_PORT, EEPROM_I2C_SCL_PIN | EEPROM_I2C_SDA_PIN);
+    HAL_NVIC_DisableIRQ(I2C4_EV_IRQn);
+    HAL_NVIC_DisableIRQ(I2C4_ER_IRQn);
   }
 
 }
@@ -421,7 +458,8 @@ void HAL_SAI_MspInit(SAI_HandleTypeDef* hsai)
     SAI2_client ++;
 
     /**SAI2_B GPIO Configuration (synced to SAI2_A - only SD needed)
-    PE11    ------> SAI2_SD_B (AF10) — DS9 pin (shared with DAC0_AMUTEI, reconfigured after DAC init)
+    PE11    ------> SAI2_SD_B (AF10) → PCM1690 U4 (DAC3) DIN, ch 24-31
+    DS10: pin no compartido — DS9 tenía conflicto con DAC0_AMUTEI, resuelto en DS10.
     */
     __HAL_RCC_GPIOE_CLK_ENABLE();
     GPIO_InitStruct.Pin = GPIO_PIN_11;

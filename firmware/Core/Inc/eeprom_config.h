@@ -1,8 +1,8 @@
 /**
  * @file    eeprom_config.h
- * @brief   EEPROM configuration persistence for DS9 beamforming
+ * @brief   EEPROM configuration persistence for DS10 beamforming
  *
- * Stores/loads beam_config_t to/from CAT24C256 EEPROM via I2C3.
+ * Stores/loads beam_config_t to/from CAT24C256 EEPROM via I2C4 (PB6/PB7 AF11).
  * Layout: Magic(4) + Version(2) + beam_config_t + CRC16(2)
  */
 

@@ -141,15 +141,22 @@ static const uint8_t dac_addrs[4] = {
 // EEPROM deferred save flag (set when config changes, save in low-priority window)
 static volatile uint8_t eeprom_save_pending = 0;
 
-// LED dimmer state machine (TIM3: CH3=D11/PB0, CH4=D10/PB1)
-// Phase 0: D11 fades 0→max in 3s, D10 off
-// Phase 1: D10 fades 0→max in 3s, D11 off
+// LED dimmer state machine (DS10 TIM3 4-channel: CH1=D4/PA6 Yellow, CH2=D5/PA7 Red,
+//                                                  CH3=D6/PB0 Green,  CH4=D7/PB1 White)
+// 4 phases of 3s each (12s full cycle): one LED fade-in 0→max while others off.
 #define DIMMER_STEPS     300UL
 #define DIMMER_STEP_CYC  (480000000UL / 100UL)  // 10ms @ 480MHz
 #define DIMMER_ARR       999UL
+#define DIMMER_NUM_PHASES 4
 static uint8_t  dimmer_phase    = 0;
 static uint32_t dimmer_step     = 0;
 static uint32_t last_dimmer_dwt = 0;
+static const uint32_t dimmer_channels[DIMMER_NUM_PHASES] = {
+    TIM_CHANNEL_1,  // D4 Yellow PA6
+    TIM_CHANNEL_2,  // D5 Red    PA7
+    TIM_CHANNEL_3,  // D6 Green  PB0
+    TIM_CHANNEL_4,  // D7 White  PB1
+};
 
 // ===== ISR → Main loop deferred processing flags =====
 // ISR sets flag, main loop processes buffer and clears flag
@@ -278,7 +285,7 @@ int main(void)
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();
 
-  // === TIM3 PWM — LED dimmer (D11=PB0/CH3, D10=PB1/CH4) ===
+  // === TIM3 PWM — LED dimmer (4ch: D4/PA6, D5/PA7, D6/PB0, D7/PB1) ===
   MX_TIM3_Init();
 
   // === Beamforming init ===
@@ -578,21 +585,18 @@ int main(void)
       }
     }
 
-    // ===== LED dimmer — TIM3 PWM step update (10ms per step, 300 steps = 3s) =====
+    // ===== LED dimmer — TIM3 PWM step (10ms/step, 300 steps = 3s/LED, 12s full cycle) =====
+    // Sweeps through all 4 LEDs (D4→D5→D6→D7), one fading-in at a time, others off.
     if (last_dimmer_dwt != 0 && (DWT->CYCCNT - last_dimmer_dwt) >= DIMMER_STEP_CYC) {
       last_dimmer_dwt += DIMMER_STEP_CYC;
       uint32_t ccr = (dimmer_step * DIMMER_ARR) / (DIMMER_STEPS - 1);
-      if (dimmer_phase == 0) {
-        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, ccr);  // D11 rising
-        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, 0);    // D10 off
-      } else {
-        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);    // D11 off
-        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, ccr);  // D10 rising
+      for (uint32_t p = 0; p < DIMMER_NUM_PHASES; p++) {
+        __HAL_TIM_SET_COMPARE(&htim3, dimmer_channels[p], (p == dimmer_phase) ? ccr : 0);
       }
       dimmer_step++;
       if (dimmer_step >= DIMMER_STEPS) {
         dimmer_step = 0;
-        dimmer_phase ^= 1;
+        dimmer_phase = (dimmer_phase + 1) % DIMMER_NUM_PHASES;
       }
     }
 

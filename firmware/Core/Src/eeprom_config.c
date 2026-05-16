@@ -61,24 +61,11 @@ static uint8_t eeprom_available = 0;
 
 HAL_StatusTypeDef EEPROM_Init(void)
 {
-    /* Init I2C4 GPIO: PB6=SCL, PB7=SDA, AF11 (per STM32H743 datasheet Tables 13-14) */
-    {
-        GPIO_InitTypeDef gpio = {0};
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-        gpio.Pin = EEPROM_I2C_SCL_PIN | EEPROM_I2C_SDA_PIN;  /* PB6 + PB7 */
-        gpio.Mode = GPIO_MODE_AF_OD;
-        gpio.Pull = GPIO_NOPULL;  /* External 4.7k pullups (RN5) */
-        gpio.Speed = GPIO_SPEED_FREQ_HIGH;
-        gpio.Alternate = EEPROM_I2C_AF;  /* GPIO_AF11_I2C4 per pin_definitions.h */
-        HAL_GPIO_Init(EEPROM_I2C_SCL_PORT, &gpio);
-    }
-
-    /* Enable I2C4 clock */
-    __HAL_RCC_I2C4_CLK_ENABLE();
-
+    /* I2C4 GPIO, clock and NVIC are configured by HAL_I2C_MspInit (stm32h7xx_hal_msp.c).
+     * Just configure the I2C handle and call HAL_I2C_Init — MspInit runs automatically. */
     memset(&hi2c4, 0, sizeof(hi2c4));
     hi2c4.Instance = I2C4;
-    hi2c4.Init.Timing = 0x307075B1;  /* 100kHz SM @ 120MHz APB */
+    hi2c4.Init.Timing = 0x307075B1;  /* 100kHz SM @ 120MHz D3PCLK1 */
     hi2c4.Init.OwnAddress1 = 0;
     hi2c4.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
     hi2c4.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
