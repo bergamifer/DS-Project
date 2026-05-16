@@ -296,7 +296,7 @@ int main(void)
 
   // === EEPROM init + load saved config ===
   {
-    UART_Print("EEPROM: Initializing I2C4 AF6 (PB6/PB7)...\r\n");
+    UART_Print("EEPROM: Initializing I2C4 AF11 (PB6/PB7)...\r\n");
     HAL_StatusTypeDef i2c_eep_st = EEPROM_Init();
     sprintf(uart_buf, "EEPROM: I2C4 init=%d, available=%u\r\n", (int)i2c_eep_st, EEPROM_IsAvailable());
     UART_Print(uart_buf);
@@ -317,7 +317,7 @@ int main(void)
         UART_Print(uart_buf);
       }
     } else {
-      UART_Print("EEPROM: Not detected on I2C3 — using defaults\r\n");
+      UART_Print("EEPROM: Not detected on I2C4 — using defaults\r\n");
     }
   }
 
@@ -355,10 +355,11 @@ int main(void)
   sprintf(uart_buf, "SAI3_B RX DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
   UART_Print(uart_buf);
 
-  // Release AK5538 from power-down — hardware strapping configures TDM256/slave/32-bit/LDO
-  HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_RESET);
-  HAL_Delay(15);  // ≥10ms POR time
-  UART_Print("AK5538VN: power-down released — TDM256 slave active\r\n");
+  // Release AK5538 from PDN: HIGH = Normal operation (per AK5538VN datasheet "L=PDN, H=Normal")
+  // Hardware strapping configures TDM256/slave/32-bit/LDO — no I2C writes needed for bring-up
+  HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_SET);
+  HAL_Delay(15);  // ≥10ms POR time after PDN release
+  UART_Print("AK5538VN: PDN released (PC7 HIGH) — TDM256 slave active\r\n");
   sprintf(uart_buf, "AK5538VN OVF=%d (0=OK)\r\n",
           HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN));
   UART_Print(uart_buf);
@@ -503,7 +504,7 @@ int main(void)
       fill_sample_count++;
     }
 
-    // SAI1_B: channels 8-15
+    // SAI1_B: channels 8-15 (DAC1 U3)
     if (need_fill_1b_first_half) {
       need_fill_1b_first_half = 0;
       __DSB();
@@ -517,7 +518,45 @@ int main(void)
       __DSB();
     }
 
-    // SAI1_B/SAI2/SAI3 fills DISABLED for U4-only I2S test
+    // SAI2_A: channels 16-23 (DAC2 U1)
+    if (need_fill_2a_first_half) {
+      need_fill_2a_first_half = 0;
+      __DSB();
+      Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
+      __DSB();
+    }
+    if (need_fill_2a_second_half) {
+      need_fill_2a_second_half = 0;
+      __DSB();
+      Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
+      __DSB();
+    }
+
+    // SAI2_B: channels 24-31 (DAC3 U4)
+    if (need_fill_2b_first_half) {
+      need_fill_2b_first_half = 0;
+      __DSB();
+      Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
+      __DSB();
+    }
+    if (need_fill_2b_second_half) {
+      need_fill_2b_second_half = 0;
+      __DSB();
+      Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
+      __DSB();
+    }
+
+    // SAI3_B RX: deinterleave 8-channel ADC into delay lines
+    if (rx_3b_first_half_ready) {
+      rx_3b_first_half_ready = 0;
+      __DSB();
+      Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
+    }
+    if (rx_3b_second_half_ready) {
+      rx_3b_second_half_ready = 0;
+      __DSB();
+      Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
+    }
 
     // ===== Check for new ESP32 config → apply to beam_config =====
     if (UART_Protocol_HasNewConfig()) {
@@ -1370,8 +1409,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(DAC_MUTE_IN_PORT, DAC_MUTE_IN_PIN, GPIO_PIN_RESET);
   /* PAM_SD LOW (all 32 amps off until audio is ready) */
   HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
-  /* AK_PDN HIGH (power-down mode until SAI3 is configured) */
-  HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_SET);
+  /* AK_PDN LOW = Reset & Power-down (chip OFF until SAI3 ready) — datasheet: L=PDN, H=Normal */
+  HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_RESET);
   /* EEPROM_WP LOW (write enabled — needed for config save) */
   HAL_GPIO_WritePin(EEPROM_WP_PORT, EEPROM_WP_PIN, GPIO_PIN_RESET);
 

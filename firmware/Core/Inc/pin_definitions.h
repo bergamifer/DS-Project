@@ -175,7 +175,10 @@
 
 /* ============================================================================
  * AK5538VN ADC Control
- * PDN:  PC7 — power-down (active LOW: HIGH=normal, LOW=active)
+ * PDN:  PC7 — Reset & Power-Down (active LOW per AK5538VN datasheet):
+ *              "L" = Reset & Power-down (chip OFF)
+ *              "H" = Normal operation (chip RUNNING)
+ *              Init sequence: hold LOW during boot → release HIGH after SAI3 ready.
  * DIF1: PC8 — interface select (strapped LOW via hardware, mirror in fw)
  * OVF:  PA15— overflow flag output from AK5538 (input to STM32)
  * ============================================================================ */

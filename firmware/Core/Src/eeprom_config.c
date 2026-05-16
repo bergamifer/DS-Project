@@ -1,14 +1,12 @@
 /**
  * @file    eeprom_config.c
- * @brief   EEPROM configuration persistence for DS9 beamforming
+ * @brief   EEPROM configuration persistence for DS10 beamforming
  *
- * CAT24C256 (U6): 32KB, I2C4, address 0xA0, page size 64 bytes.
+ * CAT24C256 (U8 on DS10): 32KB, I2C4, address 0xA0, page size 64 bytes.
  * Write cycle time: 5ms max per page write.
  *
- * NOTE: DS9 PCB routes EEPROM to PB6(SCL)/PB7(SDA).
- * On STM32H743, PB6/PB7 AF4 = I2C1 (already used for DACs on PB8/PB9).
- * PB6/PB7 AF6 = I2C4 — this is the correct peripheral for EEPROM.
- * pin_definitions.h labels it as "I2C3" but that's a schematic error.
+ * I2C4 pins: PB6(SCL) / PB7(SDA) with AF11 (per STM32H743 datasheet Tables 13-14).
+ * GPIO config uses EEPROM_I2C_AF macro from pin_definitions.h.
  *
  * EEPROM layout at base address:
  *   [0x00] uint32_t magic    = 0xD509BEEF
@@ -57,22 +55,22 @@ static uint16_t crc16_ccitt(const uint8_t *data, uint16_t len)
 }
 
 /* ============================================================
- * I2C4 Init (PB6=SCL, PB7=SDA, AF6)
+ * I2C4 Init (PB6=SCL, PB7=SDA, AF11 on STM32H743 LQFP100)
  * ============================================================ */
 static uint8_t eeprom_available = 0;
 
 HAL_StatusTypeDef EEPROM_Init(void)
 {
-    /* Init I2C4 GPIO: PB6=SCL, PB7=SDA, AF6 (NOT AF4 which is I2C1) */
+    /* Init I2C4 GPIO: PB6=SCL, PB7=SDA, AF11 (per STM32H743 datasheet Tables 13-14) */
     {
         GPIO_InitTypeDef gpio = {0};
         __HAL_RCC_GPIOB_CLK_ENABLE();
-        gpio.Pin = GPIO_PIN_6 | GPIO_PIN_7;  /* PB6 + PB7 */
+        gpio.Pin = EEPROM_I2C_SCL_PIN | EEPROM_I2C_SDA_PIN;  /* PB6 + PB7 */
         gpio.Mode = GPIO_MODE_AF_OD;
-        gpio.Pull = GPIO_NOPULL;  /* External 5.1k pullups */
+        gpio.Pull = GPIO_NOPULL;  /* External 4.7k pullups (RN5) */
         gpio.Speed = GPIO_SPEED_FREQ_HIGH;
-        gpio.Alternate = GPIO_AF6_I2C4;  /* AF6 for I2C4 on PB6/PB7 */
-        HAL_GPIO_Init(GPIOB, &gpio);
+        gpio.Alternate = EEPROM_I2C_AF;  /* GPIO_AF11_I2C4 per pin_definitions.h */
+        HAL_GPIO_Init(EEPROM_I2C_SCL_PORT, &gpio);
     }
 
     /* Enable I2C4 clock */
