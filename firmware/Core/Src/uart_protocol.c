@@ -198,7 +198,8 @@ static void process_byte(uint8_t byte)
             memcpy(&current_config, rx_payload, sizeof(ds_config_t));
             rx_frame_count++;
             new_config_flag = 1;
-            HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_0);  // D11: valid frame received
+            /* Note: PB0/PB1 are TIM3 PWM (AF2) on DS10 — GPIO toggle has no effect.
+             * Frame activity is visible via rx_frame_count in the heartbeat. */
             send_ack();
         } else {
             rx_error_count++;
@@ -238,9 +239,27 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == huart_esp->Instance) {
         rx_byte_count++;
-        HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);  // PB1 (D10) toggle = RX activity
         process_byte(rx_byte);
         /* Re-arm for next byte */
+        HAL_UART_Receive_IT(huart_esp, &rx_byte, 1);
+    }
+}
+
+/* ============================================================
+ * HAL UART Error callback
+ * Critical for link reliability: an overrun (ORE) — likely while the
+ * main loop is doing a long blocking print or EEPROM save — aborts the
+ * RX-IT chain. Without re-arming, the ESP32 link goes permanently deaf.
+ * Clear the error flags, resync the parser, and re-arm reception.
+ * ============================================================ */
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == huart_esp->Instance) {
+        __HAL_UART_CLEAR_OREFLAG(huart_esp);
+        __HAL_UART_CLEAR_FLAG(huart_esp, UART_FLAG_NE | UART_FLAG_FE | UART_FLAG_PE);
+        rx_error_count++;
+        parse_state = WAIT_HEADER_1;   /* drop partial frame, resync */
+        /* Re-arm RX — HAL_UART_Receive_IT resets the RX state machine */
         HAL_UART_Receive_IT(huart_esp, &rx_byte, 1);
     }
 }

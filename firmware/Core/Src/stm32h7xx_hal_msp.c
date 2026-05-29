@@ -141,10 +141,8 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef* hi2c)
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
     __HAL_RCC_I2C3_CLK_ENABLE();
-    HAL_NVIC_SetPriority(I2C3_EV_IRQn, 2, 0);
-    HAL_NVIC_EnableIRQ(I2C3_EV_IRQn);
-    HAL_NVIC_SetPriority(I2C3_ER_IRQn, 2, 0);
-    HAL_NVIC_EnableIRQ(I2C3_ER_IRQn);
+    /* I2C3 uses blocking (polled) transfers — no NVIC needed.
+     * Enabling the IRQ without a handler in stm32h7xx_it.c would be a latent trap. */
   }
   else if(hi2c->Instance==I2C4)
   {
@@ -171,10 +169,8 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef* hi2c)
     HAL_GPIO_Init(EEPROM_I2C_SCL_PORT, &GPIO_InitStruct);
 
     __HAL_RCC_I2C4_CLK_ENABLE();
-    HAL_NVIC_SetPriority(I2C4_EV_IRQn, 2, 0);
-    HAL_NVIC_EnableIRQ(I2C4_EV_IRQn);
-    HAL_NVIC_SetPriority(I2C4_ER_IRQn, 2, 0);
-    HAL_NVIC_EnableIRQ(I2C4_ER_IRQn);
+    /* I2C4 uses blocking (polled) transfers — no NVIC needed.
+     * Enabling the IRQ without a handler in stm32h7xx_it.c would be a latent trap. */
   }
 
 }

@@ -125,6 +125,10 @@ void HardFault_Dump(uint32_t *stack)
 {
   __disable_irq();
 
+  /* Safety: silence all 32 PAM8302A amplifiers (PAM_SD = PD3 LOW) so a crash
+   * doesn't leave the array blasting the last DMA buffer. GPIOD clk is on. */
+  GPIOD->BSRR = (uint32_t)GPIO_PIN_3 << 16U;
+
   /* Stacked registers: R0 R1 R2 R3 R12 LR PC xPSR */
   uint32_t pc  = stack[6];
   uint32_t lr  = stack[5];
@@ -140,14 +144,11 @@ void HardFault_Dump(uint32_t *stack)
   fault_print("MMFAR="); fault_hex32(SCB->MMFAR); fault_print("\r\n");
   fault_print("SP ="); fault_hex32((uint32_t)stack); fault_print("\r\n");
 
-  /* Blink D6 rapidly */
-  volatile uint32_t d;
-  while (1) {
-    GPIOC->BSRR = GPIO_PIN_4;
-    for (d = 0; d < 1000000UL; d++) { __NOP(); }
-    GPIOC->BSRR = (uint32_t)GPIO_PIN_4 << 16U;
-    for (d = 0; d < 1000000UL; d++) { __NOP(); }
-  }
+  /* Halt. UART4 dump above is the diagnostic — DS10 LEDs are on TIM3 PWM
+   * (PA6/PA7/PB0/PB1, AF2) so they can't be GPIO-toggled here. PC4 has no
+   * LED on DS10 (it was D6 on DS9). Keep the loop so the dump is re-sendable
+   * via debugger inspection. */
+  while (1) { __NOP(); }
 }
 
 /**
