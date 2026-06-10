@@ -106,10 +106,11 @@ __attribute__((naked)) void HardFault_Handler(void)
   );
 }
 
-/* Direct UART4 polling output — no HAL, no SysTick dependency */
+/* Direct UART7 polling output — no HAL, no SysTick dependency.
+ * DS10 debug is on UART7 (PE7/PE8) → J7 header → ST-Link VCP. */
 static void fault_putchar(char c) {
-  while (!(UART4->ISR & USART_ISR_TXE_TXFNF)) {}
-  UART4->TDR = (uint8_t)c;
+  while (!(UART7->ISR & USART_ISR_TXE_TXFNF)) {}
+  UART7->TDR = (uint8_t)c;
 }
 static void fault_print(const char *s) {
   while (*s) fault_putchar(*s++);

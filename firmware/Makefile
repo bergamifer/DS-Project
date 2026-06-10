@@ -321,7 +321,7 @@ flash: all
 	dfu-util -a 0 -s 0x08000000:leave -D $(BUILD_DIR)/$(TARGET).bin
 
 flash-stlink: all
-	st-flash write $(BUILD_DIR)/$(TARGET).bin 0x08000000
+	st-flash --reset write $(BUILD_DIR)/$(TARGET).bin 0x08000000
   
 #######################################
 # dependencies

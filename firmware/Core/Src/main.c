@@ -268,7 +268,7 @@ int main(void)
   MX_DMA_Init();
   MX_I2C1_Init();
   MX_I2C3_Init();
-  MX_UART4_Init();   /* UART4 (PA0/PA1) — ESP32 link + debug serial */
+  MX_UART4_Init();   /* UART4 (PA0/PA1) — ESP32 binary protocol link */
   MX_UART7_Init();
   MX_SAI1_Init();
   MX_SAI2_Init();
@@ -1485,9 +1485,11 @@ static void MX_GPIO_Init(void)
 
 /**
  * @brief Print string via UART (blocking)
+ * @note  DS10 debug goes out UART7 (PE7/PE8) → J7 header pins 7/8 → ST-Link VCP.
+ *        UART4 (PA0/PA1) stays reserved for the ESP32 binary protocol.
  */
 static void UART_Print(const char *str) {
-  HAL_UART_Transmit(&huart4, (uint8_t*)str, strlen(str), 100);
+  HAL_UART_Transmit(&huart7, (uint8_t*)str, strlen(str), 100);
 }
 
 /**
@@ -1807,17 +1809,17 @@ void HAL_SAI_ErrorCallback(SAI_HandleTypeDef *hsai) {
   error_count++;
   last_sai_error = HAL_SAI_GetError(hsai);
 
-  // Immediate debug output
+  // Immediate debug output (UART7 → J7 → ST-Link VCP)
   char err_buf[80];
   sprintf(err_buf, "!!! SAI ERROR: 0x%08lX ", last_sai_error);
-  HAL_UART_Transmit(&huart4, (uint8_t*)err_buf, strlen(err_buf), 100);
+  HAL_UART_Transmit(&huart7, (uint8_t*)err_buf, strlen(err_buf), 100);
 
   // Decode error flags
-  if (last_sai_error & 0x01) HAL_UART_Transmit(&huart4, (uint8_t*)"OVR ", 4, 10);
-  if (last_sai_error & 0x02) HAL_UART_Transmit(&huart4, (uint8_t*)"UDR ", 4, 10);
-  if (last_sai_error & 0x20) HAL_UART_Transmit(&huart4, (uint8_t*)"WCKCFG ", 7, 10);
-  if (last_sai_error & 0x80) HAL_UART_Transmit(&huart4, (uint8_t*)"DMA ", 4, 10);
-  HAL_UART_Transmit(&huart4, (uint8_t*)"\r\n", 2, 10);
+  if (last_sai_error & 0x01) HAL_UART_Transmit(&huart7, (uint8_t*)"OVR ", 4, 10);
+  if (last_sai_error & 0x02) HAL_UART_Transmit(&huart7, (uint8_t*)"UDR ", 4, 10);
+  if (last_sai_error & 0x20) HAL_UART_Transmit(&huart7, (uint8_t*)"WCKCFG ", 7, 10);
+  if (last_sai_error & 0x80) HAL_UART_Transmit(&huart7, (uint8_t*)"DMA ", 4, 10);
+  HAL_UART_Transmit(&huart7, (uint8_t*)"\r\n", 2, 10);
 }
 
 /* USER CODE END 4 */
