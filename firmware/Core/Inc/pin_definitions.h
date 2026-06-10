@@ -114,13 +114,16 @@
 /* ============================================================================
  * I2C4 — EEPROM (CAT24C256 U8, 32KB)
  * Pull-ups: RN5 4.7kΩ to +3V3
+ * AF6 (NOT AF11): empirically verified on DS9 — same STM32H743 silicon, same
+ * PB6/PB7 pins, EEPROM responded at 0x50 with AF6. The DS10 design review's
+ * "AF11" was a documentation error (same source got the MCLK freq wrong too).
  * ============================================================================ */
 
-#define EEPROM_I2C_SCL_PIN      GPIO_PIN_6      // PB6  AF11 I2C4_SCL → U8/6
+#define EEPROM_I2C_SCL_PIN      GPIO_PIN_6      // PB6  AF6 I2C4_SCL → U8/6
 #define EEPROM_I2C_SCL_PORT     GPIOB
-#define EEPROM_I2C_SDA_PIN      GPIO_PIN_7      // PB7  AF11 I2C4_SDA → U8/5
+#define EEPROM_I2C_SDA_PIN      GPIO_PIN_7      // PB7  AF6 I2C4_SDA → U8/5
 #define EEPROM_I2C_SDA_PORT     GPIOB
-#define EEPROM_I2C_AF           GPIO_AF11_I2C4
+#define EEPROM_I2C_AF           GPIO_AF6_I2C4
 
 #define EEPROM_ADDR             0xA0    // 8-bit write (A0=A1=A2=GND → 7-bit 0x50)
 #define EEPROM_ADDR_7BIT        0x50

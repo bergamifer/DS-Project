@@ -303,7 +303,7 @@ int main(void)
 
   // === EEPROM init + load saved config ===
   {
-    UART_Print("EEPROM: Initializing I2C4 AF11 (PB6/PB7)...\r\n");
+    UART_Print("EEPROM: Initializing I2C4 AF6 (PB6/PB7)...\r\n");
     HAL_StatusTypeDef i2c_eep_st = EEPROM_Init();
     sprintf(uart_buf, "EEPROM: I2C4 init=%d, available=%u\r\n", (int)i2c_eep_st, EEPROM_IsAvailable());
     UART_Print(uart_buf);

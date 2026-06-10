@@ -17,7 +17,7 @@ cd /Users/bergamifer/STM32CubeIDE/DS-Firmware/firmware
 make -j4
 
 # Compilar + Flash via ST-Link (recomendado)
-make flash-stlink
+make flash-stlink # No olvidar luego resetar con boton K4
 
 # Limpiar y recompilar
 make clean && make -j4
