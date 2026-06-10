@@ -132,6 +132,13 @@ static const int32_t sine_table_1khz[48] = {
 static volatile uint8_t test_tone_enabled = 1; /* SET TO 0 FOR BEAMFORMING MODE */
 static uint32_t test_tone_phase = 0;
 
+/* Extra right-shift applied to the -6dBFS sine table.
+ * PAM8302A has fixed +24dB gain on a 5V rail → max clean input ≈ 630mVpp diff
+ * ≈ -22dBFS at the PCM1690 (8Vpp diff full-scale). The original -6dBFS tone
+ * (4Vpp) overdrives the amp by ~16dB → square-wave clipping at the speaker.
+ * shift 4 = -24dB → tone at -30dBFS ≈ 250mVpp at PAM input ≈ 0.5W/4Ω clean. */
+static volatile uint8_t test_tone_shift = 4;
+
 // DS10: RST and AMUTEI are shared bus signals (PC11/PC12) — no per-chip GPIO.
 // PCM1690_Init receives NULL pins; RST/MUTE are controlled before calling Init.
 static const uint8_t dac_addrs[4] = {
@@ -370,6 +377,14 @@ int main(void)
   sprintf(uart_buf, "AK5538VN OVF=%d (0=OK)\r\n",
           HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN));
   UART_Print(uart_buf);
+
+  // I2C3 liveness probe — not required for operation (hardware strapping does
+  // the config), but an ACK at 0x28 proves the chip is powered and out of PDN.
+  if (HAL_I2C_IsDeviceReady(&hi2c3, AK5538_ADDR, 2, 50) == HAL_OK) {
+    UART_Print("AK5538VN: I2C3 probe OK (ACK at 0x28)\r\n");
+  } else {
+    UART_Print("AK5538VN: I2C3 probe NO ACK — check 3.3VA / PDN / strapping\r\n");
+  }
 
   // === STEP 3: PCM1690 init (shared RST/MUTE bus, DS10 style) ===
   // DAC_RST (PC11) was held LOW since GPIO init — MCLK now running ≥5ms
@@ -675,6 +690,17 @@ int main(void)
         sprintf(uart_buf, "     Slots4-7: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
                 (uint32_t)audio_buffer[20], (uint32_t)audio_buffer[21],
                 (uint32_t)audio_buffer[22], (uint32_t)audio_buffer[23]);
+        UART_Print(uart_buf);
+
+        // ADC RX dump (AK5538 → SAI3_B DMA), frame 2 = indices 16-23.
+        // Floating inputs → small noise values; injected tone → large swings.
+        sprintf(uart_buf, "     ADC ch0-3: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
+                (uint32_t)audio_buffer_3b_rx[16], (uint32_t)audio_buffer_3b_rx[17],
+                (uint32_t)audio_buffer_3b_rx[18], (uint32_t)audio_buffer_3b_rx[19]);
+        UART_Print(uart_buf);
+        sprintf(uart_buf, "     ADC ch4-7: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
+                (uint32_t)audio_buffer_3b_rx[20], (uint32_t)audio_buffer_3b_rx[21],
+                (uint32_t)audio_buffer_3b_rx[22], (uint32_t)audio_buffer_3b_rx[23]);
         UART_Print(uart_buf);
       }
 
@@ -1641,7 +1667,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
   if (test_tone_enabled) {
     uint32_t phase = test_tone_phase % 48;
     for (uint32_t i = 0; i < samples; i++) {
-      int32_t s = sine_table_1khz[phase];
+      int32_t s = sine_table_1khz[phase] >> test_tone_shift;
       if (++phase >= 48) phase = 0;
       int32_t out = s << 8;
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
