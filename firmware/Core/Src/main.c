@@ -625,43 +625,49 @@ int main(void)
       last_half = half_complete_count;
       last_full = full_complete_count;
 
+      // Verbose details only every 10th heartbeat — the per-second print is kept
+      // to ONE line. Long multi-line bursts on UART7 block the main loop long
+      // enough to delay the SAI fills → spurious underruns (~6/s). One line/sec
+      // keeps the block short.
+      static uint32_t hb_count = 0;
+      uint8_t verbose = ((hb_count++ % 10) == 0);
+
       // Expected: 50 half + 50 full per second (20ms buffer cycle @ 48kHz TDM8)
       sprintf(uart_buf, "[%lus] Half: %lu/s, Full: %lu/s, Err: %lu, Undr: %lu, RX: %lu bytes\r\n",
               HAL_GetTick() / 1000, half_per_sec, full_per_sec,
               error_count, underrun_count, UART_Protocol_GetRxByteCount());
       UART_Print(uart_buf);
 
-      // Latency stats (cycles → microseconds: cycles / CPU_FREQ_MHZ)
-      // CPU @ 480MHz: 1 cycle = 2.08ns, so us = cycles / 480
-      if (fill_sample_count > 0) {
-        uint32_t fill_avg = (uint32_t)(fill_sum_cycles / fill_sample_count);
-        sprintf(uart_buf, "     Fill: min=%lu avg=%lu max=%lu cyc (%lu/%lu/%lu us)\r\n",
-                fill_min_cycles, fill_avg, fill_max_cycles,
-                fill_min_cycles / CPU_FREQ_MHZ, fill_avg / CPU_FREQ_MHZ, fill_max_cycles / CPU_FREQ_MHZ);
-        UART_Print(uart_buf);
-      }
-      if (jitter_sample_count > 0) {
-        uint32_t jitter_avg = (uint32_t)(jitter_sum_cycles / jitter_sample_count);
-        uint32_t jitter_range = jitter_max_cycles - jitter_min_cycles;
-        sprintf(uart_buf, "     Jitter: period min=%lu avg=%lu max=%lu cyc (range=%lu = %lu us)\r\n",
-                jitter_min_cycles, jitter_avg, jitter_max_cycles,
-                jitter_range, jitter_range / CPU_FREQ_MHZ);
-        UART_Print(uart_buf);
-      }
-
       // LED dimmer: initialize DWT reference on first heartbeat
       if (last_dimmer_dwt == 0) last_dimmer_dwt = DWT->CYCCNT;
 
-      // CPU temperature
-      int32_t temp = Read_CPU_Temperature();
-      if (temp != -999) {
-        int32_t t_abs = temp >= 0 ? temp : -temp;
-        sprintf(uart_buf, "     Temp: %ld.%ld C\r\n", temp / 10, t_abs % 10);
-        UART_Print(uart_buf);
-      }
+      if (verbose) {
+        // Latency stats (cycles → microseconds: cycles / CPU_FREQ_MHZ)
+        if (fill_sample_count > 0) {
+          uint32_t fill_avg = (uint32_t)(fill_sum_cycles / fill_sample_count);
+          sprintf(uart_buf, "     Fill: min=%lu avg=%lu max=%lu cyc (%lu/%lu/%lu us)\r\n",
+                  fill_min_cycles, fill_avg, fill_max_cycles,
+                  fill_min_cycles / CPU_FREQ_MHZ, fill_avg / CPU_FREQ_MHZ, fill_max_cycles / CPU_FREQ_MHZ);
+          UART_Print(uart_buf);
+        }
+        if (jitter_sample_count > 0) {
+          uint32_t jitter_avg = (uint32_t)(jitter_sum_cycles / jitter_sample_count);
+          uint32_t jitter_range = jitter_max_cycles - jitter_min_cycles;
+          sprintf(uart_buf, "     Jitter: period min=%lu avg=%lu max=%lu cyc (range=%lu = %lu us)\r\n",
+                  jitter_min_cycles, jitter_avg, jitter_max_cycles,
+                  jitter_range, jitter_range / CPU_FREQ_MHZ);
+          UART_Print(uart_buf);
+        }
 
-      // Buffer dump: frame 2 (indices 16-23) to avoid sine(0)=0 and sine(1) edge cases
-      {
+        // CPU temperature
+        int32_t temp = Read_CPU_Temperature();
+        if (temp != -999) {
+          int32_t t_abs = temp >= 0 ? temp : -temp;
+          sprintf(uart_buf, "     Temp: %ld.%ld C\r\n", temp / 10, t_abs % 10);
+          UART_Print(uart_buf);
+        }
+
+        // Buffer dump: frame 2 (indices 16-23) to avoid sine(0)=0 and sine(1) edge cases
         sprintf(uart_buf, "     Slots0-3: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
                 (uint32_t)audio_buffer[16], (uint32_t)audio_buffer[17],
                 (uint32_t)audio_buffer[18], (uint32_t)audio_buffer[19]);
