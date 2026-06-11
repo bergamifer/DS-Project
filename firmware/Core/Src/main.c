@@ -764,6 +764,22 @@ int main(void)
                 (uint32_t)audio_buffer_3b_rx[20], (uint32_t)audio_buffer_3b_rx[21],
                 (uint32_t)audio_buffer_3b_rx[22], (uint32_t)audio_buffer_3b_rx[23]);
         UART_Print(uart_buf);
+
+        // ADC ch0 min/max over the first half-buffer (480 frames = 10ms):
+        // shows the amplitude of any signal ≥100Hz at a glance.
+        // Floating input → ±full-scale (hum). Grounded input → ~0.
+        // Injected tone → symmetric min/max at the tone's amplitude.
+        {
+          int32_t mn = INT32_MAX, mx = INT32_MIN;
+          for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
+            int32_t v = audio_buffer_3b_rx[f * ADC_CHANNELS];  // ch0
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+          }
+          sprintf(uart_buf, "     ADC ch0 min=%ld max=%ld (24-bit: %ld..%ld)\r\n",
+                  (long)mn, (long)mx, (long)(mn >> 8), (long)(mx >> 8));
+          UART_Print(uart_buf);
+        }
       }
 
       // Check SAI status
