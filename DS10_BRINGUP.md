@@ -57,18 +57,28 @@ Enchufar USB con la placa sin 24V obliga al puerto a cargar los 1.1 mF de +5VA a
 
 ## 3. Procedimiento paso a paso
 
-### Paso 0 — Chequeo de cortos (placa SIN alimentar)
+### Paso 0 — Chequeo de cortos + orientación (placa SIN alimentar) — GATE OBLIGATORIO
 
-Con el multímetro en modo resistencia (Ω):
+**Ningún riel se energiza hasta pasar este gate.** El defecto de la tanda 1 (DACs rotados, ver §6) se detecta acá, sin humo.
+
+**0a — Resistencia de cada riel a GND** (multímetro en Ω):
 
 | Medición | Sano | Falla |
 |---|---|---|
 | +24V a GND | kΩ y subiendo (caps cargando) | **<1 Ω = corto duro** |
 | +5VA a GND | sube lento (1.1mF), termina alto | **~0 Ω = corto** |
-| +3V3 a GND | sube, termina en kΩ | **~0 Ω = corto** |
+| +5VA_DAC a GND | sube, termina alto | **decenas de Ω = corto (DAC rotado)** |
+| +3V3 a GND | sube, termina en kΩ | **decenas de Ω = corto (DAC rotado)** |
 | +3.3VA a GND | sube, termina alto | **~0 Ω = corto** |
 
-Un electrolítico invertido (C290-293, C71), un puente de soldadura o el TVS equivocado (ver §6) se detectan acá sin aplicar tensión.
+> En la tanda 1: +3V3→GND = **7.8 Ω** y +5VA_DAC→GND = **13 Ω** por los DACs rotados. Un corto "blando" de decenas de Ω (no 0 Ω) es la firma de un IC mal orientado, no de un cobre puenteado.
+
+**0b — Orientación de los ICs polarizados/marcados**: con lupa, verificá que la marca de **pin 1** de cada IC coincide con el silk:
+- **4× PCM1690 (U1-U4)** ← crítico, fue el defecto de la tanda 1 (U1/U3/U4 rotados 180°)
+- AK5538 (IC3), STM32 (U7), ESP32 (U5), EEPROM (U8)
+- Electrolíticos (banda/bisel = negativo) y diodos (D2, D8).
+
+Un puente de soldadura o un componente mal orientado se detecta acá sin aplicar tensión.
 
 ### Paso 1 — Smoke test (límite 0.2A, V = 24.0V)
 
@@ -139,13 +149,25 @@ En idle la placa queda en **<100 mA**, así que con 1A hay margen de sobra y bue
 
 ---
 
-## 6. ⚠️ Estado de D8 (TVS de entrada)
+## 6. ⚠️ Defectos confirmados de la tanda 1 (orden SMT026040962250-11787566A, 3 placas)
 
-En el BOM de producción, D8 figuraba como `SM6T15A` (TVS de **15V**) **sin número LCSC**. Implicaciones:
+### 6.1 — DACs rotados 180° (CAUSA RAÍZ de los cortos) — error de JLCPCB
 
-- **Sin LCSC → JLCPCB no lo puebla.** D8 casi con seguridad llegó **sin poblar** (pad vacío). **Verificar visualmente con lupa.**
-- Si estuviera poblado con el SM6T15A (15V) sobre el riel de 24V → rompe a ~14.4V y mantiene el riel abajo. El smoke test (Paso 1) lo cazaría (24V colapsa).
-- Si está vacío → **esta tanda no tiene protección de transitorios** en la entrada de 24V. Seguro para banco (fuente limpia). Para la instalación real con daisy-chain de 24V conviene poblar el **SMBJ24A** (LCSC C726830, 24V standoff, 600W). BOM corregido a SMBJ24A para futuras tandas.
+**U1, U3, U4 (3 de los 4 PCM1690) montados rotados 180°.** U2 correcto. Presente en **las 3 placas**.
+
+- El CPL que se subió (`jlcpcb/production_files/CPL-DS.csv`) especifica los 4 DACs a **Rotation 270.0°, top** — idénticos y correctos.
+- El preview de "Confirm Parts Placement" aprobado mostraba los 4 bien. La placa física no coincide → **desviación de JLCPCB respecto a lo aprobado.**
+- **Efecto eléctrico**: rotado 180°, VDD (pin 12 → +3V3) y AVDD (pines 25/47 → +5VA_DAC) caen sobre pads de GND → corto. Medido: **+3V3→GND = 7.8 Ω, +5VA_DAC→GND = 13 Ω** en las 3 placas.
+- **Reclamo a JLCPCB en curso** (crédito a favor). No reparar antes de documentar con fotos.
+- Reparación (si aplica): aire caliente + precalentar (PCM1690 tiene thermal pad), **reemplazar por DACs nuevos** (los rotados quedaron en corto al energizar).
+
+### 6.2 — D8: TVS equivocado — error de BOM
+
+D8 = `SM6T15A` (TVS de **15V**), JLCPCB Part # **C118275**, montado en el bottom de las 3 placas.
+
+- **15V de standoff sobre el riel de 24V = componente equivocado** → conduce/calienta. Quitarlo.
+- Sin D8, la placa funciona pero **sin protección de transitorios** en la entrada de 24V. Seguro para banco (fuente limpia).
+- Fix: reemplazar por **SMBJ24A** (LCSC C726830, 24V standoff, 600W) en el esquemático KiCad para la próxima tanda. (El BOM se regenera del esquemático, así que el cambio va ahí, no en el CSV.)
 
 ---
 
@@ -161,13 +183,15 @@ Plan de bring-up: **laptop en batería** (masa flotante).
 
 ## 8. Resumen accionable
 
-1. **Bring-up = 24V siempre.** Nada de USB-only en DS10.
-2. **Paso 0**: chequeo de cortos con multímetro (placa apagada).
+1. **Paso 0 = GATE OBLIGATORIO**: medir +3V3/+5VA_DAC/+5VA/+24V/+3.3VA a GND **y** verificar orientación de los DACs (U1-U4) ANTES de energizar. Decenas de Ω en +3V3 o +5VA_DAC = DAC rotado.
+2. **Bring-up = 24V siempre.** Nada de USB-only en DS10.
 3. **Smoke test**: 0.2A solo caza cortos duros de 24V; subir a **1.5-2A** para arrancar; idle ~50-90 mA.
-4. **Mirar el pad de D8** — probablemente vacío (sin TVS esta tanda; OK para banco).
+4. **Quitar D8** (SM6T15A, TVS 15V equivocado) — sin él funciona, queda sin protección de transitorios (OK para banco).
 5. **"Sin LEDs" es normal** sin firmware. Verificar con multímetro + SWD.
 6. **Flasheo**: STM32 por SWD/J7 con 24V; ESP32 por USB con 24V ya presente y laptop en batería.
 7. **Fuente flotante**: confirmar (−)↔tierra abierto.
+
+> **Tanda 1 (3 placas, orden SMT026040962250-11787566A): NO energizar tal como llegaron** — los 3 PCM1690 rotados (U1/U3/U4) ponen +3V3 y +5VA_DAC en corto. Ver §6.1. Reclamo a JLCPCB en curso.
 
 ---
 

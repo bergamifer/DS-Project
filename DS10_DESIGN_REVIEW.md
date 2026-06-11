@@ -414,11 +414,13 @@ IC2/3 (SW) → L1/1 → L1/2 → +5VA (32x PAM + FB2 + FB3)
   - SOT-23-8 has no exposed thermal pad — heat path is: pins → GND copper → vias → L2 plane
   - Vias placed within 3-4mm of IC2 in the surrounding GND pour, not under component
 
-### Post-production improvements (for next revision)
-- [ ] C47 (1000µF THT) → 4-5x 220µF polymer SMD (SS221M160E7R7R4Z00ZZ, 16V)
-- [ ] Barrel jack J32 switch pin → end-of-chain detection (100kΩ/10kΩ divider to GPIO)
-- [ ] ESD protection on first-in-chain RJ45 inputs (future consideration)
-- [ ] SAI clock routing: buses with 0.2mm clearance OK, consider 0.3mm if EMI issues arise
+### Post-production improvements → movido a DS11_PLANNING.md
+Los items para la próxima revisión se consolidaron en **[DS11_PLANNING.md](DS11_PLANNING.md)** (documento maestro de DS11). Correcciones a este listado original:
+- ~~C47 (1000µF THT) → 220µF polymer SMD~~ — **YA IMPLEMENTADO en producción**: el bulk de +5VA son 5× 220µF/16V SMD (C290-C293, C71). No existe ningún 1000µF THT en el diseño final; el designador C47 es hoy un 0.1µF 0402 en stm32_custom (referencia vieja en docs anteriores).
+- Barrel jack J32 switch pin, ESD en RJ45, clearance SAI → ver DS11_PLANNING.md §1.
+
+### Resultado de la tanda 1 (2026-05/06)
+Las 3 placas ensambladas llegaron **defectuosas por error de JLCPCB**: U1/U3/U4 (PCM1690) montados rotados 180° pese a CPL correcto (los 4 a 270°) → corto +3V3→GND (7.8Ω) y +5VA_DAC→GND (13Ω). Además D8 montado con SM6T15A (TVS 15V, equivocado para 24V). JLCPCB admitió culpa por escrito; reclamo por crédito (~USD 399) en curso. Detalle completo: [DS10_BRINGUP.md](DS10_BRINGUP.md) §6.
 
 ---
 
@@ -733,6 +735,6 @@ Para minimizar consumo y EMI, configurar como `GPIO_MODE_ANALOG` sin pull-up/dow
 
 ---
 
-**Last updated**: 2026-04-29
+**Last updated**: 2026-06-10
 **Branch**: main
-**Status**: PCBs recibidos de JLCPCB — fase de bring-up
+**Status**: Tanda 1 defectuosa (DACs rotados por JLCPCB) — reclamo en curso. DS11 en diseño → [DS11_PLANNING.md](DS11_PLANNING.md)

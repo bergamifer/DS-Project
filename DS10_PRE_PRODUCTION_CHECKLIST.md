@@ -1,5 +1,7 @@
 # DS10 Pre-Production Checklist
 
+> ⚠️ **[2026-06-10] Documento histórico de la tanda 1.** La tanda resultó defectuosa por error de ensamblado de JLCPCB (3 de 4 PCM1690 rotados 180°, ver [DS10_BRINGUP.md](DS10_BRINGUP.md) §6) — un defecto que este checklist no podía detectar (se introdujo en los archivos de producción que genera JLCPCB). Para la próxima orden, usar además los gates anti-error de [DS11_PLANNING.md](DS11_PLANNING.md) §4 (DFM Analysis 3D, verificación BOM por C-number). Nota: la mención de "C47 (1000µF)" en §7 es obsoleta — no existe en el diseño final.
+
 > **Fecha de revision**: 2026-04-03
 > **Orden**: 5 unidades, JLCPCB
 > **Branch**: main (tag DS10)

@@ -102,7 +102,8 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 | Versión | Estado |
 | --- | --- |
 | DS9 | En producción — sistema base, PCM1802 2ch ADC |
-| **DS10** | **Orden enviada a JLCPCB (2026-04-09) — 5 unidades** |
+| DS10 | Tanda 1 (3 ensambladas) **defectuosa** — JLCPCB montó 3 de 4 DACs rotados 180°; reclamo por crédito en curso. Ver [DS10_BRINGUP.md](DS10_BRINGUP.md) §6 |
+| **DS11** | **En diseño** — correcciones DS10 + mejoras de usabilidad. Ver [DS11_PLANNING.md](DS11_PLANNING.md) |
 
 ### Mejoras DS10 respecto a DS9
 
@@ -115,5 +116,8 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 
 ## Documentación técnica
 
-- [DS10_DESIGN_REVIEW.md](DS10_DESIGN_REVIEW.md) — Revisión de diseño, verificación de netlist, decisiones de arquitectura
-- [DS10_PRE_PRODUCTION_CHECKLIST.md](DS10_PRE_PRODUCTION_CHECKLIST.md) — Checklist pre-producción, parámetros JLCPCB, verificación BOM
+- [DS11_PLANNING.md](DS11_PLANNING.md) — Plan de la revisión DS11: correcciones, nuevas features, gates de fabricación, análisis DS12
+- [DS10_DESIGN_REVIEW.md](DS10_DESIGN_REVIEW.md) — Revisión de diseño, verificación de netlist, referencia de firmware (Sección 11)
+- [DS10_BRINGUP.md](DS10_BRINGUP.md) — Procedimiento de bring-up + defectos confirmados de la tanda 1
+- [DS10_PRE_PRODUCTION_CHECKLIST.md](DS10_PRE_PRODUCTION_CHECKLIST.md) — Checklist pre-producción tanda 1 (histórico), parámetros JLCPCB
+- `versiones/DS10/` — Snapshot del proyecto KiCad tal como se fabricó (tag git `DS10`)
