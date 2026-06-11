@@ -287,7 +287,7 @@ int main(void)
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("PLL3: 24.576MHz MCLK (512xfS) — MckOverSampling=ENABLE\r\n");
   UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");
-  UART_Print("Test tone: 1kHz -6dBFS on all 32 channels\r\n\r\n");
+  UART_Print("Test tone: 1kHz -30dBFS (table -6dBFS >> 4) on all 32 channels\r\n\r\n");
 
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();
@@ -378,12 +378,24 @@ int main(void)
           HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN));
   UART_Print(uart_buf);
 
-  // I2C3 liveness probe — not required for operation (hardware strapping does
-  // the config), but an ACK at 0x28 proves the chip is powered and out of PDN.
-  if (HAL_I2C_IsDeviceReady(&hi2c3, AK5538_ADDR, 2, 50) == HAL_OK) {
-    UART_Print("AK5538VN: I2C3 probe OK (ACK at 0x28)\r\n");
-  } else {
-    UART_Print("AK5538VN: I2C3 probe NO ACK — check 3.3VA / PDN / strapping\r\n");
+  // I2C3 full bus scan — not required for operation (hardware strapping does
+  // the config), but an ACK proves the chip is powered and out of PDN.
+  // The design review said addr 7-bit 0x14, but it has a track record of
+  // errors (MCLK freq, I2C4 AF11); AKM ADCs usually sit at 0x10-0x13
+  // depending on CAD0/CAD1 strapping. Scan the whole bus and report.
+  {
+    uint32_t i2c3_found = 0;
+    UART_Print("AK5538VN: scanning I2C3...\r\n");
+    for (uint8_t a7 = 0x08; a7 <= 0x77; a7++) {
+      if (HAL_I2C_IsDeviceReady(&hi2c3, (uint16_t)(a7 << 1), 1, 5) == HAL_OK) {
+        sprintf(uart_buf, "  I2C3 ACK at 7-bit 0x%02X (8-bit 0x%02X)\r\n", a7, a7 << 1);
+        UART_Print(uart_buf);
+        i2c3_found++;
+      }
+    }
+    if (i2c3_found == 0) {
+      UART_Print("  I2C3: NO devices found — check AK5538 3.3VA supply, PDN pin, I2C-enable strapping\r\n");
+    }
   }
 
   // === STEP 3: PCM1690 init (shared RST/MUTE bus, DS10 style) ===
@@ -1000,7 +1012,7 @@ static void MX_SAI1_Init(void)
   hsai_BlockA1.Instance = SAI1_Block_A;
   hsai_BlockA1.Init.Protocol = SAI_FREE_PROTOCOL;
   hsai_BlockA1.Init.AudioMode = SAI_MODEMASTER_TX;
-  hsai_BlockA1.Init.DataSize = SAI_DATASIZE_24;  // 24-bit: SAI uses bits[31:8] of DMA word
+  hsai_BlockA1.Init.DataSize = SAI_DATASIZE_24;  // 24-bit: SAI sends bits [23:0] of DMA word (right-aligned, RM0433)
   hsai_BlockA1.Init.FirstBit = SAI_FIRSTBIT_MSB;
   hsai_BlockA1.Init.ClockStrobing = SAI_CLOCKSTROBING_FALLINGEDGE;
   hsai_BlockA1.Init.Synchro = SAI_ASYNCHRONOUS;
@@ -1669,7 +1681,13 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
     for (uint32_t i = 0; i < samples; i++) {
       int32_t s = sine_table_1khz[phase] >> test_tone_shift;
       if (++phase >= 48) phase = 0;
-      int32_t out = s << 8;
+      /* SAI with DataSize=24 transmits bits [23:0] of the FIFO word
+       * (right-aligned per RM0433) — write the 24-bit sample directly.
+       * The old `s << 8` placed it in [31:8]: the SAI then sent only the
+       * low 16 bits → waveform wrapping → severe harmonic distortion
+       * (the "square-ish 1kHz" heard on speakers, and the large HF hash
+       * seen on the scope on both DS9 and DS10). */
+      int32_t out = s;
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
         buffer[i * AUDIO_CHANNELS + ch] = out;
       }
@@ -1692,7 +1710,10 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
       // 'delay' samples old, offset by buffer position.
       uint32_t read_pos = (wp - delay - samples + i) & DELAY_LINE_MASK;
       uint32_t src_ch = (gch < 8) ? gch : 0;  // map global ch to ADC ch; clamp to 0-7
-      int32_t sample = delay_line[src_ch][read_pos];
+      /* ADC samples are 32-bit (SAI3_B DataSize=32); the DAC path is 24-bit
+       * right-aligned (SAI1/2 DataSize=24 → bits [23:0]). Shift before gain —
+       * also keeps `sample * gain` within int32 range. */
+      int32_t sample = delay_line[src_ch][read_pos] >> 8;
 
       // Apply per-channel gain (fixed-point: * gain >> 8)
       uint8_t gain = beam_config.gains[gch];
