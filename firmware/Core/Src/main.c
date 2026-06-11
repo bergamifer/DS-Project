@@ -398,6 +398,28 @@ int main(void)
     }
   }
 
+  // AK5538 register dump (found at 0x22 = 7-bit 0x11). Shows how the chip
+  // self-configured from its hardware straps — needed to verify/fix the TDM
+  // output mode via I2C (RX data currently looks misframed: only slot 0).
+  {
+    uint8_t rv;
+    UART_Print("AK5538VN: register dump (8-bit addr 0x22):\r\n");
+    for (uint32_t base = 0x00; base <= 0x10; base += 0x08) {
+      char *p = uart_buf;
+      p += sprintf(p, "  R%02lX:", base);
+      for (uint32_t r = base; r < base + 8; r++) {
+        if (HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, (uint16_t)r,
+                             I2C_MEMADD_SIZE_8BIT, &rv, 1, 50) == HAL_OK) {
+          p += sprintf(p, " %02X", rv);
+        } else {
+          p += sprintf(p, " --");
+        }
+      }
+      sprintf(p, "\r\n");
+      UART_Print(uart_buf);
+    }
+  }
+
   // === STEP 3: PCM1690 init (shared RST/MUTE bus, DS10 style) ===
   // DAC_RST (PC11) was held LOW since GPIO init — MCLK now running ≥5ms
   HAL_Delay(5);

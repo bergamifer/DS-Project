@@ -109,7 +109,10 @@
 #define I2C3_SDA_PORT           GPIOC
 #define I2C3_AF                 GPIO_AF4_I2C3
 
-#define AK5538_ADDR             0x28    // 8-bit write (7-bit 0x14, I2C enable pin=+3V3)
+/* Empirically found via I2C3 bus scan on DS10 hardware (2026-06): ACK at
+ * 7-bit 0x11 → AKM scheme 0x10 + CAD1·2 + CAD0 → CAD1=0, CAD0=1 strapping.
+ * The design review said 7-bit 0x14 — wrong (same doc as MCLK/AF11 errors). */
+#define AK5538_ADDR             0x22    // 8-bit write (7-bit 0x11)
 
 /* ============================================================================
  * I2C4 — EEPROM (CAT24C256 U8, 32KB)
