@@ -420,6 +420,34 @@ int main(void)
     }
   }
 
+  // First boot showed Control2 (R03) = 0x00 → TDM disabled (stereo mode): the
+  // straps did NOT select TDM256, which is why SAI3_B captured misframed data.
+  // Program TDM256 via I2C. AKM family (AK5558 sibling): register writes that
+  // change clock/format must be done with RSTN=0 (PM2 reg 0x01 bit0), then
+  // release. TDM[1:0] lives in Control2 (0x03) bits [6:5]: 10 = TDM256.
+  // NOTE: values based on the AK5558 family map — verify against the AK5538VN
+  // datasheet register table; readback below shows what actually stuck.
+  {
+    uint8_t v;
+    UART_Print("AK5538VN: enabling TDM256 via I2C...\r\n");
+    v = 0x00;  // RSTN=0 — hold in reset while changing mode
+    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+    v = 0x40;  // Control2: TDM[1:0]=10 → TDM256
+    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+    v = 0x01;  // RSTN=1 — release
+    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+    HAL_Delay(5);
+
+    // Readback verify R01-R03
+    uint8_t r1 = 0xEE, r2 = 0xEE, r3 = 0xEE;
+    HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &r1, 1, 50);
+    HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &r2, 1, 50);
+    HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &r3, 1, 50);
+    sprintf(uart_buf, "  readback R01=0x%02X R02=0x%02X R03=0x%02X (want R03=0x40)\r\n",
+            r1, r2, r3);
+    UART_Print(uart_buf);
+  }
+
   // === STEP 3: PCM1690 init (shared RST/MUTE bus, DS10 style) ===
   // DAC_RST (PC11) was held LOW since GPIO init — MCLK now running ≥5ms
   HAL_Delay(5);

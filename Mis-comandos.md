@@ -45,6 +45,16 @@ ls /dev/cu.usb*
 # Para salir de minicom: Ctrl+A luego X
 ```
 
+## Debug Serial SCREEN (UART) <- el que estamos usando en DS10
+
+screen /dev/cu.usbmodem11102 115200
+
+Salir de screen
+Ctrl-C no funciona porque screen se lo pasa a la sesión serial. Para matar screen:
+
+Ctrl-A y después k, confirmás con y ← este es el atajo
+Alternativa si quedó colgado de otra terminal: screen -ls y screen -X -S <id> quit
+
 ---
 
 ## Conexiones ST-Link → DS9
