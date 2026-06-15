@@ -133,11 +133,11 @@ static volatile uint8_t test_tone_enabled = 1; /* SET TO 0 FOR BEAMFORMING MODE 
 static uint32_t test_tone_phase = 0;
 
 /* Extra right-shift applied to the -6dBFS sine table.
- * PAM8302A has fixed +24dB gain on a 5V rail → max clean input ≈ 630mVpp diff
- * ≈ -22dBFS at the PCM1690 (8Vpp diff full-scale). The original -6dBFS tone
- * (4Vpp) overdrives the amp by ~16dB → square-wave clipping at the speaker.
- * shift 4 = -24dB → tone at -30dBFS ≈ 250mVpp at PAM input ≈ 0.5W/4Ω clean. */
-static volatile uint8_t test_tone_shift = 4;
+ * Now 0: the PAM8302A clipping headroom is handled by the PCM1690's own
+ * -24dB digital attenuation (registers 72-79, PCM1690_ATTEN_DEFAULT). The
+ * -6dBFS table → -30dBFS at the DAC output → clean ~0.5W at the speaker.
+ * Kept as a knob for quick test-tone level changes (each step = -6dB). */
+static volatile uint8_t test_tone_shift = 0;
 
 // DS10: RST and AMUTEI are shared bus signals (PC11/PC12) — no per-chip GPIO.
 // PCM1690_Init receives NULL pins; RST/MUTE are controlled before calling Init.
@@ -287,7 +287,7 @@ int main(void)
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("PLL3: 24.576MHz MCLK (512xfS) — MckOverSampling=ENABLE\r\n");
   UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");
-  UART_Print("Test tone: 1kHz -30dBFS (table -6dBFS >> 4) on all 32 channels\r\n\r\n");
+  UART_Print("Test tone: 1kHz -6dBFS table + PCM1690 -24dB atten = -30dBFS out\r\n\r\n");
 
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();

@@ -22,18 +22,28 @@ Razones:
 
 ---
 
+## Nivel de salida DAC→PAM — RESUELTO POR FIRMWARE (atenuación digital del PCM1690)
+
+**Problema (hallazgo #5):** el PAM8302A (+24dB fijo, rail 5V) clipea con entradas
+> ~630mVpp ≈ **-22dBFS del DAC**.
+
+**Solución adoptada (sin componentes):** la **atenuación digital integrada del
+PCM1690** (registros 72-79, per-canal, pasos de 0.5dB). El firmware setea −24dB
+en el init (`PCM1690_ATTEN_DEFAULT`), dejando que una señal digital full-scale
+quede justo bajo el clipping del amp. **No requiere cambios de hardware en DS11.**
+
+**Sobre el SNR (corrección de una afirmación previa exagerada):** la atenuación
+digital baja el SNR del DAC ~1:1 (el piso de ruido analógico del PCM1690 es ~fijo),
+de 113dB a ~89dB con −24dB. Un divisor *analógico* después del DAC preservaría el
+SNR del DAC. **PERO** el cuello de botella del sistema es el PAM8302A (~90dB SNR),
+así que el divisor analógico solo ganaría **~6dB reales** de SNR de sistema (no 20dB).
+
+**Recomendación:** mantener la atenuación digital (gratis, per-canal, sirve como
+control de volumen/balance futuro desde el ESP32). El divisor analógico pasa a
+**opcional/baja prioridad** (ver B4) — solo vale la pena si DS11+ migra a un
+amplificador de mejor SNR que el PAM8302A.
+
 ## PRIORIDAD ALTA
-
-### A1. Atenuador de nivel entre PCM1690 y PAM8302A (+20dB de SNR efectivo)
-
-**Problema (hallazgo #5):** el PAM8302A (+24dB fijo, rail 5V) clipea con entradas > ~630mVpp ≈ **-22dBFS del DAC**. Hoy el DAC solo puede usar ~1/13 de su rango → se desperdician ~3.7 bits de resolución y el SNR de la cadena queda limitado por el tramo digital bajo.
-
-**Propuesta:** atenuador resistivo de ~-20dB en cada entrada (por pata, manteniendo el diferencial):
-- Mantener R98/R99 = 1kΩ serie, agregar **R shunt ~110Ω** después del serie (÷10 ≈ -20dB)
-- Recalcular el cap del LPF para conservar fc ≈ 34kHz con la nueva impedancia (~100Ω paralelo): **C ≈ 47nF**
-- El acople C250/C251 220nF queda igual
-
-**Resultado:** el DAC opera cerca de full-scale (0..-6dBFS), el PAM recibe el mismo nivel máximo de hoy, y la relación señal/ruido de pista mejora ~20dB. Para beamforming con 32 canales sumando, ese headroom digital es valioso.
 
 ### A2. D8 — TVS correcto (SMBJ24A)
 
@@ -84,6 +94,17 @@ Hoy el USB-C del ESP32 no alimenta la placa (correcto para producción). Para de
 ### B2. Pads para divisor de strap CAD del AK5538
 
 La dirección I2C quedó en 0x11 (CAD0=1). Si alguna vez se quisieran 2 ADCs en el mismo bus, pads de 0Ω para CAD0/CAD1 darían las 4 direcciones. Hoy innecesario.
+
+### B4. Divisor analógico DAC→PAM (solo si se mejora el amplificador)
+
+Reclasificado desde "prioridad alta" — ver la sección de nivel de salida arriba.
+Con el PAM8302A actual (~90dB SNR), la atenuación digital del PCM1690 ya resuelve
+el clipping y el divisor analógico solo agregaría ~6dB de SNR de sistema, que no
+justifica los componentes. Si en una revisión futura se reemplaza el PAM8302A por
+un amplificador de mejor SNR (donde el DAC dejaría de estar sub-utilizado),
+entonces sí conviene: ~-20dB por pata (R serie 1k + shunt ~110Ω), recalcular el
+cap del LPF a ~47nF para mantener fc ≈ 34kHz, y subir la atenuación digital del
+DAC de nuevo a 0dB.
 
 ### B3. Cambios que NO hay que hacer
 

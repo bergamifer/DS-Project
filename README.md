@@ -170,7 +170,22 @@ webserver/                      # Control web (Flask + SQLite)
 2. Loop completo: `test_tone_enabled=0` → señal inyectada sale por parlantes (ADC→beamform→DAC)
 3. Reponer DACs U1/U3/U4 → verificar 32 canales
 4. Implementar matriz de beamforming real (issue #13)
-5. Aplicar upgrades DS11 para la placa de producción
+5. **Control de volumen/balance per-canal via ESP32** (ver abajo)
+6. Aplicar upgrades DS11 para la placa de producción
+
+### Control de volumen via ESP32 (pendiente)
+
+La atenuación de salida vive en los **registros 72-79 del PCM1690** (per-canal,
+0.5dB, hoy fijos en −24dB vía `PCM1690_ATTEN_DEFAULT`). Para exponerlo como control
+remoto hay que:
+1. **Protocolo** (`uart_protocol.h`): nuevo comando `CMD_SET_ATTEN` (o extender el
+   payload de config) con un valor de atenuación por canal (0-255 → registro PCM1690).
+2. **STM32**: al recibirlo, llamar `PCM1690_SetAttenuation(hi2c1, dac_addr, ch, val)`.
+   Nota: es distinto de `beam_config.gains[]` (que se aplica en software en el
+   beamformer) — la atenuación del DAC es post-mezcla y no pierde resolución.
+3. **ESP32** (`firmware_esp32c3/main/main.c`): pasar el comando nuevo al STM32.
+4. **Webserver** (`webserver/app.py` + templates): sliders de volumen/balance por
+   canal, persistidos en `ds_config.db`.
 
 ---
 

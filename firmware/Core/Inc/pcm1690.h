@@ -83,8 +83,17 @@
 #define PCM1690_ATTEN_6DB       0xF3    // -6 dB
 #define PCM1690_ATTEN_12DB      0xE7    // -12 dB
 #define PCM1690_ATTEN_20DB      0xD7    // -20 dB
+#define PCM1690_ATTEN_24DB      0xCF    // -24 dB
 #define PCM1690_ATTEN_40DB      0xAF    // -40 dB
 #define PCM1690_ATTEN_MUTE      0x80    // Mute (infinite attenuation)
+
+/* Default output attenuation applied at init (all 8 channels).
+ * PAM8302A has fixed +24dB gain on a 5V rail → clips above ~-22dBFS at the
+ * DAC. -24dB keeps a full-scale (0dBFS) digital signal just under the amp's
+ * clean limit, so the DAC/beamformer can use its whole range without the
+ * software test_tone_shift. Per-channel, so it doubles as a future per-channel
+ * volume/balance control (set via PCM1690_SetAttenuation, e.g. from ESP32). */
+#define PCM1690_ATTEN_DEFAULT   PCM1690_ATTEN_24DB
 
 /* ============================================================================
  * Status codes

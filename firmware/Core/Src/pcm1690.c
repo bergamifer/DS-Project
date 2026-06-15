@@ -100,11 +100,13 @@ PCM1690_Status PCM1690_ConfigTDM(I2C_HandleTypeDef *hi2c, uint8_t dev_addr)
     status = PCM1690_WriteReg_Internal(hi2c, dev_addr, PCM1690_REG_DEEMPH, 0x00);
     if (status != HAL_OK) return PCM1690_ERR_I2C;
 
-    // Reg 72-79: All 8 channels at 0dB (no attenuation)
+    // Reg 72-79: All 8 channels at the default attenuation. -24dB keeps a
+    // full-scale digital signal under the PAM8302A clipping threshold (fixed
+    // +24dB amp on 5V). Per-channel → usable later as volume/balance control.
     for (uint8_t ch = 0; ch < 8; ch++) {
         status = PCM1690_WriteReg_Internal(hi2c, dev_addr,
                                             PCM1690_REG_ATTEN_CH1 + ch,
-                                            PCM1690_ATTEN_0DB);
+                                            PCM1690_ATTEN_DEFAULT);
         if (status != HAL_OK) return PCM1690_ERR_I2C;
     }
 

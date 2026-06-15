@@ -81,9 +81,19 @@ Resultado: framing perfecto, 8 canales con datos de 24-bit MSB-aligned en slots 
 - Entrada máxima limpia del PAM: 10Vpp/15.8 ≈ 630mVpp ≈ **-22dBFS digital**
 - El tono a -6dBFS (4Vpp) sobrecargaba el amp por ~16dB
 
-**Fix (commit 65428a7):** `test_tone_shift = 4` → tono a -30dBFS ≈ 250mVpp ≈ 0.5W/4Ω limpio.
+**Fix inicial (commit 65428a7):** `test_tone_shift = 4` → tono a -30dBFS (atenuación por software, solo para el test tone).
 
-**Regla permanente:** con PAM8302A directo, nunca mandar más de ~-22dBFS desde el PCM1690. (Ver propuesta de divisor de entrada en [ds11_upgrades.md](ds11_upgrades.md).)
+**Fix definitivo:** atenuación digital integrada del PCM1690 (registros 72-79,
+`PCM1690_ATTEN_DEFAULT = -24dB`), aplicada en el init a los 8 canales. Resuelve el
+clipping para TODO el audio (no solo el tono), es per-canal (sirve de volumen/balance
+futuro), y devuelve el `test_tone_shift` a 0 (la tabla vuelve a usar su rango completo).
+Verificable en el boot: Reg72-79 leen 0xCF en vez de 0xFF.
+
+**Regla permanente:** con PAM8302A directo, mantener la atenuación del DAC en ~-24dB
+(una señal 0dBFS queda justo bajo el clipping del amp). El SNR del DAC baja ~1:1 con
+la atenuación, pero el sistema está limitado por el SNR del PAM (~90dB), así que un
+divisor analógico solo ganaría ~6dB — no justifica los componentes con este amp.
+Ver [ds11_upgrades.md](ds11_upgrades.md).
 
 ---
 
