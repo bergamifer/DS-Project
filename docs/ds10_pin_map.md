@@ -39,8 +39,8 @@
 | PB3  | SWO      | SWD trace output | SWO | AF0 | J7/pin5 |
 | PB4  | —        | Sin usar | GPIO_ANALOG | — | |
 | PB5  | EEPROM_WP | Write-protect EEPROM | GPIO_OUTPUT | — | HIGH=protegido, LOW=escritura |
-| PB6  | I2C4_SCL | EEPROM CAT24C256 SCL | I2C4 | **AF11** | pull-up en PCB |
-| PB7  | I2C4_SDA | EEPROM CAT24C256 SDA | I2C4 | **AF11** | pull-up en PCB |
+| PB6  | I2C4_SCL | EEPROM CAT24C256 SCL | I2C4 | **AF6** | pull-up en PCB (RN5 4.7k) |
+| PB7  | I2C4_SDA | EEPROM CAT24C256 SDA | I2C4 | **AF6** | pull-up en PCB (RN5 4.7k) |
 | PB8  | I2C1_SCL | DAC bus SCL (4×PCM1690) | I2C1 | AF4 | RN5 4.7kΩ pull-up |
 | PB9  | I2C1_SDA | DAC bus SDA (4×PCM1690) | I2C1 | AF4 | RN5 4.7kΩ pull-up |
 | PB10 | I2C2_SCL | Expansión J5 | I2C2 | AF4 | RN6 4.7kΩ pull-up |
@@ -50,7 +50,7 @@
 | PB14 | —        | Sin usar | — | — | Libre |
 | PB15 | —        | Sin usar | GPIO_ANALOG | — | |
 
-> **Nota AF11 I2C4:** PB6/PB7 AF4 = I2C1 (ya usado en PB8/PB9). AF11 es el único AF correcto para I2C4 en estos pines en STM32H743.
+> **Nota AF6 I2C4 (verificado en hardware 2026-05):** PB6/PB7 AF4 = I2C1 (ya usado en PB8/PB9). El AF correcto para I2C4 en estos pines es **AF6** — con AF11 (que decía el design review) la EEPROM no hace ACK. Confirmado empíricamente en DS9 y DS10: con AF6, `EEPROM available=1`.
 
 ---
 
@@ -138,8 +138,8 @@
 |-----|-----|-----|----|-------------|-----------|
 | I2C1 | PB8  | PB9  | AF4  | 4× PCM1690 DAC (0x98/0x9A/0x9C/0x9E) | 100 kHz SM |
 | I2C2 | PB10 | PB11 | AF4  | Expansión J5 | — |
-| I2C3 | PA8  | PC9  | AF4  | AK5538VN ADC (0x28) | 100 kHz SM |
-| I2C4 | PB6  | PB7  | **AF11** | EEPROM CAT24C256 (0xA0) | 100 kHz SM |
+| I2C3 | PA8  | PC9  | AF4  | AK5538VN ADC (**0x22** = 7-bit 0x11, verificado por scan) | 100 kHz SM |
+| I2C4 | PB6  | PB7  | **AF6** | EEPROM CAT24C256 (0xA0) | 100 kHz SM |
 
 ---
 
@@ -151,7 +151,7 @@
 | SAI1_B (Slave TX)  | DMA1_S3 req88 | DAC1 | U3 | 0x9C | ch 8-15 |
 | SAI2_A (Master TX) | DMA1_S1 req89 | DAC2 | U1 | 0x9A | ch 16-23 |
 | SAI2_B (Slave TX)  | DMA1_S2 req90 | DAC3 | U4 | 0x9E | ch 24-31 |
-| SAI3_B (Master RX) | DMA1_S4 req114 | ADC | IC3 | 0x28 (I2C3) | 8 ch in |
+| SAI3_B (Master RX) | DMA1_S4 req114 | ADC | IC3 | 0x22 (I2C3) | 8 ch in |
 
 ---
 

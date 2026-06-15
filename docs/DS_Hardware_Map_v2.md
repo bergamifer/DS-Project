@@ -15,7 +15,7 @@
 | **Amps** | Salida directa DAC | **32× PAM8302A 2.5W, SD=PD3** |
 | **Power supply** | 12V→LDO→5V/3.3V | **24V→Buck→5VA→LDOs→3.3V/3.3VA** |
 | **LEDs** | GPIO directo (PC4/PC5/PB0/PB1) | **TIM3 PWM 4ch (PA6/PA7/PB0/PB1)** |
-| **I2C para EEPROM** | I2C4 PB6/PB7 **AF6** | **I2C4 PB6/PB7 AF11** |
+| **I2C para EEPROM** | I2C4 PB6/PB7 AF6 | I2C4 PB6/PB7 **AF6** (igual — el "AF11" del design review era un error, verificado en bring-up) |
 | **UART7** | PE7/PE8 — no usado | **PE7/PE8 AF7 debug header J7** |
 | **PCM1690 refs** | U3/U4/U2/U8 | **U2/U3/U1/U4** |
 | **PCM1690 dirs** | 0x94/0x96/0x98/0x9A (incorrectas DS9 docs) | **0x98/0x9C/0x9A/0x9E (verificadas netlist)** |
@@ -27,8 +27,8 @@
 | Bus | Pines | AF | Dispositivos |
 |-----|-------|-----|-------------|
 | I2C1 | PB8/PB9 | AF4 | 4× PCM1690 (0x98, 0x9A, 0x9C, 0x9E) |
-| I2C3 | PA8/PC9 | AF4 | AK5538VN ADC (0x28) |
-| I2C4 | PB6/PB7 | **AF11** | EEPROM CAT24C256 (0xA0) |
+| I2C3 | PA8/PC9 | AF4 | AK5538VN ADC (**0x22**, verificado por scan) |
+| I2C4 | PB6/PB7 | **AF6** | EEPROM CAT24C256 (0xA0) — AF verificado en hardware |
 
 ### DS10 SAI→DAC Routing
 
@@ -38,7 +38,7 @@
 | SAI1_B Slave TX | —/—/PE3 | AF6 | DAC1 | U3 | 0x9C | 8-15 |
 | SAI2_A Master TX | PD12/PD13/PD11 | AF10 | DAC2 | U1 | 0x9A | 16-23 |
 | SAI2_B Slave TX | —/—/PE11 | AF10 | DAC3 | U4 | 0x9E | 24-31 |
-| SAI3_B Master RX | PD10/PD8/PD9 | AF6 | ADC | IC3 | 0x28 (I2C3) | 8ch in |
+| SAI3_B Master RX | PD10/PD8/PD9 | AF6 | ADC | IC3 | 0x22 (I2C3) | 8ch in |
 
 ---
 

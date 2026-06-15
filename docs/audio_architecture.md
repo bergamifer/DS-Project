@@ -24,7 +24,7 @@
                         │ SAI2_B: PE11(SD) AF10             → PCM1690 U4 (DAC3) ch24-31  │──► 8× PAM8302A
                         │                                                                   │
                         │ I2C1 (PB8/PB9 AF4) ──── DAC config (4× PCM1690)                 │
-                        │ I2C4 (PB6/PB7 AF11) ─── EEPROM CAT24C256 (U8, 32KB)             │
+                        │ I2C4 (PB6/PB7 AF6) ──── EEPROM CAT24C256 (U8, 32KB)             │
                         │ UART4 (PA0/PA1 AF8) ──── ESP32-C3-Mini U5 (WiFi control)         │
                         └───────────────────────────────────────────────────────────────────┘
 ```
@@ -35,7 +35,7 @@
 
 | Componente | Ref | Función | SAI Block | I2C Addr (8-bit) | Canales |
 |------------|-----|---------|-----------|-------------------|---------|
-| AK5538VN   | IC3 | ADC 8ch TDM256 | SAI3_B (Master RX) | 0x28 (I2C3) | 8 entrada |
+| AK5538VN   | IC3 | ADC 8ch TDM256 | SAI3_B (Master RX) | 0x22 (I2C3) | 8 entrada |
 | PCM1690    | U2  | DAC 8ch TDM8   | SAI1_A (Master TX) | 0x98 (I2C1) | ch 0-7 |
 | PCM1690    | U3  | DAC 8ch TDM8   | SAI1_B (Slave TX)  | 0x9C (I2C1) | ch 8-15 |
 | PCM1690    | U1  | DAC 8ch TDM8   | SAI2_A (Master TX) | 0x9A (I2C1) | ch 16-23 |
@@ -99,19 +99,20 @@ HSE 25 MHz ──►  PLL3: M=5 N=68 P=14 FRACN=6660  ──►  VCO = 344.0625 
 
 | Parámetro | Valor |
 |-----------|-------|
-| Interfaz audio | TDM256 slave (32-bit, MSN=GND hardware-strapped) |
+| Interfaz audio | TDM256 slave (MSN=GND hardware-strapped), **modo TDM configurado por I2C** |
 | SAI STM32 | SAI3_B Master RX — STM32 genera BICK y LRCK |
 | Interfaz control | I2C3 (PA8 SCL, PC9 SDA, AF4) |
-| Dirección I2C | 0x28 (8-bit write), 7-bit 0x14 |
-| Control PDN | PC7 — HIGH=activo, LOW=power-down |
-| DIF1 | PC8 — strapped LOW en PCB (TDM mode) |
-| OVF | PA15 — output overflow flag (input al STM32) |
+| Dirección I2C | **0x22 (8-bit write), 7-bit 0x11** — verificada por scan en hardware |
+| Control PDN | PC7 — HIGH=activo, LOW=power-down (datasheet: "L = Reset & Power-down") |
+| OVF | PA15 — output overflow flag (input al STM32; LOW = OK) |
+| Formato de datos | 24-bit MSB-aligned en slots de 32 (LSB byte = 0x00 en RX) |
 
-**Secuencia de bring-up:**
-1. PC7 (AK_PDN) = LOW durante init (power-down)
-2. Arrancar SAI3_B DMA antes de liberar PDN
-3. PC7 = HIGH → esperar ≥10ms → AK5538 listo
-4. No se requieren writes I2C para operación básica (hardware strapping configura TDM256/slave/32-bit)
+**Secuencia de bring-up (verificada 2026-06):**
+1. PC7 (AK_PDN) = LOW durante init (power-down; resetea registros)
+2. Arrancar SAI3_B DMA antes de liberar PDN (BICK/LRCK corriendo)
+3. PC7 = HIGH → esperar ≥10ms (POR interno)
+4. **Configurar TDM256 por I2C**: `R01=0x00` (RSTN) → `R03=0x40` (TDM[1:0]=10) → `R01=0x01` + readback
+5. ⚠️ El strapping de hardware NO configura TDM (el design review estaba equivocado — el dump mostró R03=0x00 = modo estéreo). Sin el paso 4, el SAI recibe datos misframed. Ver [ak5538vn_ref.md](ak5538vn_ref.md).
 
 ---
 
@@ -263,7 +264,11 @@ HAL_SAI_Receive_DMA(&hsai_BlockB3, …);   // SAI3_B RX
 
 ## 11. Test Tone Mode
 
-Variable global `test_tone_enabled` (toggle via ESP32 o debug). Cuando activo, `Fill_Audio_Beamform()` genera un tono 1kHz -6dBFS en todos los 8 canales usando la tabla `sine_table_1khz[48]`, bypaseando el beamforming.
+Variable global `test_tone_enabled` (toggle via ESP32 o debug). Cuando activo, `Fill_Audio_Beamform()` genera un tono 1kHz en todos los canales usando la tabla `sine_table_1khz[48]` (-6dBFS), atenuada por `test_tone_shift` (default 4 → **-30dBFS**), bypaseando el beamforming.
+
+**⚠️ Límite de nivel con PAM8302A**: el amp tiene ganancia fija +24dB sobre rail de 5V → entrada máxima limpia ≈ 630mVpp diff ≈ **-22dBFS digital** en el PCM1690 (8Vpp FS). Niveles mayores clipean el amp (verificado en bring-up: el tono original a -6dBFS sonaba cuadrado y consumía 5.4W).
+
+**⚠️ Alineamiento de datos SAI (root cause histórico)**: con `DataSize=24` el SAI transmite los bits **[23:0]** del registro (right-aligned, RM0433) — los samples se escriben directo, **sin `<<8`**. El `<<8` erróneo (heredado de DS9) enviaba solo los 16 bits bajos → wrapping → la distorsión "tipo 50kHz" que se vio en DS9 y DS10 hasta el fix (commit 4db688d). El camino ADC(32-bit)→DAC(24-bit) hace `>>8` antes del gain.
 
 ---
 

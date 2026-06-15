@@ -50,13 +50,16 @@ El AK5538VN en DS10 es **esclavo de audio**: el STM32 SAI3_B actúa como Master 
 | VDDA | — | 3.3VA | Analógico (separado del VDD digital) |
 | VDD | — | 3.3V | Digital |
 
-### Dirección I2C
+### Dirección I2C — VERIFICADA EN HARDWARE (2026-06)
 
 | Parámetro | Valor |
 |-----------|-------|
-| 7-bit addr | 0x14 |
-| 8-bit write | 0x28 |
-| Pin I2CEN | +3.3V (I2C habilitado) |
+| 7-bit addr | **0x11** (scan I2C3 en placa DS10) |
+| 8-bit write | **0x22** |
+| Esquema AKM | 0x10 + CAD1·2 + CAD0 → CAD1=0, CAD0=1 en DS10 |
+
+> ⚠️ El design review decía "7-bit 0x14" — **error** (su 5to error documentado).
+> La dirección real se encontró con un scan completo del bus en el primer bring-up.
 
 ---
 
@@ -90,49 +93,62 @@ hsai_BlockB3.SlotInit.SlotActive = 0x000000FF;  // slots 0-7
 
 ---
 
-## Secuencia de Inicialización
+## Secuencia de Inicialización — VERIFICADA EN HARDWARE (2026-06)
 
-No se requieren writes I2C para la operación básica. El hardware strapping configura todo lo crítico. La secuencia mínima:
+> ⚠️ **HALLAZGO CLAVE DEL BRING-UP**: el design review afirmaba que el strapping
+> de hardware configuraba TDM256 — **FALSO**. El register dump del primer boot
+> mostró `Control2 (R03) = 0x00` → TDM deshabilitado (modo estéreo) → datos
+> misframed en el SAI. **La configuración TDM256 DEBE escribirse por I2C.**
+> Causa probable: los pines de strap CKS0/CKS2 comparten el bus I2C3, cuyos
+> pull-ups los fuerzan a 1 cuando se libera PDN.
 
-1. `AK_PDN (PC7) = LOW` — mantener power-down durante boot
-2. Configurar e iniciar SAI3_B DMA (Master RX)
+Secuencia completa (implementada en main.c):
+
+1. `AK_PDN (PC7) = LOW` — power-down durante boot (resetea los registros)
+2. Configurar e iniciar SAI3_B DMA (Master RX) — BICK/LRCK corriendo
 3. Asegurar MCLK (PE2, 24.576 MHz) corriendo
-4. `AK_PDN (PC7) = HIGH` — liberar power-down
-5. Esperar ≥10 ms para POR interno del AK5538VN
-6. Verificar `AK_OVF (PA15)` — debe ser LOW (sin overflow)
+4. `AK_PDN (PC7) = HIGH` — liberar power-down, esperar ≥10 ms (POR)
+5. **Configurar TDM256 por I2C3 (addr 0x22):**
+   ```c
+   write R01 = 0x00   // RSTN=0 — reset interno para cambiar modo
+   write R03 = 0x40   // Control2: TDM[1:0]=10 → TDM256
+   write R01 = 0x01   // RSTN=1 — operación normal
+   ```
+6. Readback de R01-R03 para verificar (R03 debe leer 0x40)
+7. Verificar `AK_OVF (PA15)` — debe ser LOW (sin overflow)
 
-Para configuración avanzada (filtros, ganancia, modo HPF), usar I2C3:
-
-```c
-// Ejemplo write I2C3
-uint8_t data[2] = { reg_addr, value };
-HAL_I2C_Master_Transmit(&hi2c3, AK5538_ADDR, data, 2, HAL_MAX_DELAY);
-```
+**Importante:** los registros vuelven a default con cada ciclo de PDN — la
+config I2C debe re-aplicarse en cada boot (el firmware ya lo hace).
 
 ---
 
-## Registros Clave (para configuración avanzada)
+## Registros — valores reales observados en DS10
 
-| Registro | Addr | Descripción | Default |
-|----------|------|-------------|---------|
-| Control 1 | 0x00 | HPF, reset, mode | 0x0C |
-| Control 2 | 0x01 | DIF1/DIF0, TDM mode | 0x22 |
-| Control 3 | 0x02 | Loop, mute | 0x00 |
-| Channel Mute | 0x03 | Per-channel mute (bit per ch) | 0x00 |
-| Gain CH1/2 | 0x04–0x05 | Digital gain ±18dB | 0x00 |
-| Gain CH3/4 | 0x06–0x07 | | 0x00 |
-| Gain CH5/6 | 0x08–0x09 | | 0x00 |
-| Gain CH7/8 | 0x0A–0x0B | | 0x00 |
+Dump del primer boot (defaults post-PDN):
 
-**Reg 0x01 (Control 2) — DIF1:DIF0 modo interfaz:**
-| DIF1 | DIF0 | Modo |
-|------|------|------|
-| 0 | 0 | I2S Left-Justified |
-| 0 | 1 | I2S Right-Justified |
-| 1 | 0 | I2S standard (Philips) |
-| 1 | 1 | **TDM256** ← DS10 config |
+```
+R00: FF  → Power Management: los 8 canales ON
+R01: 01  → RSTN=1 (operación normal); bit0 = RSTN
+R02: 01  → Control1: HPF habilitado
+R03: 00  → Control2: TDM[1:0]=00 = TDM OFF (¡el strap NO configuró TDM!)
+R04-R17: 00 (excepto R13=04, sin decodificar)
+```
 
-Con `DIF1=1, DIF0=1` (TDM256), los 8 canales se transmiten en TDM en la misma señal SDTO1, con FrameLength=256 bits (8 slots × 32 bits).
+| Registro | Addr | Función confirmada |
+|----------|------|--------------------|
+| Power Management | 0x00 | Bit por canal (0xFF = 8 canales ON) |
+| PM2 / Reset | 0x01 | bit0 = RSTN (0=reset interno, 1=normal) |
+| Control 1 | 0x02 | bit0 = HPFE (HPF on/off); resto por confirmar |
+| Control 2 | 0x03 | **bits [6:5] = TDM[1:0]: 00=off, 10=TDM256 (=0x40)** |
+
+> El mapa coincide con el del AK5558 (hermano de familia). Para campos aún no
+> usados (DIF, CKS, ganancias), confirmar contra el datasheet AK5538VN antes
+> de escribir.
+
+**Formato de datos observado**: con TDM256 activo, el chip entrega muestras de
+**24 bits MSB-aligned en slots de 32** (byte LSB siempre 0x00 en el RX). El
+camino de beamforming hace `>> 8` para llevarlas a 24-bit right-aligned, que
+es exactamente lo que espera el TX (SAI DataSize=24 → bits [23:0]).
 
 ---
 

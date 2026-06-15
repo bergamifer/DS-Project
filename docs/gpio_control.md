@@ -88,7 +88,7 @@ if (HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN) == GPIO_PIN_SET) {
 }
 ```
 
-**Nota:** El AK5538VN no requiere writes I2C para operación básica. El strapping de hardware (MSN=GND en PCB) configura: modo esclavo TDM256, 32-bit, LDO interno habilitado. I2C3 (0x28) está disponible para configuración avanzada (filtros, ganancia).
+**Nota (corregida tras bring-up 2026-06):** El strapping de hardware solo configura el modo esclavo (MSN=GND). **El modo TDM256 NO queda strapped y DEBE escribirse por I2C3 (addr 0x22)** en cada boot: `R01=0x00 → R03=0x40 → R01=0x01`. Sin esto el chip queda en modo estéreo y el SAI recibe datos misframed. Ver [ak5538vn_ref.md](ak5538vn_ref.md).
 
 ### 1.4 EEPROM Write-Protect (PB5)
 
