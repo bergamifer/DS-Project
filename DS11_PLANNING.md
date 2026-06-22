@@ -7,18 +7,20 @@
 
 ## 1. Correcciones obligatorias (errores DS10)
 
-| # | Problema en DS10 | Origen | Fix DS11 |
-|---|---|---|---|
-| 1 | **RJ45 ×4 orientados hacia el interior de la placa** (Issue #1) — el conector abre hacia adentro | Error de placement propio | Rotar 180° en layout. En evaluación: conector RJ45 ×4 integrado (footprint `RJ45_Amphenol_RJHSE538X-04` ya creado, datasheet `datasheets/rj45x4.pdf`, 3D `3d/RJ45x4.step`). **Verificar con 3D viewer + impresión 1:1 antes de Gerbers** |
-| 2 | **Daisy-chain 24V por barrel jack acumula corriente** (Issue #2) — 2.5A×N placas: el primer conector de una cadena de 18 lleva ~45A | Error de arquitectura | Terminal block enchufable 5.08mm 20A (tipo BXCONN JCB508-ZOMC2P) entrada/salida + verificar sección de pistas/planos de 24V para la corriente de paso |
-| 3 | **D8 = SM6T15A (TVS de 15V) en riel de 24V** — conduce a tensión nominal; contribuyó al humo de la tanda 1 | Error de BOM | Cambiar en el **esquemático**: Value=SMBJ24A, LCSC=C726830 (el BOM se regenera del esquemático; corregirlo solo en CSV se pierde) |
-| 4 | **USB-only no arranca** — inrush ~9A cargando 1.1mF de +5VA a través de FB2 → OCP del puerto USB corta VBUS | Limitación de diseño | Jumper en serie con FB2: `+5VA → FB2 → [JP_PAM] → +5V`. Dimensionar para 2-3A continuos (doble pin o solder jumper ancho). Ver §2 |
-| 5 | 6× ERC `power_pin_not_driven` | Cosmético | Agregar PWR_FLAG (instrucciones: [DS10_PRE_PRODUCTION_CHECKLIST.md](DS10_PRE_PRODUCTION_CHECKLIST.md) §8) |
-| 6 | J31/J32 pin 3 (switch del barrel) sin uso | Mejora | Si se mantiene barrel: divisor 100k/10k a GPIO para detección fin-de-cadena. Si se pasa a terminal block: N/A |
-| 7 | Sin protección ESD en entradas RJ45 | Mejora | TVS array en los pares del primer conector de la cadena |
-| 8 | `netlist.md` desactualizado (no incluye R107-R110 de AMUTEO) | Doc | Regenerar netlist al cerrar el esquemático DS11 + actualizar la Sección 11 del [DS10_DESIGN_REVIEW.md](DS10_DESIGN_REVIEW.md) |
-| 9 | 8× `endpoint_off_grid` en sheet root | Cosmético | Alinear wires a la grilla |
-| 10 | Silkscreen de K1 dice "Reset ESP32" — es **boot mode** (GPIO8), no reset | Silk engañoso | Renombrar a "BOOT ESP32" en silk |
+> **Estado al 2026-06-22**: el grueso del esquemático DS11 está implementado. ✅ = hecho, ⬜ = pendiente (mayormente layout / pre-fab).
+
+| # | Problema en DS10 | Origen | Fix DS11 | Estado |
+|---|---|---|---|---|
+| 1 | **RJ45 ×4 orientados hacia el interior de la placa** (Issue #1) | Error de placement propio | Conector RJ45 ×4 integrado `RJ45_Amphenol_RJHSE538X-04` (datasheet `datasheets/rj45x4.pdf` = RJ-052-4-2, 3D `3d/RJ45x4.step`) orientado hacia afuera. **Verificar con 3D viewer + impresión 1:1 antes de Gerbers** | ✅ diseñado |
+| 2 | **Daisy-chain 24V por barrel jack acumula corriente** (Issue #2) — 2.5A×N placas | Error de arquitectura | Terminal block enchufable **MSTBVA 2,5/2-G-5,08** (Phoenix / clon KF2EDGK 5.08 2P) entrada (J31) + salida (J32). **Clusters de 4 cajas por fuente** → máx 10A < 12A rating del MSTB. Machos enchufables se compran aparte (LCSC/AliExpress `KF2EDGK 5.08 2P`) — JLCPCB no los ensambla (no se sueldan) | ✅ encargado / ⬜ pistas 24V ≥2.5mm en layout |
+| 3 | **D8 = SM6T15A (TVS de 15V) en riel de 24V** | Error de BOM | Value=SMBJ24A, LCSC=C726830 en el esquemático | ✅ |
+| 4 | **USB-only no arranca** — inrush ~9A cargando 1.1mF de +5VA a través de FB2 | Limitación de diseño | **Schottky SS34 (C8678) en serie con FB2**: `+5VA → FB2 → D(SS34, ánodo +5VA) → +5V`. Bloquea USB→+5VA automáticamente. FB3/+5VA_DAC cuelga de +5VA → mismo corte aísla los DACs. Solo lleva rama LDOs (~0.5A). Ver §2 | ✅ |
+| 5 | 6× ERC `power_pin_not_driven` | Cosmético | Agregar PWR_FLAG | ✅ |
+| 6 | J31/J32 pin 3 (switch del barrel) sin uso | Mejora | N/A — se pasó a terminal block | ✅ N/A |
+| 7 | Sin protección ESD en entradas RJ45 | Mejora | **PRTR5V0U2X (SOT-143, C5158049)**, 1 por par diferencial. Pinout: IO1(pin3)→IN+, IO2(pin2)→IN-, VCC(pin4)→+3V3, GND(pin1)→GND. **En AMBOS conectores RJ45** (cualquiera puede ser IN según cableado del daisy-chain) → 8 pares × 2 = **16 ICs**. **Colocar cerca de cada conector RJ45**, no del AK5538 (el TVS debe interceptar el pico antes del trace) | ✅ en esquemático / ⬜ placement |
+| 8 | `netlist.md` desactualizado (no incluye R107-R110 de AMUTEO) | Doc | Regenerar netlist al cerrar el esquemático DS11 + actualizar Sección 11 del [DS10_DESIGN_REVIEW.md](DS10_DESIGN_REVIEW.md) | ⬜ al cerrar esquemático |
+| 9 | 8× `endpoint_off_grid` en sheet root | Cosmético | Alinear wires a la grilla (ERC → click error → snap a grilla 50mil; o `Edit → Cleanup Schematic`) | ⬜ |
+| 10 | Silkscreen de K1 dice "Reset ESP32" — antes era boot mode | Silk | **K1 rediseñado: ahora ES el reset real del ESP32** (pin EN + RC 10k+100nF, ver §3). El silk "Reset ESP32" quedó correcto. **Botón de boot (GPIO8) eliminado** — GPIO8 queda fijo HIGH con pull-up, USB CDC bootea siempre | ✅ |
 
 ---
 
@@ -31,26 +33,32 @@ Razones:
 - Inyectar 3.3V directo al riel +3V3 back-alimenta la salida del AP1117 (riesgo de corriente inversa en el LDO) y deja +3.3VA muerto (el ADC no se puede probar).
 - El pin 3V3 de los ST-Link (sobre todo clones) sale de un LDO interno chico (~100-200mA): insuficiente para STM32+ESP32 (~350mA en picos). El pin 5V es VBUS del USB casi directo (~450mA disponibles).
 
-### Topología propuesta (tres fuentes de 5V OR-eadas por diodo)
+### Topología propuesta (tres fuentes de 5V OR-eadas por diodo, aislamiento automático)
 
 ```
-Buck 24V→5V ──► FB2 ──► [JP_PAM] ──┐
-USB-C VBUS ──► D2 (Schottky) ──────┼──► +5V ──► U11 (+3V3) y U10 (+3.3VA)
-ST-Link 5V (J7/10) ──► D_nuevo ────┘
+Buck 24V→5V (+5VA) ──► FB2 ──► D_buck (SS34) ──┐
+USB-C VBUS ──────────► D2 (Schottky) ──────────┼──► +5V ──► U11 (+3V3) y U10 (+3.3VA)
+ST-Link 5V (J7/10) ──► D_stlink (B5819W) ──────┘
 ```
 
-- **Agregar Schottky** (tipo B5819W, como D2) en serie con el actual JP3 (+5V → J7/10): hoy, con JP3 cerrado y 24V presente, el buck back-alimenta el VBUS del ST-Link. Con el diodo, cualquier combinación de fuentes es segura.
-- Con **JP_PAM abierto**: el lado digital se alimenta por USB-C o ST-Link con ~30-60µF de inrush → no dispara OCP. Cerrado: operación completa por 24V.
+- **D_buck (Schottky en serie con FB2, ánodo en +5VA)**: deja pasar buck→LDOs en operación normal y bloquea USB/ST-Link→+5VA. El aislamiento de los PAMs es **automático, sin jumper**. Como FB3/+5VA_DAC cuelga de +5VA, el mismo diodo aísla también el AVDD de los DACs y el back-feed al buck. Corriente: solo la rama de LDOs (~0.3-0.5A) → SS34 sobra. Caída ~0.4V → +5V queda en ~4.6V con 24V (AP1117-33 necesita ~4.3V: margen OK; los pines +5V de J5/J6 quedan en ~4.6V — aceptable). Opcional: solder jumper en paralelo a D_buck como bypass.
+- **D_stlink (B5819W) en serie con el actual JP3** (+5V → J7/10): hoy, con JP3 cerrado y 24V presente, el buck back-alimenta el VBUS del ST-Link. Con el diodo, cualquier combinación de fuentes es segura. ✅ implementado.
+- **VTREF del ST-Link (J7/1)**: el antiguo JP4 (jumper abierto) → conectar **directo a +3V3**, sin jumper. VTREF es solo referencia de tensión (alta impedancia, sin back-feed, sin consumo); siempre quiere estar conectado. ✅ implementado.
+- Alimentando por USB-C o ST-Link: el lado digital carga solo ~30-60µF de inrush → no dispara OCP.
 - Presupuesto de corriente programando: STM32 ~150-200mA + ESP32 idle ~50mA (bursts WiFi 300mA) + lógica DACs/ADC → OK para programar y debuggear; **evitar WiFi activo + pipeline de audio si se alimenta solo por ST-Link**.
-- ⚠️ **Verificar en datasheet PCM1690**: con JP_PAM abierto los DACs quedan con VDD=3.3V y AVDD=0V. Los CMOS de TI suelen tolerarlo (sin path de latch-up), pero confirmarlo antes de fijar la topología.
+- ⚠️ **Verificar en datasheet PCM1690**: alimentando por USB los DACs quedan con VDD=3.3V y AVDD=0V. Los CMOS de TI suelen tolerarlo (sin path de latch-up), pero confirmarlo antes de fijar la topología.
+- **Bodge equivalente en DS10**: desoldar FB2 y soldar un B5819W sobre sus pads — ánodo al pad 1 (+5VA), cátodo al pad 2 (+5V). Se pierde el ferrite (OK en desarrollo).
 
 ---
 
 ## 3. Nuevas features (lecciones del bring-up tanda 1)
 
-- **LED de power hardwired en +3V3** (y opcional en +5VA): R + LED directo al riel, sin firmware. En la tanda 1 no había NINGUNA señal visible de vida (los 5 LEDs son de firmware) y eso complicó el diagnóstico del primer encendido.
-- **Test points**: +24V, +5VA, +5V, +3V3, +3.3VA, GND ×2, MCLK (PE2). Hacen el gate de bring-up ([DS10_BRINGUP.md](DS10_BRINGUP.md) §0) mucho más rápido.
+- **LED de power hardwired en +3V3**: R + LED directo al riel, sin firmware. **R = 470Ω** (LED verde Vf≈2.0V → If≈2.8mA; bajar a 330Ω si se quiere más brillo). En la tanda 1 no había NINGUNA señal visible de vida (los 5 LEDs son de firmware) y eso complicó el diagnóstico del primer encendido. ✅ implementado.
+- **Test points**: +24V, +5VA, +5V, +3V3, +3.3VA, GND ×2, MCLK (PE2), BICK (PD8). Footprint `TestPoint:TestPoint_Pad_1.0x1.0mm` o 1.5×1.5mm. ✅ implementado.
+- **LEDs verdes del conector RJ45×4** (2 LEDs por puerto, 8 en total): los 4 verdes encendidos como indicador de "puerto vivo", controlados por **STM32 PE12** (no PB2). **4× R 470Ω individuales** (una por LED → distribución uniforme; If≈2.8mA c/u, 11mA total < 25mA del GPIO). ✅ implementado.
+- **Reset hardware del ESP32 en K1**: pin EN (CHIP_EN) con red **RC 10kΩ a +3V3 + 100nF a GND** + botón K1 a GND. El RC filtra glitches y garantiza reset limpio al soltar. (DS10 no tenía reset para el ESP32). ✅ implementado.
 - Mantener el **gate de bring-up** como procedimiento estándar para cada tanda nueva: medir rieles a GND + verificar orientación de ICs ANTES de energizar.
+- **(Idea, no implementada) Link al repo en silk**: QR en `F.Silkscreen` (KiCad 9: `Edit → Add → QR Code`, ~15×15mm) apuntando a un redirect que se controla (ej. `bergamifer.github.io/ds` → repo real). Así el link es actualizable sin rediseñar la placa.
 
 ---
 
@@ -67,11 +75,11 @@ ST-Link 5V (J7/10) ──► D_nuevo ────┘
 
 ## 5. Conectores en evaluación (trabajo en curso)
 
-| Función | Candidato | Material ya en repo |
-|---|---|---|
-| RJ45 audio | RJHSE538X-04 (bloque ×4 integrado) | footprint en `librerias/DS_local_library.pretty/`, `datasheets/rj45x4.pdf`, `3d/RJ45x4.step` |
-| USB-C | G-Switch GT-USB-7051x (vertical) | footprint en `librerias/DS_local_library.pretty/`, `datasheets/usb_vertical.pdf` |
-| Power 24V | Terminal block 5.08mm 20A / barrel vertical | `datasheets/barrel vertical.pdf` |
+| Función | Candidato | Estado | Material ya en repo |
+|---|---|---|---|
+| RJ45 audio | RJHSE538X-04 (bloque ×4 integrado) | ✅ elegido e implementado | footprint en `librerias/DS_local_library.pretty/`, `datasheets/rj45x4.pdf`, `3d/RJ45x4.step` |
+| USB-C | G-Switch GT-USB-7051x (vertical) | en evaluación | footprint en `librerias/DS_local_library.pretty/`, `datasheets/usb_vertical.pdf` |
+| Power 24V | **MSTBVA 2,5/2-G-5,08** (Phoenix / clon KF2EDGK) — hembra PCB; macho KF2EDGK 5.08 2P aparte | ✅ elegido y encargado | `3d/.../PhoenixContact_MSTBVA_2,5_2-G-5,08_1x02_P5.08mm_Vertical.step`, `datasheets/barrel vertical.pdf` |
 
 Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agregar a la tabla de rotation corrections, y probar con impresión 1:1 del layout.
 
@@ -101,14 +109,14 @@ Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agreg
 
 ## 7. Orden sugerido de trabajo hacia DS11
 
-1. Cerrar reclamo JLCPCB (define presupuesto).
-2. Esquemático: fixes #3 (D8), #4 (JP_PAM), §2 (diodo ST-Link), #5 (PWR_FLAG), #10 (silk K1) + LED power + test points (§3).
-3. Layout: RJ45 (#1), conector de potencia (#2), pistas 24V para corriente de paso.
-4. Regenerar netlist + ERC/DRC limpios + actualizar docs (#8).
-5. Gates de fabricación (§4) — en particular DFM 3D y BOM por C-number.
-6. Pedido con el crédito aplicado.
+1. ✅ Cerrar reclamo JLCPCB — **resuelto: USD 355 a JLC Balance** (ver `memory/project_ds10_production_defect.md`).
+2. ✅ Esquemático: D8→SMBJ24A, SS34 en FB2, B5819W en ST-Link, VTREF directo, PWR_FLAG, K1=reset ESP32 (boot eliminado), LED power, test points, LEDs RJ45 en PE12, TVS PRTR5V0U2X en pares diferenciales.
+3. ⬜ **Layout (lo que queda)**: placement de los 16 TVS pegados a cada RJ45; pistas/planos 24V ≥2.5mm entre J31-J32; verificar RJ45 abre hacia afuera (3D + impresión 1:1).
+4. ⬜ Limpiar `endpoint_off_grid` (#9), regenerar netlist + ERC/DRC limpios + actualizar docs (#8).
+5. ⬜ Gates de fabricación (§4) — tabla de rotation corrections para footprints nuevos, DFM 3D, BOM por C-number.
+6. ⬜ Pedido con el crédito de USD 355 aplicado.
 
 ---
 
-**Last updated**: 2026-06-10
-**Estado**: planificación — esquemático DS11 no comenzado
+**Last updated**: 2026-06-22
+**Estado**: esquemático DS11 prácticamente cerrado; pendiente layout (placement TVS, pistas 24V), limpieza ERC y gates de fabricación. Reclamo JLCPCB cerrado en USD 355.

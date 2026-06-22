@@ -58,3 +58,7 @@ gerber/
 \#auto_saved_files#
 
 # End of https://www.toptal.com/developers/gitignore/api/kicad
+# Copia local del release DS10 (redundante con tag DS10, 104MB)
+Versiones/
+# Archivos de recuperación de crash de KiCad
+*.recovered.*.kicad_sch
