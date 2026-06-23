@@ -188,6 +188,13 @@ static volatile uint32_t full_complete_count = 0;
 static volatile uint32_t error_count = 0;
 static volatile uint32_t last_sai_error = 0;
 
+// Per-SAI-block callback counters (Half+Full) — to localize silent channels.
+// If 1B/2A/2B don't advance, those DACs never get the tone (ch8-31 silent).
+static volatile uint32_t cb_a1_count = 0;
+static volatile uint32_t cb_1b_count = 0;
+static volatile uint32_t cb_2a_count = 0;
+static volatile uint32_t cb_2b_count = 0;
+
 // ===== Latency & Jitter measurement via DWT cycle counter =====
 // DWT->CYCCNT runs at CPU clock (480MHz → 2.08ns/cycle)
 static volatile uint32_t last_half_isr_cycles = 0;
@@ -744,14 +751,16 @@ int main(void)
           UART_Print(uart_buf);
         }
 
-        // Buffer dump: frame 2 (indices 16-23) to avoid sine(0)=0 and sine(1) edge cases
-        sprintf(uart_buf, "     Slots0-3: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
-                (uint32_t)audio_buffer[16], (uint32_t)audio_buffer[17],
-                (uint32_t)audio_buffer[18], (uint32_t)audio_buffer[19]);
+        // TX buffer dump (slot 0 of frame 2) for the 4 SAI blocks, plus their
+        // fill-callback counts. If a buffer reads 0x00000000 and its count is
+        // not advancing, that SAI's DMA callbacks aren't firing → its DACs
+        // output the initial silence (this localizes "ch8-31 silent").
+        sprintf(uart_buf, "     TXbuf A1=0x%08lX 1B=0x%08lX 2A=0x%08lX 2B=0x%08lX\r\n",
+                (uint32_t)audio_buffer[16], (uint32_t)audio_buffer_1b[16],
+                (uint32_t)audio_buffer_2a[16], (uint32_t)audio_buffer_2b[16]);
         UART_Print(uart_buf);
-        sprintf(uart_buf, "     Slots4-7: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
-                (uint32_t)audio_buffer[20], (uint32_t)audio_buffer[21],
-                (uint32_t)audio_buffer[22], (uint32_t)audio_buffer[23]);
+        sprintf(uart_buf, "     fills/s A1=%lu 1B=%lu 2A=%lu 2B=%lu\r\n",
+                cb_a1_count, cb_1b_count, cb_2a_count, cb_2b_count);
         UART_Print(uart_buf);
 
         // ADC RX dump (AK5538 → SAI3_B DMA), frame 2 = indices 16-23.
@@ -1831,21 +1840,25 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
       underrun_count++;
     }
 
+    cb_a1_count++;
     need_fill_first_half = 1;
     __DSB();
   }
   else if (hsai->Instance == SAI1_Block_B) {
     if (need_fill_1b_first_half) underrun_count++;
+    cb_1b_count++;
     need_fill_1b_first_half = 1;
     __DSB();
   }
   else if (hsai->Instance == SAI2_Block_A) {
     if (need_fill_2a_first_half) underrun_count++;
+    cb_2a_count++;
     need_fill_2a_first_half = 1;
     __DSB();
   }
   else if (hsai->Instance == SAI2_Block_B) {
     if (need_fill_2b_first_half) underrun_count++;
+    cb_2b_count++;
     need_fill_2b_first_half = 1;
     __DSB();
   }
@@ -1879,21 +1892,25 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
       underrun_count++;
     }
 
+    cb_a1_count++;
     need_fill_second_half = 1;
     __DSB();
   }
   else if (hsai->Instance == SAI1_Block_B) {
     if (need_fill_1b_second_half) underrun_count++;
+    cb_1b_count++;
     need_fill_1b_second_half = 1;
     __DSB();
   }
   else if (hsai->Instance == SAI2_Block_A) {
     if (need_fill_2a_second_half) underrun_count++;
+    cb_2a_count++;
     need_fill_2a_second_half = 1;
     __DSB();
   }
   else if (hsai->Instance == SAI2_Block_B) {
     if (need_fill_2b_second_half) underrun_count++;
+    cb_2b_count++;
     need_fill_2b_second_half = 1;
     __DSB();
   }
