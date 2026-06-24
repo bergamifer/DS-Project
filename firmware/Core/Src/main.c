@@ -494,13 +494,22 @@ int main(void)
   HAL_GPIO_WritePin(DAC_MUTE_IN_PORT, DAC_MUTE_IN_PIN, GPIO_PIN_SET);
   UART_Print("PCM1690: AMUTEI HIGH — DACs unmuted\r\n");
 
-  // === STEP 4: Verify SAI1_A ===
+  // === STEP 4: Verify all 4 TX SAI blocks ===
+  // SAIEN=1 means enabled. WCKCFG=1 (master only) = wrong clock config → the
+  // block can't generate valid BCK/FS → its DACs get garbage/nothing. OVRUDR=
+  // underrun. If SAI2_A shows WCKCFG=1 or any block SAIEN=0, that's a firmware
+  // bug (not the rework) and explains the silent channels.
   {
-    uint32_t cr1 = SAI1_Block_A->CR1;
-    uint32_t sr = SAI1_Block_A->SR;
-    sprintf(uart_buf, "SAI1_A: SAIEN=%lu SR=0x%08lX OVRUDR=%lu WCKCFG=%lu\r\n",
-            (cr1 >> 16) & 1, sr, (sr >> 0) & 1, (sr >> 2) & 1);
-    UART_Print(uart_buf);
+    SAI_Block_TypeDef *blk[4] = { SAI1_Block_A, SAI1_Block_B, SAI2_Block_A, SAI2_Block_B };
+    const char *nm[4] = { "SAI1_A(U2)", "SAI1_B(U3)", "SAI2_A(U1)", "SAI2_B(U4)" };
+    for (uint32_t i = 0; i < 4; i++) {
+      uint32_t cr1 = blk[i]->CR1;
+      uint32_t sr  = blk[i]->SR;
+      sprintf(uart_buf, "%s: SAIEN=%lu MODE=%lu SR=0x%08lX OVRUDR=%lu WCKCFG=%lu FLVL=%lu\r\n",
+              nm[i], (cr1 >> 16) & 1, (cr1 >> 0) & 3, sr,
+              (sr >> 0) & 1, (sr >> 2) & 1, (sr >> 16) & 7);
+      UART_Print(uart_buf);
+    }
   }
 
   // === STEP 5: Enable amplifier bank ===
