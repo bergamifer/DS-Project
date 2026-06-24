@@ -408,10 +408,13 @@ void HAL_SAI_MspInit(SAI_HandleTypeDef* hsai)
     }
     SAI2_client ++;
 
-    /**SAI2_A GPIO Configuration
-    PD11    ------> SAI2_SD_A
-    PD12    ------> SAI2_SCK_A (FS_A per HAL, but actually SCK)
-    PD13    ------> SAI2_FS_A
+    /**SAI2_A GPIO Configuration (AF10 fixed silicon mapping, STM32H743 DS12110)
+    PD11    ------> SAI2_SD_A   (data → U1 DIN)
+    PD12    ------> SAI2_FS_A   (LRCK, 48kHz → U1+U4)
+    PD13    ------> SAI2_SCK_A  (BCK, 12.288MHz → U1+U4)
+    PCB MUST route PD12→LRCK and PD13→BCK on U1/U4. A swap (the DS9-era
+    confusion) leaves U1/U4 with FS↔BCK crossed → they ACK on I2C but
+    produce no audio. Verify against the DS10 schematic.
     */
     __HAL_RCC_GPIOD_CLK_ENABLE();
     GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13;
