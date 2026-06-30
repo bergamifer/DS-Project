@@ -129,8 +129,17 @@ static const int32_t sine_table_1khz[48] = {
   -4194304, -4158422, -4051387, -3875034, -3632372, -3327563,
   -2965812, -2553318, -2097152, -1605080, -1085575,  -547466
 };
-static volatile uint8_t test_tone_enabled = 1; /* SET TO 0 FOR BEAMFORMING MODE */
+static volatile uint8_t test_tone_enabled = 0; /* 1 = 1kHz test tone; 0 = use monitor/beamform */
 static uint32_t test_tone_phase = 0;
+
+/* ADC monitor mode: route the live digitized ADC straight to the DACs so you
+ * can HEAR what the AK5538 is capturing. Each DAC channel plays its matching
+ * ADC channel (ch0→ch0 …). Only DAC0/U2 (ch0-7) is populated on this board, so
+ * you hear ADC ch0-7 on U2. The ADC signal is low-level (hum ~-55dBFS, noise
+ * floor ~-95dBFS), so it is boosted by (1<<adc_monitor_shift) before the DAC,
+ * then clamped to 24-bit FS. Takes priority over test tone and beamform. */
+static volatile uint8_t adc_monitor_enabled = 1;   /* 1 = live ADC→DAC monitor */
+static volatile uint8_t adc_monitor_shift = 5;     /* gain boost: 5 = ×32 ≈ +30dB */
 
 /* Extra right-shift applied to the -6dBFS sine table.
  * Now 0: the PAM8302A clipping headroom is handled by the PCM1690's own
@@ -194,6 +203,10 @@ static volatile uint32_t cb_a1_count = 0;
 static volatile uint32_t cb_1b_count = 0;
 static volatile uint32_t cb_2a_count = 0;
 static volatile uint32_t cb_2b_count = 0;
+// RX (ADC) DMA callback counter — if this does NOT advance ~100/s, the SAI3_B
+// RX DMA is stalled and audio_buffer_3b_rx is frozen (explains "input does
+// nothing"). This is the decisive ADC data-path liveness check.
+static volatile uint32_t cb_rx3b_count = 0;
 
 // ===== Latency & Jitter measurement via DWT cycle counter =====
 // DWT->CYCCNT runs at CPU clock (480MHz → 2.08ns/cycle)
@@ -294,7 +307,7 @@ int main(void)
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("PLL3: 24.576MHz MCLK (512xfS) — MckOverSampling=ENABLE\r\n");
   UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");
-  UART_Print("Test tone: 1kHz -6dBFS table + PCM1690 -24dB atten = -30dBFS out\r\n\r\n");
+  UART_Print("MODE: ADC monitor (live AK5538 -> DAC0/U2, +30dB boost) — hear what you capture\r\n\r\n");
 
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();
@@ -427,21 +440,31 @@ int main(void)
     }
   }
 
-  // First boot showed Control2 (R03) = 0x00 → TDM disabled (stereo mode): the
-  // straps did NOT select TDM256, which is why SAI3_B captured misframed data.
-  // Program TDM256 via I2C. AKM family (AK5558 sibling): register writes that
-  // change clock/format must be done with RSTN=0 (PM2 reg 0x01 bit0), then
-  // release. TDM[1:0] lives in Control2 (0x03) bits [6:5]: 10 = TDM256.
-  // NOTE: values based on the AK5558 family map — verify against the AK5538VN
-  // datasheet register table; readback below shows what actually stuck.
+  // AK5538/AK5578 register map (verified against AKM datasheet, 2026-06):
+  //   0x02 Control1: [.][CKS3][CKS2][CKS1][CKS0][DIF1][DIF0][HPFE]
+  //   0x03 Control2: [.][TDM1][TDM0][.....................]
+  // TWO things must be programmed (straps don't, since CKS/TDM pins are reused
+  // for I2C and default to 0):
+  //  1) CKS3-0 = MCLK/fs ratio (Table 5). DEFAULT 0000 = 128fs Quad-Speed —
+  //     but we feed 512fs (24.576MHz shared MCLK for the PCM1690s). That
+  //     mismatch makes the delta-sigma modulator run at the wrong oversampling
+  //     → it saturates → OVF=1 → output rails on all 8 ch, INDEPENDENT of the
+  //     analog input. THIS was the "ADC ignores its inputs" root cause.
+  //     For 512fs @ 48kHz (Normal Speed) → CKS3-0 = 0110.
+  //     R02 = [0][0110][00][1] = 0x31  (CKS=0110, DIF=00 24-bit MSB, HPFE=1).
+  //  2) TDM1-0 = 10 → TDM256 (R03 = 0x40).
+  // Clock/format changes require RSTN=0 (PM2 0x01 bit0) during the write, then
+  // RSTN=1 with a stable clock already running (it is).
   {
     uint8_t v;
-    UART_Print("AK5538VN: enabling TDM256 via I2C...\r\n");
-    v = 0x00;  // RSTN=0 — hold in reset while changing mode
+    UART_Print("AK5538VN: clock mode (CKS=512fs) + TDM256 via I2C...\r\n");
+    v = 0x00;  // RSTN=0 — hold in reset while changing clock mode / format
     HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+    v = 0x31;  // Control1: CKS3-0=0110 (512fs Normal), DIF=00 (24-bit MSB), HPFE=1
+    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
     v = 0x40;  // Control2: TDM[1:0]=10 → TDM256
     HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
-    v = 0x01;  // RSTN=1 — release
+    v = 0x01;  // RSTN=1 — release (stable MCLK/BICK/LRCK already running)
     HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
     HAL_Delay(5);
 
@@ -450,7 +473,7 @@ int main(void)
     HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &r1, 1, 50);
     HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &r2, 1, 50);
     HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &r3, 1, 50);
-    sprintf(uart_buf, "  readback R01=0x%02X R02=0x%02X R03=0x%02X (want R03=0x40)\r\n",
+    sprintf(uart_buf, "  readback R01=0x%02X R02=0x%02X R03=0x%02X (want R02=0x31 R03=0x40)\r\n",
             r1, r2, r3);
     UART_Print(uart_buf);
   }
@@ -730,6 +753,39 @@ int main(void)
               HAL_GetTick() / 1000, half_per_sec, full_per_sec,
               error_count, underrun_count, UART_Protocol_GetRxByteCount());
       UART_Print(uart_buf);
+
+      // 8-channel ADC peak meter — printed EVERY second (one line) so an
+      // injected tone is visible live on whatever input pair it lands on.
+      // Peak = max(|min|,|max|) over the first half-buffer, shown 24-bit.
+      // Floating input → ~8.3M (railed hum). Grounded → ~0. Tone → scales
+      // linearly with the generator level. Use this to map input→TDM slot.
+      {
+        // Per-channel PEAK = max(|v|) over the half-buffer, in 24-bit. Now that
+        // the clock mode is correct the ADC no longer rails, so peak ≈ noise
+        // floor (~100) on quiet inputs and jumps to the signal amplitude when a
+        // tone is injected — linear with the generator level. Use this to map
+        // input→TDM slot and confirm the ADC tracks a real signal.
+        int32_t pk[ADC_CHANNELS] = {0};
+        for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
+          for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
+            int32_t v = audio_buffer_3b_rx[f * ADC_CHANNELS + ch] >> 8; // 24-bit
+            int32_t a = v < 0 ? -v : v;
+            if (a > pk[ch]) pk[ch] = a;
+          }
+        }
+        // RX DMA liveness (~100/s) + live OVF (PA15): 1 = analog over-range.
+        static uint32_t last_rx3b = 0;
+        uint32_t rx_now = cb_rx3b_count;
+        uint32_t rx_per_sec = rx_now - last_rx3b;
+        last_rx3b = rx_now;
+        int ovf = HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN);
+
+        sprintf(uart_buf,
+                "     ADCpk: c0=%ld c1=%ld c2=%ld c3=%ld c4=%ld c5=%ld c6=%ld c7=%ld | OVF=%d RXdma=%lu/s\r\n",
+                (long)pk[0], (long)pk[1], (long)pk[2], (long)pk[3],
+                (long)pk[4], (long)pk[5], (long)pk[6], (long)pk[7], ovf, rx_per_sec);
+        UART_Print(uart_buf);
+      }
 
       // LED dimmer: initialize DWT reference on first heartbeat
       if (last_dimmer_dwt == 0) last_dimmer_dwt = DWT->CYCCNT;
@@ -1759,6 +1815,26 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
  * per-channel delay offset, applies gain and mute. Single beam (L only) for now.
  */
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset) {
+  /* ADC monitor mode: play the live digitized ADC straight out the DACs.
+   * DAC channel ch ← ADC channel (ch_offset+ch), most recent samples, boosted
+   * so the low-level capture is audible, then clamped to 24-bit full scale. */
+  if (adc_monitor_enabled) {
+    uint32_t wp = delay_write_pos;
+    for (uint32_t i = 0; i < samples; i++) {
+      uint32_t read_pos = (wp - samples + i) & DELAY_LINE_MASK;
+      for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+        uint32_t src = ch_offset + ch;
+        if (src > 7) src = 0;                       // only ADC ch0-7 exist
+        int32_t s = delay_line[src][read_pos] >> 8; // 32-bit ADC → 24-bit
+        s <<= adc_monitor_shift;                    // gain boost
+        if (s > 8388607) s = 8388607;               // clamp to +FS
+        else if (s < -8388608) s = -8388608;        // clamp to -FS
+        buffer[i * AUDIO_CHANNELS + ch] = s;
+      }
+    }
+    return;
+  }
+
   /* Test tone mode: 1kHz sine on all 8 channels, bypasses beamforming */
   if (test_tone_enabled) {
     uint32_t phase = test_tone_phase % 48;
@@ -1932,6 +2008,7 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai) {
 void HAL_SAI_RxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
   if (hsai->Instance == SAI3_Block_B) {
     rx_3b_first_half_ready = 1;
+    cb_rx3b_count++;
     __DSB();
   }
 }
@@ -1943,6 +2020,7 @@ void HAL_SAI_RxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
 void HAL_SAI_RxCpltCallback(SAI_HandleTypeDef *hsai) {
   if (hsai->Instance == SAI3_Block_B) {
     rx_3b_second_half_ready = 1;
+    cb_rx3b_count++;
     __DSB();
   }
 }
