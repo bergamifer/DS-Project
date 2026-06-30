@@ -34,8 +34,9 @@
 #define BLINK_GPIO       GPIO_NUM_10   // LED en GPIO10 (DS9 board)
 #define BLINK_PERIOD_MS  500           // 500ms ON / 500ms OFF = 1Hz
 
-#define WIFI_SSID        "CasaBergesi 2.4GHz-2.4GHz"
-#define WIFI_PASS        "12943801"
+// WiFi credentials live in secrets.h (gitignored). Copy secrets.h.example to
+// secrets.h and fill in your network — keeps passwords out of the public repo.
+#include "secrets.h"
 #define DEVICE_ID        "DS_01"
 
 // UART0: link con STM32. DS9 PCB: GPIO0→PA1(STM32 RX), GPIO1→PA0(STM32 TX)

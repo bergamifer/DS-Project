@@ -104,3 +104,7 @@ __pycache__/
 
 ### Databases ###
 *.db
+
+### Local secrets — WiFi credentials etc., NEVER commit (public repo) ###
+secrets.h
+firmware_esp32c3/main/secrets.h
