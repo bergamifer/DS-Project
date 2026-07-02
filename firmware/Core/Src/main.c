@@ -600,7 +600,26 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
     // ===== Deferred buffer fill: beamform from delay line =====
-    // ISR sets flag, we process here in main context
+    // ISR sets flag, we process here in main context.
+    //
+    // SAI3_B RX must run BEFORE the 4 TX fills below: all 4 TX groups read
+    // delay_write_pos independently, so if RX advanced it between two TX
+    // fills within the same pass, those groups would read different time
+    // windows — a phase skew across DAC banks that's silent in passthrough
+    // (delay=0) but would break beamforming once real per-channel delays
+    // are in use. Processing RX first makes wp stable for the rest of
+    // this loop iteration, so all 4 TX fills see the same snapshot.
+    if (rx_3b_first_half_ready) {
+      rx_3b_first_half_ready = 0;
+      __DSB();
+      Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
+    }
+    if (rx_3b_second_half_ready) {
+      rx_3b_second_half_ready = 0;
+      __DSB();
+      Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
+    }
+
     // SAI1_A: channels 0-7
     if (need_fill_first_half) {
       need_fill_first_half = 0;
@@ -667,18 +686,6 @@ int main(void)
       __DSB();
       Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
       __DSB();
-    }
-
-    // SAI3_B RX: deinterleave 8-channel ADC into delay lines
-    if (rx_3b_first_half_ready) {
-      rx_3b_first_half_ready = 0;
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
-    }
-    if (rx_3b_second_half_ready) {
-      rx_3b_second_half_ready = 0;
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
     }
 
     // ===== Check for new ESP32 config → apply to beam_config =====
@@ -816,44 +823,13 @@ int main(void)
           UART_Print(uart_buf);
         }
 
-        // TX buffer dump (slot 0 of frame 2) for the 4 SAI blocks, plus their
-        // fill-callback counts. If a buffer reads 0x00000000 and its count is
-        // not advancing, that SAI's DMA callbacks aren't firing → its DACs
-        // output the initial silence (this localizes "ch8-31 silent").
-        sprintf(uart_buf, "     TXbuf A1=0x%08lX 1B=0x%08lX 2A=0x%08lX 2B=0x%08lX\r\n",
-                (uint32_t)audio_buffer[16], (uint32_t)audio_buffer_1b[16],
-                (uint32_t)audio_buffer_2a[16], (uint32_t)audio_buffer_2b[16]);
-        UART_Print(uart_buf);
-        sprintf(uart_buf, "     fills/s A1=%lu 1B=%lu 2A=%lu 2B=%lu\r\n",
-                cb_a1_count, cb_1b_count, cb_2a_count, cb_2b_count);
-        UART_Print(uart_buf);
-
-        // ADC RX dump (AK5538 → SAI3_B DMA), frame 2 = indices 16-23.
-        // Floating inputs → small noise values; injected tone → large swings.
-        sprintf(uart_buf, "     ADC ch0-3: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
-                (uint32_t)audio_buffer_3b_rx[16], (uint32_t)audio_buffer_3b_rx[17],
-                (uint32_t)audio_buffer_3b_rx[18], (uint32_t)audio_buffer_3b_rx[19]);
-        UART_Print(uart_buf);
-        sprintf(uart_buf, "     ADC ch4-7: 0x%08lX 0x%08lX 0x%08lX 0x%08lX\r\n",
-                (uint32_t)audio_buffer_3b_rx[20], (uint32_t)audio_buffer_3b_rx[21],
-                (uint32_t)audio_buffer_3b_rx[22], (uint32_t)audio_buffer_3b_rx[23]);
-        UART_Print(uart_buf);
-
-        // ADC ch0 min/max over the first half-buffer (480 frames = 10ms):
-        // shows the amplitude of any signal ≥100Hz at a glance.
-        // Floating input → ±full-scale (hum). Grounded input → ~0.
-        // Injected tone → symmetric min/max at the tone's amplitude.
-        {
-          int32_t mn = INT32_MAX, mx = INT32_MIN;
-          for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
-            int32_t v = audio_buffer_3b_rx[f * ADC_CHANNELS];  // ch0
-            if (v < mn) mn = v;
-            if (v > mx) mx = v;
-          }
-          sprintf(uart_buf, "     ADC ch0 min=%ld max=%ld (24-bit: %ld..%ld)\r\n",
-                  (long)mn, (long)mx, (long)(mn >> 8), (long)(mx >> 8));
-          UART_Print(uart_buf);
-        }
+        // TXbuf/fills-per-SAI/ADC hex dump lines removed: they were bring-up
+        // aids for the "ch8-31 silent" and "ADC railed at ±FS" bugs, both
+        // root-caused and fixed. Blocking UART7 for ~50ms every 10th
+        // heartbeat was costing ~15 spurious underruns per verbose print
+        // (see comment above `verbose` — this loop has no UART7 DMA channel,
+        // so trimming the block is the cheap fix). ADCpk above still gives a
+        // live per-channel peak every second for input→slot mapping.
       }
 
       // Check SAI status
