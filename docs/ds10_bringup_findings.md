@@ -110,6 +110,20 @@ Detectado en revisión de código antes del primer flash: el firmware tenía la 
 
 ---
 
+## Hallazgo #8 — Validación completa 8ch ADC + carrera de `delay_write_pos` + heartbeat bloqueante (2026-07-02)
+
+**Validación de los 8 canales del AK5538 (no solo c0):** tras el fix del CKS (Hallazgo previo, ver memoria del proyecto), se probó tocar/acercar antena en las 8 entradas físicas, no solo c0. Los 8 canales muestran picos claros y no-railed al tocarlos (ej. c4=8256, c5=9306, c6=1374, c7=2240 — muy por debajo de full-scale ±8.388.607), confirmando el front-end analógico completo de 8 canales operativo, no solo el subconjunto probado originalmente.
+
+**Carrera de `delay_write_pos` (bug latente, aún no manifestado):** en `Fill_Audio_Beamform()`, los 4 fills TX (SAI1_A/1B/2A/2B) leían `delay_write_pos` cada uno por separado, y `Process_ADC_Half` (RX) se procesaba DESPUÉS de los 4 en el loop principal. Si el RX avanzaba el puntero entre dos fills TX de la misma pasada, dos bancos de 8 canales podían leer ventanas de tiempo distintas — invisible hoy en modo passthrough (delay=0) pero rompería la coherencia de fase entre bancos de DAC en cuanto se activen delays reales de beamforming. Encontrado en una revisión de arquitectura (asistida por IA, modelo Fable) del pipeline SAI/DMA.
+
+**Fix:** reordenado el loop principal para procesar RX *antes* que los 4 TX, de forma que todos comparten el mismo `wp` dentro de la misma pasada. Verificado sin regresión: `Err=0` y jitter ~0µs estables en test de 9.5+ minutos corridos.
+
+**Heartbeat verboso bloqueante:** el bloque de diagnóstico de cada 10º heartbeat (`Fill`/`Jitter`/`Temp`/`TXbuf`/`fills-per-SAI`/dumps hex de ADC) bloqueaba UART7 ~50ms → ~15 underruns espurios por bloque (ya documentado en el propio código como trade-off aceptado durante el bring-up). Los dumps de `TXbuf`/`fills-per-SAI`/hex ADC eran ayudas específicas para los bugs ya resueltos de "canales mudos" y "ADC raileado" — se eliminaron, dejando solo `Fill`/`Jitter`/`Temp`. Redujo el costo a ~4 underruns por bloque. El test automático de 60s (que exige `Underruns==0`) sigue marcando `TEST FAILED` por este residual, aunque `Err` y jitter (las métricas que importan) están perfectas — pendiente si se quiere 100% limpio: bajar la frecuencia del bloque de cada 10 a cada 30-60 heartbeats (UART7 no tiene canal DMA asignado, así que no puede hacerse no-bloqueante sin agregar config DMA nueva).
+
+**Roadmap de beamforming real:** a partir de esta revisión de arquitectura se armó un plan de fases (channel walker, RX delay-and-sum, TX steering por geometría, precisión sub-muestra, protocolo ESP32) documentado en [beamforming_roadmap.md](beamforming_roadmap.md).
+
+---
+
 ## Otros datos verificados en el bring-up
 
 | Item | Resultado |
@@ -120,7 +134,7 @@ Detectado en revisión de código antes del primer flash: el firmware tenía la 
 | `st-flash --reset` | Necesario para que el H7 arranque solo tras flashear |
 | DMA pipeline | 50 Half + 50 Full/s, 0 errores, jitter ~0µs (rango ~100 ciclos @ 480MHz) |
 | Fill time | ~127µs por half-buffer (1.3% CPU) con tono; presupuesto 10ms |
-| Underruns | Solo durante bursts de print verbose (benignos); 1 línea/s = 0 underruns |
+| Underruns | Solo durante bursts de print verbose (benignos); recortado de ~15/bloque a ~4/bloque (2026-07-02) |
 | AK5538 OVF | LOW = OK (confirmado contra datasheet: "Power down status: L") |
 | Formato RX del AK5538 | 24-bit MSB-aligned en slots de 32 (LSB byte = 0x00) |
 

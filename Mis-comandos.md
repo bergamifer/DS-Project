@@ -49,9 +49,7 @@ ls /dev/cu.usb*
 
 screen /dev/cu.usbmodem11102 115200
 
-Salir de screen
-Ctrl-C no funciona porque screen se lo pasa a la sesión serial. Para matar screen:
-
+Para matar screen:
 Ctrl-A y después k, confirmás con y ← este es el atajo
 Alternativa si quedó colgado de otra terminal: screen -ls y screen -X -S <id> quit
 

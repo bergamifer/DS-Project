@@ -2,7 +2,65 @@
 
 **Base:** hallazgos del bring-up DS10 ([ds10_bringup_findings.md](ds10_bringup_findings.md))
 **Criterio:** DS11 es candidata a placa de producción — debe salir funcionando sin bodges ni sorpresas.
-**Última revisión:** 2026-06-12
+**Última revisión:** 2026-07-02 (agregada revisión de netlist DS11 con Fable — ver sección siguiente)
+
+---
+
+## Revisión de circuito DS11 vía netlist (Fable, 2026-07-02)
+
+**Fuente:** análisis del netlist KiCad exportado ([DS11_netlist.net](DS11_netlist.net), 606 componentes / 610 nets, sheet "Master DS11"), asistido por IA (modelo Fable). Revisión de diseño solamente — nada de esto se aplicó todavía al PCB, son recomendaciones a incorporar antes de fabricar.
+
+### 🔴 Crítico — Falta bias/alimentación para micrófonos en J9
+
+Los 4 RJ45 (J9) no tienen ningún rail hacia el conector — todos los pines no-señal van a GND. Con el acople DC (Cc) agregado, el auto-bias interno del AK5538 (~1.25V) queda del lado del chip y no puede polarizar un electret pasivo. Consecuencia: los pods de micrófono deben ser activos/autoalimentados, o hay que agregar bias local (R ~2.2kΩ a 3.3VA del lado J9 del cap) o alimentación por el cable (5VA vía ferrite en un pin del RJ45). Definir según el tipo de mic que se va a usar en producción.
+
+### 🔴 Crítico — Polaridad alternada entre canales pares/impares en la salida
+
+Verificado en los 64 nets DAC→PAM→JSPK: el amp del canal impar de cada banco recibe VOUT+ en IN− (inversión), y su OUT− termina en el pin 1 del conector JSPK (doble inversión → en fase); el canal par entra derecho y su OUT+ va al pin 4. Si el arnés de parlantes asume polaridad uniforme (1=+, 2=−, 3=+, 4=−), la mitad de los parlantes queda en contrafase y destruye el patrón de beamforming. **Acción: verificar contra el arnés antes de armar; test de polaridad físico por canal antes de beamformar (channel walker, ver [beamforming_roadmap.md](beamforming_roadmap.md)).**
+
+### 🔴 Crítico — Mapeo canal lógico → conector físico no es directo
+
+VC (U1/DAC2, SAI2_A ch16-23) tiene un swap: ch1-2→JSPK10 y ch3-4→JSPK09 (invertidos respecto al resto). El firmware necesita una tabla explícita canal DSP → posición física del parlante — sin ella los delays de beamforming apuntan a parlantes equivocados. Direcciones I2C de los 4 PCM1690 confirmadas por strapping y coinciden con firmware (U2=0x98, U3=0x9C, U1=0x9A, U4=0x9E) ✓.
+
+### 🔴 Crítico — MP2315S (buck 24V→5VA) en su límite absoluto de entrada
+
+24V nominal contra 26V máx operativo del MP2315S — margen cero ante cualquier transitorio de cable largo. Los 32 PAM8302A en fase (justo lo que hace un beam) pueden pedir más de los 3A/15W del buck, y un brown-out arrastra todo el sistema (MCU/ADC comparten el mismo rail derivado). Mitigación sin costo para DS11: alimentar a 19-20V en vez de 24V, y/o limitador de potencia global en firmware. Para DS12: buck de 36V/5-6A (MP2338, MPQ8633).
+
+### 🟡 Importante — Front-end de entrada: falta capacitor diferencial
+
+Solo hay 100pF de modo común por pata (a GND); el mismatch entre esos dos caps convierte modo común→diferencial en RF, degradando CMRR. Agregar ~1nF diferencial (P↔N) pegado al ADC, además del acople DC y R serie ya planeados (ver sección de nivel de salida más abajo — la parte de acople DC + R serie ya fue confirmada para agregar en cada placa).
+
+### 🟡 Importante — Rama MCLK del ADC sin terminación serie
+
+Las 4 ramas de MCLK a los DACs tienen 62Ω de amortiguación; la rama al AK5538 (IC3.24) cuelga directo del net compartido (6 cargas a 24.576MHz). Riesgo de ringing si el layout tiene stubs largos — es el chip más sensible a jitter del sistema. Verificar en layout; si hace falta, 22-33Ω cerca de PE2.
+
+### 🟡 Importante — PLL3 fraccional mete jitter en el MCLK compartido
+
+`FRACN=6660` genera spurs que son el techo de rendimiento real del ADC (107dB nominal). Aceptable para voz/PA; no para hi-fi. La placa ya prevé el escape: JP2 permite desconectar PE2 e inyectar MCLK externo desde J5.7 — un oscilador XO de 24.576MHz ahí sería el upgrade limpio para DS12 (requiere firmware en modo MCLK externo).
+
+### 🟡 Importante — +5VA_DAC comparte rail con los 32 amplificadores class-D
+
+Solo separado por ferrite (FB3). El ripple de conmutación de los PAMs a volumen alto puede modular la referencia analógica de los 4 PCM1690. Acción para DS11 física: medir ripple en +5VA_DAC bajo carga; si aparece en el ruido de salida, subir bulk local (100µF) cerca de FB3.
+
+### 🟡 Importante — SNR: el PAM8302A sigue siendo el cuello de botella
+
+Reconfirma el hallazgo ya documentado abajo (sección "Nivel de salida"): -24dB digital para no clipear cuesta ~20dB de rango dinámico del DAC. Un divisor resistivo post-acople (aprovechando los 1kΩ serie ya existentes) recuperaría ~20dB sin re-spin — ítem B4 más abajo.
+
+### 🟢 Confirmado correcto (no tocar)
+
+- ESD PRTR5V0U2X con riel a 3.3VA (no 5V) ✓, filtro RF 470Ω+100pF → 3.4MHz ✓ (más el acople DC + R serie ya decididos)
+- Dominio único de MCLK (mejora estructural real vs DS10): todo frequency-locked a PLL3, la preocupación cross-domain SAI1/SAI3 queda resuelta por diseño
+- VREF del AK5538 (20Ω + 100µF∥0.1µF) sigue el reference design AKM exacto
+- BOOT0: botón K3 + pulldown R14 correctamente wireado
+- Buses de control (AMUTEI/RST/SD) sin conflictos de pin — los errores de DS9/DS10 no se repiten
+- Anti-pop de boot: `/ALL_AMPS/SD` con pulldown → los 32 amps arrancan apagados, firmware los habilita al final (correcto)
+- Filtro de reconstrucción DAC (1kΩ+4.7nF, ~34kHz) y snubber de salida (ferrite+220pF) — sin cambios necesarios
+
+### 🟡 A revisar en layout (no visible en netlist)
+
+- Shield de J9 a GND de señal directo — con pods remotos podría armar lazo de tierra audible; si aparece hum, cortar el shield en el pod o pasar a RC a chasis en DS12
+- Retornos de los 32 PAMs no deben cruzar la isla analógica del ADC/DACs
+- AMUTEO wired-OR (1kΩ por DAC a PC10): solo válido si los 4 PCM1690 quedan en open-drain; si no, PC10 ve un divisor ambiguo — confirmar configuración o leer estado por I2C
 
 ---
 
