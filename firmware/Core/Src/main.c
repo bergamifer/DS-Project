@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 #include "uart_protocol.h"
 #include "pcm1690.h"
 #include "pin_definitions.h"
@@ -52,6 +53,37 @@
 #define DELAY_LINE_MASK      (DELAY_LINE_SIZE - 1)
 #define MAX_DELAY_SAMPLES    64       // ~1.33ms @ 48kHz = ~45.7cm at 343 m/s
 #define BEAM_NUM_CHANNELS    32
+
+// ===== RX beamforming (delay-and-sum over the 8 ADC inputs) =====
+#define MIC_COUNT            8
+#define SPEED_OF_SOUND_MM_S  343000.0f
+// PLACEHOLDER geometry: uniform linear array along X, 50mm pitch.
+// EDIT mic_pos_x_mm[] below when the real input/mic geometry is decided —
+// the steering math only depends on that table.
+#define MIC_SPACING_MM       50.0f
+
+// ===== TX beamforming — speaker array geometry (DS 4×8 brick pattern) =====
+// Listener frame, facing the cones: X = to the LISTENER's right, Y = from
+// row 1 toward row 4 (physical up/down TBC by user), Z = out toward listener.
+// Rows 1&3 (r=0,2) aligned; rows 2&4 (r=1,3) shifted +40mm in X.
+// Channel map placeholder: ch = row*8 + col, col 0 = leftmost (row-major) —
+// to be validated with the channel walker on real DS11 hardware.
+#define SPK_ROWS         4
+#define SPK_COLS         8
+#define SPK_X_PITCH_MM   80.0f
+#define SPK_Y_PITCH_MM   160.0f
+#define SPK_ROW_DX_MM    40.0f    // brick offset of rows 2&4 (r=1,3)
+// Array extents: X = 7×80+40 = 600mm (brick offset included), Y = 3×160 =
+// 480mm ⇒ diagonal ≈ 768mm ≈ 108 samples @48kHz. By the triangle inequality
+// no focal point can require a delay spread beyond the diagonal, so 128
+// covers every possible focus. Delay-line bound: delay+480 ≤ 1024 ⇒ ≤544 ✓.
+#define TX_MAX_DELAY_SAMPLES 128
+
+// ===== Channel walker (sequential per-channel test tone) =====
+#define WALKER_SECONDS_PER_CH 1
+// Only U2/DAC0 (ch0-7) is populated on this DS10 — walk 8 channels.
+// Set to 32 on DS11 to validate the full speaker map + JSPK wiring.
+#define WALKER_NUM_CH        8
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -140,6 +172,80 @@ static uint32_t test_tone_phase = 0;
  * then clamped to 24-bit FS. Takes priority over test tone and beamform. */
 static volatile uint8_t adc_monitor_enabled = 1;   /* 1 = live ADC→DAC monitor */
 static volatile uint8_t adc_monitor_shift = 5;     /* gain boost: 5 = ×32 ≈ +30dB */
+
+/* ===== Operating states — cycled with user button K2 (PA4, press = LOW) =====
+ * Flat list: each press advances one state and prints the new one on UART7.
+ *   0 ADC monitor  → 1 channel walker → 2..6 RX beam at preset azimuths → wrap
+ * Exactly one of adc_monitor_enabled / walker_enabled / beam_enabled is set. */
+typedef struct {
+  const char *name;
+  uint8_t monitor, walker, beam;
+  int16_t az_deg;                 // RX beam steering azimuth
+  uint8_t tx;                     // 1 = TX steered output (Phase 2)
+  int16_t fx_mm, fy_mm, fz_mm;    // TX focal point, relative to array center
+} ui_state_t;
+static const ui_state_t ui_states[] = {
+  { .name = "ADC monitor (+30dB)",          .monitor = 1 },
+  { .name = "Channel walker (1s/ch)",       .walker = 1 },
+  { .name = "RX beam az=0 (broadside)",     .beam = 1, .az_deg =   0 },
+  { .name = "RX beam az=+30",               .beam = 1, .az_deg =  30 },
+  { .name = "RX beam az=-30",               .beam = 1, .az_deg = -30 },
+  { .name = "RX beam az=+60",               .beam = 1, .az_deg =  60 },
+  { .name = "RX beam az=-60",               .beam = 1, .az_deg = -60 },
+  // TX steering presets (Phase 2). Source = RX beam at broadside (az=0);
+  // each output channel gets its near-field focal delay. X in the frame of
+  // a LISTENER FACING THE CONES (if L/R turn out mirrored on the real box,
+  // flip the sign of SPK coords — one line). Y toward row 4.
+  { .name = "TX focus center @1m",          .beam = 1, .tx = 1,
+    .fx_mm =    0, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX focus left 0.5m @1m",       .beam = 1, .tx = 1,
+    .fx_mm = -500, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX focus right 0.5m @1m",      .beam = 1, .tx = 1,
+    .fx_mm =  500, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX focus center NEAR 0.3m",    .beam = 1, .tx = 1,
+    .fx_mm =    0, .fy_mm = 0, .fz_mm =  300 },
+};
+#define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
+static volatile uint8_t ui_state_idx = 0;
+
+/* ===== Channel walker state ===== */
+static volatile uint8_t walker_enabled = 0;
+// Frame counter @48kHz; advanced ONLY by the ch_offset==0 (SAI1_A) fill so all
+// 4 banks derive the same active channel. Banks 1B/2A/2B see it post-advance
+// (+480), which is phase-exact here: 480 % 48 == 0 (10 full sine periods).
+static uint32_t walker_frame = 0;
+
+/* ===== RX beam (delay-and-sum) state =====
+ * beam_line[] holds the summed beam in 24-bit scale (delay_line samples are
+ * 32-bit ADC scale, so each term is >>8 before accumulating; the sum of 8 is
+ * then >>3 so a coherent identical signal on all mics comes out at ~unity).
+ * Written by Process_ADC_Half at the same positions/cadence as delay_line,
+ * read by the TX fills exactly like the ADC monitor reads delay_line. */
+static volatile uint8_t beam_enabled = 0;
+static int32_t beam_line[DELAY_LINE_SIZE] __attribute__((aligned(32)));
+static uint16_t rx_delay[MIC_COUNT] = {0};        // per-mic delay in samples
+static volatile int16_t beam_az_deg = 0;
+static volatile uint8_t beam_out_shift = 5;       // output boost, same as monitor
+// Input/mic X positions in mm (linear placeholder — see MIC_SPACING_MM note)
+static float mic_pos_x_mm[MIC_COUNT] = {
+  0.0f * MIC_SPACING_MM, 1.0f * MIC_SPACING_MM, 2.0f * MIC_SPACING_MM,
+  3.0f * MIC_SPACING_MM, 4.0f * MIC_SPACING_MM, 5.0f * MIC_SPACING_MM,
+  6.0f * MIC_SPACING_MM, 7.0f * MIC_SPACING_MM
+};
+
+/* ===== TX steering (Phase 2) state =====
+ * tx_delay[] is deliberately SEPARATE from beam_config.delays[]: the ESP32
+ * config path overwrites beam_config.delays[0..15] on every command (and in
+ * beam mode delays[0..7] double as raw RX delays), so aliasing TX steering
+ * onto it would silently destroy the focus each time a config arrives.
+ * Gains/mutes/master ARE shared from beam_config (per-channel trims). */
+static volatile uint8_t tx_steer_enabled = 0;
+static uint16_t tx_delay[BEAM_NUM_CHANNELS] = {0};   // samples, ≤ TX_MAX_DELAY_SAMPLES
+static int8_t speaker_sign[BEAM_NUM_CHANNELS];       // +1 all — DS11 alternating-
+                                                     // polarity fix goes here later
+static float spk_x_mm[BEAM_NUM_CHANNELS];            // built by Beam_InitTxGeometry
+static float spk_y_mm[BEAM_NUM_CHANNELS];
+static float spk_center_x_mm = 0, spk_center_y_mm = 0;
 
 /* Extra right-shift applied to the -6dBFS sine table.
  * Now 0: the PAM8302A clipping headroom is handled by the PCM1690's own
@@ -253,6 +359,10 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void UART_Print(const char *str);
 static void Print_DMA_Config(void);
+static void Beam_UpdateDelays(int16_t az_deg);
+static void Beam_InitTxGeometry(void);
+static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
+static void UI_ApplyState(uint8_t idx);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -307,7 +417,7 @@ int main(void)
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("PLL3: 24.576MHz MCLK (512xfS) — MckOverSampling=ENABLE\r\n");
   UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");
-  UART_Print("MODE: ADC monitor (live AK5538 -> DAC0/U2, +30dB boost) — hear what you capture\r\n\r\n");
+  UART_Print("MODE: ADC monitor (default). K2 cycles: monitor -> walker -> RX beam -> TX focus\r\n\r\n");
 
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();
@@ -326,6 +436,7 @@ int main(void)
   memset(beam_config.delays, 0, sizeof(beam_config.delays));
   memset(beam_config.gains, 255, sizeof(beam_config.gains));  // 0xFF = unity gain
   beam_config.mutes = 0;
+  Beam_InitTxGeometry();
   UART_Print("Beamforming initialized (delay lines zeroed, gains=max)\r\n");
 
   // === EEPROM init + load saved config ===
@@ -688,6 +799,20 @@ int main(void)
       __DSB();
     }
 
+    // ===== K2 button (PA4, external pull-up, press = LOW): cycle op state =====
+    {
+      static uint8_t k2_prev = 1;
+      static uint32_t k2_change_dwt = 0;
+      uint8_t k2_now = (HAL_GPIO_ReadPin(OPT_SW_K2_PORT, OPT_SW_K2_PIN) == GPIO_PIN_SET);
+      if (k2_now != k2_prev && (DWT->CYCCNT - k2_change_dwt) > (30UL * 480000UL)) {
+        k2_prev = k2_now;                          // 30ms debounce @480MHz
+        k2_change_dwt = DWT->CYCCNT;
+        if (k2_now == 0) {                         // falling edge = press
+          UI_ApplyState((ui_state_idx + 1) % UI_NUM_STATES);
+        }
+      }
+    }
+
     // ===== Check for new ESP32 config → apply to beam_config =====
     if (UART_Protocol_HasNewConfig()) {
       const ds_config_t *cfg = UART_Protocol_GetConfig();
@@ -699,6 +824,15 @@ int main(void)
         beam_config.gains[i] = cfg->gains[i];
       }
       beam_config.mutes = (uint32_t)cfg->mutes;  // lower 16 bits
+      // In RX beam mode, delays[0..7] act as RAW per-mic RX delays —
+      // experimentation path that overrides the computed steering table.
+      if (beam_enabled) {
+        for (uint32_t m = 0; m < MIC_COUNT; m++) {
+          uint16_t d = cfg->delays[m];
+          rx_delay[m] = (d > MAX_DELAY_SAMPLES) ? MAX_DELAY_SAMPLES : d;
+        }
+        UART_Print("BEAM: raw RX delays applied from ESP32 config\r\n");
+      }
       UART_Protocol_PrintConfig();
       UART_Print("Config applied to beamformer\r\n");
 
@@ -792,6 +926,21 @@ int main(void)
                 (long)pk[0], (long)pk[1], (long)pk[2], (long)pk[3],
                 (long)pk[4], (long)pk[5], (long)pk[6], (long)pk[7], ovf, rx_per_sec);
         UART_Print(uart_buf);
+
+        // RX beam meter: peak of the freshest 480 beam samples. With the same
+        // signal injected on all mics: steering at the (electrical) source
+        // → BEAMpk ≈ ADCpk of one channel; steering away → BEAMpk drops.
+        if (beam_enabled) {
+          uint32_t bwp = delay_write_pos;
+          int32_t bpk = 0;
+          for (uint32_t i = 0; i < ADC_BUFFER_SAMPLES; i++) {
+            int32_t v = beam_line[(bwp - ADC_BUFFER_SAMPLES + i) & DELAY_LINE_MASK];
+            if (v < 0) v = -v;
+            if (v > bpk) bpk = v;
+          }
+          sprintf(uart_buf, "     BEAM az=%d pk=%ld\r\n", (int)beam_az_deg, (long)bpk);
+          UART_Print(uart_buf);
+        }
       }
 
       // LED dimmer: initialize DWT reference on first heartbeat
@@ -1764,6 +1913,118 @@ static void Print_DMA_Config(void) {
 }
 
 /**
+ * @brief Recompute per-mic RX delays for a far-field steering angle.
+ * @param az_deg Azimuth in degrees; 0 = broadside, + toward higher mic index.
+ *
+ * τ_m = (x_m · sin(az)) / c, normalized so the smallest delay is 0, rounded
+ * to whole samples @48kHz. Runs only on state/config changes (float math is
+ * fine here — never per-sample). Prints the resulting table (integers only:
+ * nano.specs printf has no %f).
+ */
+static void Beam_UpdateDelays(int16_t az_deg) {
+  float s = sinf((float)az_deg * 3.14159265f / 180.0f);
+  float d[MIC_COUNT];
+  float dmin = 1e9f;
+  for (uint32_t m = 0; m < MIC_COUNT; m++) {
+    d[m] = mic_pos_x_mm[m] * s * (float)AUDIO_SAMPLE_RATE / SPEED_OF_SOUND_MM_S;
+    if (d[m] < dmin) dmin = d[m];
+  }
+  for (uint32_t m = 0; m < MIC_COUNT; m++) {
+    int32_t di = (int32_t)(d[m] - dmin + 0.5f);
+    if (di > MAX_DELAY_SAMPLES) di = MAX_DELAY_SAMPLES;
+    rx_delay[m] = (uint16_t)di;
+  }
+  beam_az_deg = az_deg;
+  sprintf(uart_buf, "BEAM delays (az=%d): [%u %u %u %u %u %u %u %u] samples\r\n",
+          (int)az_deg, rx_delay[0], rx_delay[1], rx_delay[2], rx_delay[3],
+          rx_delay[4], rx_delay[5], rx_delay[6], rx_delay[7]);
+  UART_Print(uart_buf);
+}
+
+/**
+ * @brief Build speaker_pos[32] from the 4×8 brick-pattern array geometry.
+ *
+ * ch = row*8 + col (row-major placeholder — validate with the channel walker
+ * on real DS11 hardware). Row 1 (r=0) = ch0-7 = U2, col 0 = leftmost in the
+ * listener frame. Rows 2&4 (r=1,3) shifted +SPK_ROW_DX_MM in X.
+ * Also computes the array center, the origin for focal-point presets.
+ */
+static void Beam_InitTxGeometry(void) {
+  float sx = 0, sy = 0;
+  for (uint32_t ch = 0; ch < BEAM_NUM_CHANNELS; ch++) {
+    uint32_t r = ch / SPK_COLS, c = ch % SPK_COLS;
+    spk_x_mm[ch] = (float)c * SPK_X_PITCH_MM + ((r & 1) ? SPK_ROW_DX_MM : 0.0f);
+    spk_y_mm[ch] = (float)r * SPK_Y_PITCH_MM;
+    speaker_sign[ch] = 1;
+    sx += spk_x_mm[ch];
+    sy += spk_y_mm[ch];
+  }
+  spk_center_x_mm = sx / BEAM_NUM_CHANNELS;
+  spk_center_y_mm = sy / BEAM_NUM_CHANNELS;
+  sprintf(uart_buf, "TX array: 4x8 brick, X0..%d Y0..%d, center (%d,%d) mm\r\n",
+          (int)(7 * SPK_X_PITCH_MM + SPK_ROW_DX_MM), (int)(3 * SPK_Y_PITCH_MM),
+          (int)spk_center_x_mm, (int)spk_center_y_mm);
+  UART_Print(uart_buf);
+}
+
+/**
+ * @brief Recompute per-speaker TX delays for a near-field focal point.
+ * @param fx_mm,fy_mm,fz_mm Focus relative to the array center (listener
+ *        frame: +X right facing the cones, +Y toward row 4, +Z outward).
+ *
+ * d_k = |p − spk_k| / c; delay_k = round((max_j d_j − d_k) · fs): the
+ * farthest speaker fires first (delay 0), the nearest last, so all
+ * wavefronts arrive at the focus together. Prints one row per line for
+ * geometric sanity-checking. Runs only on state changes (float OK).
+ */
+static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
+  float px = spk_center_x_mm + (float)fx_mm;
+  float py = spk_center_y_mm + (float)fy_mm;
+  float pz = (float)fz_mm;
+  float d[BEAM_NUM_CHANNELS];
+  float dmax = 0;
+  for (uint32_t ch = 0; ch < BEAM_NUM_CHANNELS; ch++) {
+    float dx = px - spk_x_mm[ch], dy = py - spk_y_mm[ch];
+    d[ch] = sqrtf(dx * dx + dy * dy + pz * pz);
+    if (d[ch] > dmax) dmax = d[ch];
+  }
+  for (uint32_t ch = 0; ch < BEAM_NUM_CHANNELS; ch++) {
+    int32_t di = (int32_t)((dmax - d[ch]) * (float)AUDIO_SAMPLE_RATE
+                           / SPEED_OF_SOUND_MM_S + 0.5f);
+    if (di > TX_MAX_DELAY_SAMPLES) di = TX_MAX_DELAY_SAMPLES;
+    tx_delay[ch] = (uint16_t)di;
+  }
+  sprintf(uart_buf, "TX focus (%d,%d,%d)mm rel center — delays/row:\r\n",
+          (int)fx_mm, (int)fy_mm, (int)fz_mm);
+  UART_Print(uart_buf);
+  for (uint32_t r = 0; r < SPK_ROWS; r++) {
+    uint16_t *t = &tx_delay[r * SPK_COLS];
+    sprintf(uart_buf, "  r%lu: %u %u %u %u %u %u %u %u\r\n", (unsigned long)r,
+            t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    UART_Print(uart_buf);
+  }
+}
+
+/**
+ * @brief Switch operating state (K2 button): sets exactly one mode flag.
+ */
+static void UI_ApplyState(uint8_t idx) {
+  const ui_state_t *st = &ui_states[idx];
+  ui_state_idx = idx;
+  walker_enabled = st->walker;
+  tx_steer_enabled = st->tx;
+  if (st->beam && !beam_enabled) memset(beam_line, 0, sizeof(beam_line));
+  beam_enabled = st->beam;
+  adc_monitor_enabled = st->monitor;
+  if (st->beam) Beam_UpdateDelays(st->az_deg);
+  if (st->tx) Beam_UpdateTxFocus(st->fx_mm, st->fy_mm, st->fz_mm);
+  if (st->walker) walker_frame = 0;
+  sprintf(uart_buf, "MODE [%u/%u]: %s\r\n", (unsigned)(idx + 1),
+          (unsigned)UI_NUM_STATES, st->name);
+  UART_Print(uart_buf);
+}
+
+/**
  * @brief Process ADC half-buffer: deinterleave 8ch TDM into delay lines
  * @param rx_buf  Pointer to received interleaved ch0..7 samples (AK5538VN TDM256)
  * @param samples Number of frames (half of ADC_BUFFER_SAMPLES)
@@ -1778,6 +2039,22 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
       delay_line[ch][(wp + i) & DELAY_LINE_MASK] = rx_buf[i * ADC_CHANNELS + ch];
     }
   }
+
+  /* RX delay-and-sum: beam[i] = Σₘ delay_line[m][wp + i − rx_delay[m]] >> 8,
+   * then >>3 so a coherent identical signal on the 8 mics sums to ~unity.
+   * The rx_delay[m] look BACK into history just written/older (≤64 samples,
+   * window is 1024) so no wrap hazard. 8 MAC/sample = 3840 MACs per half —
+   * negligible (~0.1% CPU). Runs in main-loop context, after mic lines. */
+  if (beam_enabled) {
+    for (uint32_t i = 0; i < samples; i++) {
+      int32_t acc = 0;
+      for (uint32_t m = 0; m < MIC_COUNT; m++) {
+        acc += delay_line[m][(wp + i - rx_delay[m]) & DELAY_LINE_MASK] >> 8;
+      }
+      beam_line[(wp + i) & DELAY_LINE_MASK] = acc >> 3;
+    }
+  }
+
   delay_write_pos = (wp + samples) & DELAY_LINE_MASK;
 }
 
@@ -1791,6 +2068,79 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
  * per-channel delay offset, applies gain and mute. Single beam (L only) for now.
  */
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset) {
+  /* Channel walker: 1kHz tone on ONE output channel at a time, advancing every
+   * WALKER_SECONDS_PER_CH. Verifies channel→speaker mapping (and, with a scope
+   * or mic, polarity) one channel per second. Frame counter advances only in
+   * the ch_offset==0 (SAI1_A) call — see walker_frame declaration. */
+  if (walker_enabled) {
+    uint32_t active_ch = (walker_frame / (WALKER_SECONDS_PER_CH * AUDIO_SAMPLE_RATE))
+                         % WALKER_NUM_CH;
+    for (uint32_t i = 0; i < samples; i++) {
+      int32_t s = sine_table_1khz[(walker_frame + i) % 48];
+      for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+        buffer[i * AUDIO_CHANNELS + ch] =
+            (ch_offset + ch == active_ch) ? s : 0;
+      }
+    }
+    if (ch_offset == 0) {
+      walker_frame += samples;
+      // One short line on each channel change (main-loop context, ~3ms UART)
+      static uint32_t last_walker_ch = 0xFFFFFFFF;
+      if (active_ch != last_walker_ch) {
+        last_walker_ch = active_ch;
+        sprintf(uart_buf, "WALKER: ch%lu (DAC%lu slot%lu)\r\n",
+                (unsigned long)active_ch, (unsigned long)(active_ch / 8),
+                (unsigned long)(active_ch % 8));
+        UART_Print(uart_buf);
+      }
+    }
+    return;
+  }
+
+  /* Beam modes: output derived from beam_line (the RX delay-and-sum beam,
+   * 24-bit scale, written by Process_ADC_Half). */
+  if (beam_enabled) {
+    uint32_t wp = delay_write_pos;
+
+    /* TX steered (Phase 2): each output channel plays the beam delayed by
+     * its focal delay (farthest speaker fires first) with per-channel
+     * gain/sign and the global master/mutes — wavefronts converge at the
+     * focal point set by Beam_UpdateTxFocus. */
+    if (tx_steer_enabled) {
+      uint8_t master = beam_config.mute_global ? 0 : beam_config.master_gain;
+      for (uint32_t i = 0; i < samples; i++) {
+        for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+          uint32_t gch = ch_offset + ch;
+          int32_t s = 0;
+          if (master && !((beam_config.mutes >> gch) & 1)) {
+            s = beam_line[(wp - tx_delay[gch] - samples + i) & DELAY_LINE_MASK];
+            s = (s * (int32_t)beam_config.gains[gch]) >> 8;  // 24-bit×255 < 2³¹
+            s = (s * (int32_t)master) >> 8;
+            if (speaker_sign[gch] < 0) s = -s;
+            s <<= beam_out_shift;
+            if (s > 8388607) s = 8388607;
+            else if (s < -8388608) s = -8388608;
+          }
+          buffer[i * AUDIO_CHANNELS + ch] = s;
+        }
+      }
+      return;
+    }
+
+    /* RX beam monitor: the same mono beam on every output channel, boosted
+     * like the ADC monitor. */
+    for (uint32_t i = 0; i < samples; i++) {
+      int32_t s = beam_line[(wp - samples + i) & DELAY_LINE_MASK];
+      s <<= beam_out_shift;
+      if (s > 8388607) s = 8388607;
+      else if (s < -8388608) s = -8388608;
+      for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+        buffer[i * AUDIO_CHANNELS + ch] = s;
+      }
+    }
+    return;
+  }
+
   /* ADC monitor mode: play the live digitized ADC straight out the DACs.
    * DAC channel ch ← ADC channel (ch_offset+ch), most recent samples, boosted
    * so the low-level capture is audible, then clamped to 24-bit full scale. */
