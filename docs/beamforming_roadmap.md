@@ -46,9 +46,26 @@ Nuevo buffer `beam[480]`: por muestra, `beam[i] = Σₘ (mic_gain[m] × delay_li
 
 Pendiente de esta fase: ventana de ganancias (Hann) para sidelobes, comando ESP32 `{az, el, dist, nivel}` (hoy los presets son solo por K2), y la validación acústica con parlantes conectados. La ventana Hann conviene recién cuando se pueda medir el patrón — con 1 solo DAC poblado no hay apertura completa.
 
-### Fase 3 — Precisión sub-muestra (solo si la medición lo pide)
+### Fase 3 — Precisión sub-muestra ✅ interpolación lineal implementada 2026-07-02 (branch `feature/beamforming`)
 
-A 48kHz, 1 muestra = 7.1mm. Para voz (<4kHz) el error de cuantización es ±7° de fase — empezar con delays enteros y medir el patrón antes de complicar. Escalera de upgrade: interpolación lineal (+1 MAC/muestra/canal) → FIR polifásico windowed-sinc 8 taps × 32 fases (8 MAC/muestra/canal, ~3-5% CPU para TX completo 32ch). Dual beam (L+R) duplica un costo que ya es marginal. Calibración por canal (offsets ±2 samples, trim de gain) persistida en EEPROM — el lazo ADC→DAC que ya funciona permite auto-calibración.
+`tx_delay_q8[32]` en punto fijo Q8 (1 LSB = 1/256 de muestra ≈ 0.03mm de camino acústico); `Beam_UpdateTxFocus` conserva la fracción en vez de redondear y el fill TX interpola linealmente entre las dos muestras adyacentes de `beam_line` (intermedio int64 — el Δ×frac desborda int32). Es el primer escalón de la escalera prevista; el FIR polifásico windowed-sinc queda para cuando una medición del patrón lo justifique (a 48kHz el error lineal-vs-sinc solo pesa arriba de ~4kHz). Los delays RX siguen enteros (la geometría de mics es placeholder — no tiene sentido refinar sub-muestra sobre posiciones inventadas). Dual beam: pendiente, sin caso de uso definido todavía. Calibración por canal: cubierta de forma más fuerte por el modo AUTOFOCUS (abajo); persistencia EEPROM de la calibración queda pendiente (el resultado del autofocus es específico de la posición del mic — decidir si vale persistirlo como "último foco" antes de tocar el layout de EEPROM).
+
+### Modo AUTOFOCUS — foco medido con micrófono ✅ implementado 2026-07-02 (branch `feature/beamforming`)
+
+**Idea (del usuario): elegir el punto focal físicamente con un micrófono.** Mic de medición colocado en el punto deseado → ADC input 1 (c0). El modo (estado 12 de K2) escanea: chirp lineal 500Hz→6kHz de 10ms por parlante (uno a la vez, resto en silencio, 100ms de settle entre canales), captura 100ms del mic, y correlaciona contra la referencia — **chunked a 128 lags por pasada del loop (~0.6ms)** para no romper jamás el deadline de audio de 10ms. Por parlante se obtiene: **TOF sub-muestra** (parábola sobre |corr| alrededor del pico, Q8), **polaridad medida** (pico de correlación negativo = parlante invertido → `speaker_sign[k]` — resuelve empíricamente el hallazgo de polaridad alternada del netlist DS11 sin depender del arnés), y **calidad** (pico/promedio ×10; <50 = señal de mic dudosa, se avisa). Con todos los TOF: `delay_k = max(tof) − tof_k` → `tx_delay_q8`. Los offsets fijos del pipeline (espera de buffer TX, group delays del DAC/ADC) son idénticos para todos los parlantes y **se cancelan en los delays relativos** — por eso no hace falta conocerlos. Al terminar, reproduce un tono 1kHz steered con los delays/signos medidos: **el foco queda físicamente en el mic**, y `ADCpk c0` del heartbeat mide el nivel en el foco (mover el mic y ver caer el nivel = validación del patrón). Escanea `CAL_NUM_CH=8` (solo U2 poblado); en DS11 se sube a 32. Re-entrar al modo re-escanea. Scan completo ~2s.
+
+Esto es superior a la calibración "±2 samples de trim" planteada originalmente: no corrige un modelo — **mide el sistema real completo** (geometría, mapeo, polaridad, group delays) de una pasada.
+
+### Control remoto de modos desde el webserver — PENDIENTE (spec para implementar)
+
+Hoy el cambio de modo es solo por botón K2. Para hacerlo remoto (pedido 2026-07-02):
+
+1. **Protocolo UART (ESP32→STM32)** — `uart_protocol.h` ya define framing `AA 55 | cmd | len(2,LE) | payload | checksum | 0D 0A` con `CMD_UPDATE_CFG=0x01`. Agregar:
+   - `CMD_SET_MODE = 0x02`, payload 1 byte = índice de estado (0-11, mismo orden que `ui_states[]`). El STM32 responde ACK/NACK (ya existen `CMD_ACK`/`CMD_NACK`).
+   - `CMD_GET_STATUS = 0x03`, payload 0. Respuesta nueva `CMD_STATUS = 0x04` con payload: `{uint8 mode_idx, uint8 num_modes, int16 beam_az, uint32 underruns, uint8 ovf, int32 adcpk[8]}` — le da al webserver telemetría real para UI.
+   - En el STM32: el handler llama `UI_ApplyState(idx)` (ya es la única puerta de entrada de cambio de modo — K2 usa la misma función, así que no hay estado duplicado).
+2. **ESP32** (`firmware_esp32c3/main/main.c`): endpoint `POST /mode` con JSON `{"mode": N}` → arma la trama `CMD_SET_MODE`; `GET /status` extendido para pedir `CMD_GET_STATUS` por UART y devolver el estado real del STM32 (hoy `/status` solo refleja estado local del ESP32). Los nombres de los modos pueden hardcodearse en el ESP32 (espejo de `ui_states[]`) o agregarse a la respuesta de status — versionar con un byte de versión de protocolo para que ESP32 y STM32 puedan flashearse por separado.
+3. **STM32→ESP32 (estados/eventos)**: hoy el STM32 solo manda debug ASCII por UART4. Definir trama binaria de evento `CMD_EVENT = 0x05` (ej. "scan AUTOFOCUS terminado", "modo cambiado por K2") para que el webserver se entere de cambios locales sin polling.
 
 ### Fase 4 — Protocolo / ESP32 / web
 
