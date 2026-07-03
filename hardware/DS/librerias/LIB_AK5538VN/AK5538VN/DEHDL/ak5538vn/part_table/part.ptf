@@ -1,0 +1,11 @@
+FILE_TYPE = MULTI_PHYS_TABLE;
+
+PART 'AK5538VN'
+CLASS = IC
+{========================================================================================}
+:"MANUFACTURER_NAME", "MANUFACTURER_PART_NUMBER"= "PART_NUMBER", "JEDEC_TYPE", "PACK_TYPE", "MOUSER_PART_NUMBER", "MOUSER_PRICE/STOCK", "DESCRIPTION", "DATASHEET", "HEIGHT";
+{========================================================================================}
+ "Asahi Kasei Microdevices", "AK5538VN" (!) = "", "QFN50P900X900X100-65N", "Quad Flat No-Lead", "412-AK5538VN", "https://www.mouser.co.uk/ProductDetail/Asahi-Kasei-Microdevices/AK5538VN?qs=vvQtp7zwQdPIrFHV6bIVJQ%3D%3D", "ADC, Audio 32 b 768k DSD, PCM 64-QFN (9x9)", "https://www.akm.com/content/dam/documents/products/audio/audio-adc/ak5538vn/ak5538vn-en-datasheet.pdf", "1 mm"
+END_PART
+
+END.

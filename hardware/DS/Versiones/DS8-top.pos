@@ -1,0 +1,46 @@
+### Footprint positions - created on 2026-01-24T16:56:55-0300 ###
+### Printed by KiCad version 9.0.6
+## Unit = mm, Angle = deg.
+## Side : top
+# Ref     Val          Package                                           PosX       PosY       Rot  Side
+C1        10u          C_Elec_5x5.4                                  192.0600   -85.8950    0.0000  top
+C3        100u         CP_Elec_6.3x5.4                               192.0600  -116.3750    0.0000  top
+C6        10u          C_Elec_5x5.4                                  176.0580   -85.8150    0.0000  top
+C7        10u          C_Elec_5x5.4                                  152.9440   -58.2090    0.0000  top
+C8        0.1u         C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   185.5610   -57.8975  -90.0000  top
+C15       1u           C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   147.6100   -56.9390   90.0000  top
+C16       1u           C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   145.8320   -56.8550   90.0000  top
+C18       0.1u         C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   143.2920   -55.3310  -90.0000  top
+C20       0.1u         C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   140.1170   -55.3310  -90.0000  top
+C21       10u          C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   138.4660   -55.3310  -90.0000  top
+C22       10u          C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   139.1010   -68.5390    0.0000  top
+C23       0.1u         C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   139.2280   -70.1470    0.0000  top
+C27       10u          C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   148.1180  -137.4570   90.0000  top
+C29       0.1u         C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   146.3400  -137.4570  -90.0000  top
+C30       0.1u         C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   145.9893  -131.3534   90.0000  top
+C31       22pF         C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   117.5413  -130.2704    0.0000  top
+C36       10u          C_Elec_5x5.4                                  181.3202   -57.8461  -90.0000  top
+C37       10u          C_Elec_5x5.4                                  113.0660   -55.2040   90.0000  top
+C40       1u           C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   175.0420   -53.3830  180.0000  top
+C41       1u           C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   130.8583   -53.1430    0.0000  top
+C42       1u           C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   181.6460   -52.3670  180.0000  top
+C43       1u           C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   118.1460   -52.6640  180.0000  top
+FB1       FerriteBead  L_0603_1608Metric_Pad1.05x0.95mm_HandSolder   185.5610   -63.8400   90.0000  top
+R4        220          R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   151.4200  -124.2490   90.0000  top
+R7        10k          R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   149.0373  -131.3494   90.0000  top
+R8        5.1k         R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   127.7980   -68.2850    0.0000  top
+R9        1M           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   110.6295  -138.2190    0.0000  top
+R12       10k          R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   133.2893  -124.9994   90.0000  top
+R17       33           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   156.7540   -70.1470   90.0000  top
+R22       33           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   121.7020   -66.5910  -90.0000  top
+R25       1k           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   176.2402   -63.8151  -90.0000  top
+R26       1k           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   133.1150   -62.6675    0.0000  top
+R32       1k           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   141.7680   -55.3310   90.0000  top
+R34       1k           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   171.4860   -66.3370   90.0000  top
+R35       1k           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   125.7660   -64.7290    0.0000  top
+R36       1k           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   173.0100   -66.3370   90.0000  top
+R37       1k           R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   126.7820   -66.5070    0.0000  top
+U2        PCM1690      TSSOP-48_6.1x12.5mm_P0.5mm                    168.7520   -59.2775   90.0000  top
+U3        PCM1690      TSSOP-48_6.1x12.5mm_P0.5mm                    124.5460   -58.7600   90.0000  top
+U8        PCM1802      SSOP-20_5.3x7.2mm_P0.65mm                     141.0060   -62.8240  -90.0000  top
+## End

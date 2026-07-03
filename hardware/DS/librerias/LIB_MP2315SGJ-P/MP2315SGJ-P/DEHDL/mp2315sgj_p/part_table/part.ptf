@@ -1,0 +1,11 @@
+FILE_TYPE = MULTI_PHYS_TABLE;
+
+PART 'MP2315SGJ_P'
+CLASS = IC
+{========================================================================================}
+:"MANUFACTURER_NAME", "MANUFACTURER_PART_NUMBER"= "PART_NUMBER", "JEDEC_TYPE", "PACK_TYPE", "MOUSER_PART_NUMBER", "MOUSER_PRICE/STOCK", "DESCRIPTION", "DATASHEET", "HEIGHT";
+{========================================================================================}
+ "Monolithic Power Systems (MPS)", "MP2315SGJ-P" (!) = "", "SOT65P280X100-8N", "SOT23 (8-Pin)", "946-MP2315SGJ-P", "https://www.mouser.co.uk/ProductDetail/Monolithic-Power-Systems-MPS/MP2315SGJ-P?qs=Zwj7mHVHPHRNCucLjW2rNg%3D%3D", "Switching Voltage Regulators 3A 24V Hi Effc.Sync Step Down Converter", "https://www.monolithicpower.com/pub/media/document/MP2315S_r1.0.pdf", "1 mm"
+END_PART
+
+END.

@@ -1,0 +1,1690 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<template-document xmlns="http://www.hsmworks.com/namespace/hsmworks/document/template" version="1.0">
+
+  <user-description></user-description>
+
+  <user-notes></user-notes>
+
+  <iconID id="0"/>
+
+  <priority value="50.000000"/>
+
+  <doubleSided value="false"/>
+
+  <template description="2D Pocket1" isFallback="0" strategy="pocket2d" toolPresetId="{ed6f4fc4-2500-46e2-9a13-316331d98fac}" unit="millimeters" version="178">
+    <tool guid="95592c49-3364-4b7f-873a-5a00ffdb78f1" tool-library-version="36" type="flat end mill" unit="millimeters" version="1.5">
+      <description>6mm Flat Endmill</description>
+      <expressions>
+        <expression parameterKey="tool_material" value="'unspecified'"/>
+        <expression parameterKey="tool_numberOfFlutes" value="2"/>
+      </expressions>
+      <nc break-control="0" diameter-offset="1" length-offset="1" live-tool="1" manual-tool-change="0" number="1" turret="0"/>
+      <coolant mode="disabled"/>
+      <material name="unspecified"/>
+      <body assembly-gauge-length="85.3396" body-length="22.5" coolant-support="no" diameter="6" flute-length="20" number-of-flutes="2" overall-length="63" shaft-diameter="6" shoulder-diameter="6" shoulder-length="20" thread-pitch="0" thread-profile-angle="60"/>
+      <holder description="Maritool CAT40-ER32-2.35" gauge-length="62.8396" product-id="CAT40-ER32-2.35" vendor="Maritool">
+        <section diameter="38.1" length="0"/>
+        <section diameter="50.038" length="3.7592"/>
+        <section diameter="50.038" length="21.2344"/>
+        <section diameter="39.878" length="0"/>
+        <section diameter="39.878" length="4.4704"/>
+        <section diameter="44.45" length="2.286"/>
+        <section diameter="44.45" length="10.795"/>
+        <section diameter="46.99" length="1.27"/>
+        <section diameter="62.0268" length="0"/>
+        <section diameter="63.5508" length="0.762"/>
+        <section diameter="63.5508" length="3.683"/>
+        <section diameter="56.261" length="2.0066"/>
+        <section diameter="56.261" length="2.9972"/>
+        <section diameter="63.5508" length="2.0066"/>
+        <section diameter="63.5508" length="3.6322"/>
+        <section diameter="62.0268" length="0.762"/>
+        <section diameter="44.45" length="0"/>
+        <section diameter="44.45" length="3.175"/>
+      </holder>
+      <motion clockwise="yes" cutting-feedrate="1000" entry-feedrate="1000" exit-feedrate="1000" feed-mode="per-minute" plunge-feedrate="333.33333333333" ramp-angle="2" ramp-feedrate="333.33333333333" ramp-spindle-rpm="19000" retract-feedrate="0" spindle-rpm="19000" transition-feedrate="1000"/>
+      <presets>
+        <preset description="SAMPLE preset for slotting in Aluminum" id="{ed6f4fc4-2500-46e2-9a13-316331d98fac}" name="Default preset">
+          <parameter expression="'disabled'" key="tool_coolant" value="disabled"/>
+          <parameter key="tool_spindleSpeed" value="5000"/>
+          <parameter key="tool_rampSpindleSpeed" value="5000"/>
+          <parameter key="tool_feedCutting" value="1000"/>
+          <parameter key="tool_feedEntry" value="1000"/>
+          <parameter key="tool_feedExit" value="1000"/>
+          <parameter key="tool_feedPlunge" value="333.33333333333331"/>
+          <parameter key="tool_feedTransition" value="1000"/>
+          <parameter key="tool_feedRamp" value="333.33333333333331"/>
+          <parameter key="tool_presetMaterialCategory" value="all"/>
+          <parameter key="tool_presetMaterialQuery" value=""/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for slotting in Aluminum" id="{2f05f455-c098-4964-a246-cbddf0288a8a}" name="Aluminum - Slotting">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="12000"/>
+          <parameter key="tool_rampSpindleSpeed" value="12000"/>
+          <parameter key="tool_feedCutting" value="2388.4329896907216"/>
+          <parameter key="tool_feedEntry" value="2388.4329896907216"/>
+          <parameter key="tool_feedExit" value="2388.4329896907216"/>
+          <parameter key="tool_feedPlunge" value="796.14432989690749"/>
+          <parameter key="tool_feedTransition" value="2388.4329896907216"/>
+          <parameter key="tool_feedRamp" value="2388.4329896907216"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Aluminum"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for roughing in Aluminum" id="{2974ea6b-49f4-4122-a104-138f7effcafe}" name="Aluminum - Roughing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="12000"/>
+          <parameter key="tool_rampSpindleSpeed" value="12000"/>
+          <parameter key="tool_feedCutting" value="2388.4329896907216"/>
+          <parameter key="tool_feedEntry" value="2388.4329896907216"/>
+          <parameter key="tool_feedExit" value="2388.4329896907216"/>
+          <parameter key="tool_feedPlunge" value="796.14432989690749"/>
+          <parameter key="tool_feedTransition" value="2388.4329896907216"/>
+          <parameter key="tool_feedRamp" value="2388.4329896907216"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Aluminum"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for finishing in Aluminum" id="{e83c3b2e-460b-45b1-b746-02b38c0181b9}" name="Aluminum - Finishing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="12000"/>
+          <parameter key="tool_rampSpindleSpeed" value="12000"/>
+          <parameter key="tool_feedCutting" value="3018.0655670103101"/>
+          <parameter key="tool_feedEntry" value="3018.0655670103101"/>
+          <parameter key="tool_feedExit" value="3018.0655670103101"/>
+          <parameter key="tool_feedPlunge" value="1006.0218556701032"/>
+          <parameter key="tool_feedTransition" value="3018.0655670103101"/>
+          <parameter key="tool_feedRamp" value="3018.0655670103101"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Aluminum"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for slotting in Brass" id="{9ad36c27-2f41-4c15-b2a9-3dd540c093f2}" name="Brass - Slotting">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_rampSpindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_feedCutting" value="1286.7065600212843"/>
+          <parameter key="tool_feedEntry" value="1286.7065600212843"/>
+          <parameter key="tool_feedExit" value="1286.7065600212843"/>
+          <parameter key="tool_feedPlunge" value="428.90218667376143"/>
+          <parameter key="tool_feedTransition" value="1286.7065600212843"/>
+          <parameter key="tool_feedRamp" value="1286.7065600212843"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Brass"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for roughing in Brass" id="{c600d577-b8bb-4462-bf5a-705f0182c6f6}" name="Brass - Roughing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_rampSpindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_feedCutting" value="1286.7065600212843"/>
+          <parameter key="tool_feedEntry" value="1286.7065600212843"/>
+          <parameter key="tool_feedExit" value="1286.7065600212843"/>
+          <parameter key="tool_feedPlunge" value="428.90218667376143"/>
+          <parameter key="tool_feedTransition" value="1286.7065600212843"/>
+          <parameter key="tool_feedRamp" value="1286.7065600212843"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Brass"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for finishing in Brass" id="{aeaae811-5142-48ef-bf31-7216976e6b06}" name="Brass - Finishing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_rampSpindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_feedCutting" value="1626.0815040356035"/>
+          <parameter key="tool_feedEntry" value="1626.0815040356035"/>
+          <parameter key="tool_feedExit" value="1626.0815040356035"/>
+          <parameter key="tool_feedPlunge" value="542.02716801186818"/>
+          <parameter key="tool_feedTransition" value="1626.0815040356035"/>
+          <parameter key="tool_feedRamp" value="1626.0815040356035"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Brass"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for slotting in Copper" id="{8204b010-0a4a-41d2-aa17-92a0a53e504f}" name="Copper - Slotting">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="3638.281999080727"/>
+          <parameter key="tool_rampSpindleSpeed" value="3638.281999080727"/>
+          <parameter key="tool_feedCutting" value="579.01795200957804"/>
+          <parameter key="tool_feedEntry" value="579.01795200957804"/>
+          <parameter key="tool_feedExit" value="579.01795200957804"/>
+          <parameter key="tool_feedPlunge" value="193.00598400319265"/>
+          <parameter key="tool_feedTransition" value="579.01795200957804"/>
+          <parameter key="tool_feedRamp" value="579.01795200957804"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Copper"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for roughing in Copper" id="{1ea5f5e1-f8ac-410d-b50f-725fb17ad733}" name="Copper - Roughing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="3638.281999080727"/>
+          <parameter key="tool_rampSpindleSpeed" value="3638.281999080727"/>
+          <parameter key="tool_feedCutting" value="579.01795200957804"/>
+          <parameter key="tool_feedEntry" value="579.01795200957804"/>
+          <parameter key="tool_feedExit" value="579.01795200957804"/>
+          <parameter key="tool_feedPlunge" value="193.00598400319265"/>
+          <parameter key="tool_feedTransition" value="579.01795200957804"/>
+          <parameter key="tool_feedRamp" value="579.01795200957804"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Copper"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for finishing in Copper" id="{6353ca0d-e57b-4657-bbf7-39c9f377ee42}" name="Copper - Finishing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="3638.281999080727"/>
+          <parameter key="tool_rampSpindleSpeed" value="3638.281999080727"/>
+          <parameter key="tool_feedCutting" value="731.73667681602183"/>
+          <parameter key="tool_feedEntry" value="731.73667681602183"/>
+          <parameter key="tool_feedExit" value="731.73667681602183"/>
+          <parameter key="tool_feedPlunge" value="243.91222560534069"/>
+          <parameter key="tool_feedTransition" value="731.73667681602183"/>
+          <parameter key="tool_feedRamp" value="731.73667681602183"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Copper"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for slotting in Low Carbon Steel" id="{76aa7668-7793-4d91-86b7-5d2be4274845}" name="Low Carbon Steel - Slotting">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_rampSpindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_feedCutting" value="554.56469611582497"/>
+          <parameter key="tool_feedEntry" value="554.56469611582497"/>
+          <parameter key="tool_feedExit" value="554.56469611582497"/>
+          <parameter key="tool_feedPlunge" value="184.85489870527499"/>
+          <parameter key="tool_feedTransition" value="554.56469611582497"/>
+          <parameter key="tool_feedRamp" value="554.56469611582497"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Low Carbon Steel"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for roughing in Low Carbon Steel" id="{131fe77f-ecf6-4955-9336-eb14c659c506}" name="Low Carbon Steel - Roughing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_rampSpindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_feedCutting" value="497.82200004741298"/>
+          <parameter key="tool_feedEntry" value="497.82200004741298"/>
+          <parameter key="tool_feedExit" value="497.82200004741298"/>
+          <parameter key="tool_feedPlunge" value="165.94066668247095"/>
+          <parameter key="tool_feedTransition" value="497.82200004741298"/>
+          <parameter key="tool_feedRamp" value="497.82200004741281"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Low Carbon Steel"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for finishing in Low Carbon Steel" id="{5f0ca95f-7921-404d-9a00-419d6f2edfd5}" name="Low Carbon Steel - Finishing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_rampSpindleSpeed" value="8085.0711090682835"/>
+          <parameter key="tool_feedCutting" value="633.24760793429505"/>
+          <parameter key="tool_feedEntry" value="633.24760793429505"/>
+          <parameter key="tool_feedExit" value="633.24760793429505"/>
+          <parameter key="tool_feedPlunge" value="211.08253597809832"/>
+          <parameter key="tool_feedTransition" value="633.24760793429505"/>
+          <parameter key="tool_feedRamp" value="633.24760793429505"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Low Carbon Steel"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for slotting in High Carbon Steel" id="{a3f4ed8a-f6e2-461c-bf82-a49658fce2ac}" name="High Carbon Steel - Slotting">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_rampSpindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_feedCutting" value="202.50092481118529"/>
+          <parameter key="tool_feedEntry" value="202.50092481118529"/>
+          <parameter key="tool_feedExit" value="202.50092481118529"/>
+          <parameter key="tool_feedPlunge" value="67.500308270395095"/>
+          <parameter key="tool_feedTransition" value="202.50092481118529"/>
+          <parameter key="tool_feedRamp" value="202.50092481118529"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="High Carbon Steel"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for roughing in High Carbon Steel" id="{fd5a6afb-6297-4d14-87a4-0b8907e8416d}" name="High Carbon Steel - Roughing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_rampSpindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_feedCutting" value="182.051929578634"/>
+          <parameter key="tool_feedEntry" value="182.051929578634"/>
+          <parameter key="tool_feedExit" value="182.051929578634"/>
+          <parameter key="tool_feedPlunge" value="60.683976526211303"/>
+          <parameter key="tool_feedTransition" value="182.051929578634"/>
+          <parameter key="tool_feedRamp" value="182.051929578634"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="High Carbon Steel"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for finishing in High Carbon Steel" id="{3dc11a61-91f0-41bd-92cf-e86de0746226}" name="High Carbon Steel - Finishing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_rampSpindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_feedCutting" value="233.06629442039721"/>
+          <parameter key="tool_feedEntry" value="233.06629442039721"/>
+          <parameter key="tool_feedExit" value="233.06629442039721"/>
+          <parameter key="tool_feedPlunge" value="77.688764806799043"/>
+          <parameter key="tool_feedTransition" value="233.06629442039721"/>
+          <parameter key="tool_feedRamp" value="233.06629442039721"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="High Carbon Steel"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for slotting in Plastics" id="{2823ca6f-3665-48f4-9fa1-0b61d9f36966}" name="Plastics - Slotting">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="12000"/>
+          <parameter key="tool_rampSpindleSpeed" value="12000"/>
+          <parameter key="tool_feedCutting" value="2398.3793814432988"/>
+          <parameter key="tool_feedEntry" value="2398.3793814432988"/>
+          <parameter key="tool_feedExit" value="2398.3793814432988"/>
+          <parameter key="tool_feedPlunge" value="799.45979381443306"/>
+          <parameter key="tool_feedTransition" value="2398.3793814432988"/>
+          <parameter key="tool_feedRamp" value="2398.3793814432988"/>
+          <parameter key="tool_presetMaterialCategory" value="plastic"/>
+          <parameter key="tool_presetMaterialQuery" value="Plastics"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for roughing in Plastics" id="{49fe2231-5c58-4323-91d1-88ebc10d4564}" name="Plastics - Roughing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="12000"/>
+          <parameter key="tool_rampSpindleSpeed" value="12000"/>
+          <parameter key="tool_feedCutting" value="2398.3793814432988"/>
+          <parameter key="tool_feedEntry" value="2398.3793814432988"/>
+          <parameter key="tool_feedExit" value="2398.3793814432988"/>
+          <parameter key="tool_feedPlunge" value="799.45979381443306"/>
+          <parameter key="tool_feedTransition" value="2398.3793814432988"/>
+          <parameter key="tool_feedRamp" value="2398.3793814432988"/>
+          <parameter key="tool_presetMaterialCategory" value="plastic"/>
+          <parameter key="tool_presetMaterialQuery" value="Plastics"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for finishing in Plastics" id="{e7cb1913-8694-4016-b8f4-0b8e22065a66}" name="Plastics - Finishing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="12000"/>
+          <parameter key="tool_rampSpindleSpeed" value="12000"/>
+          <parameter key="tool_feedCutting" value="3003.1459793814438"/>
+          <parameter key="tool_feedEntry" value="3003.1459793814438"/>
+          <parameter key="tool_feedExit" value="3003.1459793814438"/>
+          <parameter key="tool_feedPlunge" value="1001.0486597938143"/>
+          <parameter key="tool_feedTransition" value="3003.1459793814438"/>
+          <parameter key="tool_feedRamp" value="3003.1459793814438"/>
+          <parameter key="tool_presetMaterialCategory" value="plastic"/>
+          <parameter key="tool_presetMaterialQuery" value="Plastics"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for slotting in Stainless Steel" id="{18d85e9d-c9a3-4070-ba3b-e762bcebb5b4}" name="Stainless Steel - Slotting">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_rampSpindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_feedCutting" value="202.50092481118529"/>
+          <parameter key="tool_feedEntry" value="202.50092481118529"/>
+          <parameter key="tool_feedExit" value="202.50092481118529"/>
+          <parameter key="tool_feedPlunge" value="67.500308270395095"/>
+          <parameter key="tool_feedTransition" value="202.50092481118529"/>
+          <parameter key="tool_feedRamp" value="202.50092481118529"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Stainless Steel"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for roughing in Stainless Steel" id="{a6d65de3-3ea7-4b34-b8ce-79b0c9806952}" name="Stainless Steel - Roughing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_rampSpindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_feedCutting" value="182.051929578634"/>
+          <parameter key="tool_feedEntry" value="182.051929578634"/>
+          <parameter key="tool_feedExit" value="182.051929578634"/>
+          <parameter key="tool_feedPlunge" value="60.683976526211303"/>
+          <parameter key="tool_feedTransition" value="182.051929578634"/>
+          <parameter key="tool_feedRamp" value="182.051929578634"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Stainless Steel"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for finishing in Stainless Steel" id="{c6e8e0be-b511-4c6b-b132-02cabd39ad35}" name="Stainless Steel - Finishing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_rampSpindleSpeed" value="3234.028443627315"/>
+          <parameter key="tool_feedCutting" value="233.06629442039721"/>
+          <parameter key="tool_feedEntry" value="233.06629442039721"/>
+          <parameter key="tool_feedExit" value="233.06629442039721"/>
+          <parameter key="tool_feedPlunge" value="77.688764806799043"/>
+          <parameter key="tool_feedTransition" value="233.06629442039721"/>
+          <parameter key="tool_feedRamp" value="233.06629442039721"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Stainless Steel"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for slotting in Titanium" id="{d71df74c-cfdc-4d97-9c76-24440431f606}" name="Titanium - Slotting">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="2425.5213327204851"/>
+          <parameter key="tool_rampSpindleSpeed" value="2425.5213327204851"/>
+          <parameter key="tool_feedCutting" value="259.45931724058761"/>
+          <parameter key="tool_feedEntry" value="259.45931724058761"/>
+          <parameter key="tool_feedExit" value="259.45931724058761"/>
+          <parameter key="tool_feedPlunge" value="86.486439080195865"/>
+          <parameter key="tool_feedTransition" value="259.45931724058761"/>
+          <parameter key="tool_feedRamp" value="259.45931724058761"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Titanium"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for roughing in Titanium" id="{bc1d614a-788a-4964-b96a-fb6fbc84c630}" name="Titanium - Roughing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="2425.5213327204851"/>
+          <parameter key="tool_rampSpindleSpeed" value="2425.5213327204851"/>
+          <parameter key="tool_feedCutting" value="258.45410118310963"/>
+          <parameter key="tool_feedEntry" value="258.45410118310963"/>
+          <parameter key="tool_feedExit" value="258.45410118310963"/>
+          <parameter key="tool_feedPlunge" value="86.151367061036552"/>
+          <parameter key="tool_feedTransition" value="258.45410118310963"/>
+          <parameter key="tool_feedRamp" value="258.45410118310963"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Titanium"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+        <preset description="SAMPLE preset for finishing in Titanium" id="{24467502-c563-412f-bfae-07566919a4db}" name="Titanium - Finishing">
+          <parameter key="tool_coolant" value="flood"/>
+          <parameter key="tool_spindleSpeed" value="2425.5213327204851"/>
+          <parameter key="tool_rampSpindleSpeed" value="2425.5213327204851"/>
+          <parameter key="tool_feedCutting" value="259.45931724058761"/>
+          <parameter key="tool_feedEntry" value="259.45931724058761"/>
+          <parameter key="tool_feedExit" value="259.45931724058761"/>
+          <parameter key="tool_feedPlunge" value="86.486439080195865"/>
+          <parameter key="tool_feedTransition" value="259.45931724058761"/>
+          <parameter key="tool_feedRamp" value="259.45931724058761"/>
+          <parameter key="tool_presetMaterialCategory" value="metal"/>
+          <parameter key="tool_presetMaterialQuery" value="Titanium"/>
+          <parameter key="tool_stepdown" value="18"/>
+          <parameter key="tool_stepover" value="1.8"/>
+          <parameter key="tool_rampAngle" value="2"/>
+        </preset>
+      </presets>
+    </tool>
+    <parameter expression="'specific'" name="tool_selectionMethod"/>
+    <parameter expression="'exact'" name="tool_searchMethod"/>
+    <parameter expression="10mm" name="tool_exactDiameter"/>
+    <parameter expression="1.0" name="tool_diameterRatio"/>
+    <parameter expression="0.1mm" name="tool_searchTolerance"/>
+    <parameter expression="5mm" name="tool_minDiameter"/>
+    <parameter expression="10mm" name="tool_maxDiameter"/>
+    <parameter expression="0.5" name="tool_minDiameterRatio"/>
+    <parameter expression="1.0" name="tool_maxDiameterRatio"/>
+    <parameter expression="false" name="tool_checkLengthBelowHolder"/>
+    <parameter expression="0mm" name="tool_minLengthBelowHolder"/>
+    <parameter expression="30mm" name="tool_maxLengthBelowHolder"/>
+    <parameter expression="'flat end mill'" name="tool_type"/>
+    <parameter expression="'tapered_bull_nose'" name="tool_taperedType"/>
+    <parameter expression="'millimeters'" name="tool_unit"/>
+    <parameter expression="1" name="tool_number"/>
+    <parameter expression="tool_number" name="tool_diameterOffset"/>
+    <parameter expression="tool_number" name="tool_lengthOffset"/>
+    <parameter expression="tool_number" name="tool_compensationOffset"/>
+    <parameter expression="0" name="tool_turret"/>
+    <parameter expression="false" name="tool_manualToolChange"/>
+    <parameter expression="false" name="tool_breakControl"/>
+    <parameter expression="true" name="tool_live"/>
+    <parameter expression="'unspecified'" name="tool_material"/>
+    <parameter expression="'6mm Flat Endmill'" name="tool_description"/>
+    <parameter expression="''" name="tool_comment"/>
+    <parameter expression="''" name="tool_vendor"/>
+    <parameter expression="''" name="tool_productId"/>
+    <parameter expression="''" name="tool_productLink"/>
+    <parameter expression="6." name="tool_diameter"/>
+    <parameter expression="tool_diameter + 2*tool_fluteLength*Math.tan(tool_taperAngle)" name="tool_maximumCuttingDiameter"/>
+    <parameter expression="0.0" name="tool_tipDiameter"/>
+    <parameter expression="0.0" name="tool_tipOffset"/>
+    <parameter expression="0.0" name="tool_cornerRadius"/>
+    <parameter expression="0.0" name="tool_taperAngle"/>
+    <parameter expression="(tool_type == 'counter sink') ? 90.0deg : ((tool_type == 'spot drill') ? 120deg : 118.0deg)" name="tool_tipAngle"/>
+    <parameter expression="tool_type == 'thread mill' ? 'point' : 'round'" name="tool_threadTipType"/>
+    <parameter expression="tool_type == 'thread mill' ? tool_threadPitch / 4 : tool_maximumThreadPitch / 8" name="tool_threadTipWidth"/>
+    <parameter expression="(((tool_type == 'thread mill' ? tool_threadPitch / 4 : tool_maximumThreadPitch / (tool_internalThread ? 8 : 4))) / 2) / Math.cos(tool_threadProfileAngle / 2 radians)" name="tool_threadTipRadius"/>
+    <parameter expression="60." name="tool_threadProfileAngle"/>
+    <parameter expression="0.0" name="tool_tipLength"/>
+    <parameter expression="20." name="tool_fluteLength"/>
+    <parameter expression="tool_fluteLength" name="tool_shoulderLength"/>
+    <parameter expression="22.5" name="tool_bodyLength"/>
+    <parameter expression="63." name="tool_overallLength"/>
+    <parameter expression="tool_diameter" name="tool_shaftDiameter"/>
+    <parameter expression="0.0" name="tool_threadPitch"/>
+    <parameter expression="1.0mm" name="tool_maximumThreadPitch"/>
+    <parameter expression="1.0mm" name="tool_minimumThreadPitch"/>
+    <parameter expression="1" name="tool_numberOfTeeth"/>
+    <parameter expression="2" name="tool_numberOfFlutes"/>
+    <parameter expression="6." name="tool_shoulderDiameter"/>
+    <parameter expression="(tool_type == 'circle segment barrel' ? (tool_diameter / 12) : (tool_type == 'circle segment taper' ? (tool_diameter / 2) : 0mm))" name="tool_upperRadius"/>
+    <parameter expression="(tool_type == 'circle segment taper' ? (tool_diameter * 31.25) : (tool_type == 'circle segment oval' ? (tool_diameter * 15) : (tool_type == 'circle segment barrel' ? (tool_diameter * 4) : (tool_diameter * 0.6))))" name="tool_profileRadius"/>
+    <parameter expression="(tool_type == 'circle segment taper' ? (tool_upperRadius / 2) : ((tool_type == 'circle segment barrel' ? tool_upperRadius : ((tool_type == 'circle segment lens' ? (tool_diameter): (tool_diameter / 6))))))" name="tool_lowerRadius"/>
+    <parameter expression="tool_fluteLength / 2" name="tool_axialDistance"/>
+    <parameter expression="1mm" name="tool_chamferWidth"/>
+    <parameter expression="45deg" name="tool_chamferAngle"/>
+    <parameter expression="'Maritool CAT40-ER32-2.35'" name="holder_description"/>
+    <parameter expression="''" name="holder_comment"/>
+    <parameter expression="'Maritool'" name="holder_vendor"/>
+    <parameter expression="'CAT40-ER32-2.35'" name="holder_productId"/>
+    <parameter expression="''" name="holder_productLink"/>
+    <parameter expression="''" name="holder_libraryName"/>
+    <parameter expression="62.8396" name="tool_holderGaugeLength"/>
+    <parameter expression="85.3396" name="tool_assemblyGaugeLength"/>
+    <parameter expression="19000.00 rpm" name="tool_spindleSpeed"/>
+    <parameter expression="tool_isTurning ? (tool_unit == 'millimeters' ? 25mm : 1.0in) : tool_diameter" name="tool_stockDiameter"/>
+    <parameter expression="tool_diameter * Math.PI * tool_spindleSpeed" name="tool_surfaceSpeed"/>
+    <parameter expression="tool_spindleSpeed" name="tool_rampSpindleSpeed"/>
+    <parameter expression="1000." name="tool_feedCutting"/>
+    <parameter expression="tool_spindleSpeed > 0 ? tool_feedCutting/(tool_spindleSpeed * tool_numberOfFlutes) : 0.0" name="tool_feedPerTooth"/>
+    <parameter expression="tool_type == 'probe' || tool_isDepositing ? 1000mmpm : tool_feedCutting" name="tool_feedEntry"/>
+    <parameter expression="tool_isDepositing ? 1000mmpm : tool_feedCutting" name="tool_feedExit"/>
+    <parameter expression="tool_feedCutting" name="tool_feedTransition"/>
+    <parameter expression="tool_feedPlunge" name="tool_feedRamp"/>
+    <parameter expression="(tool_type=='drill' || tool_type=='reamer' || tool_isDepositing)?(1000mmpm):(tool_feedCutting/3)" name="tool_feedPlunge"/>
+    <parameter expression="tool_spindleSpeed > 0 ? tool_feedPlunge/tool_spindleSpeed : 0.0" name="tool_feedPerRevolution"/>
+    <parameter expression="tool_feedPlunge" name="tool_feedRetract"/>
+    <parameter expression="true" name="tool_clockwise"/>
+    <parameter expression="'disabled'" name="tool_coolant"/>
+    <parameter expression="'none'" name="featureOperationId"/>
+    <parameter expression="false" name="tab_5axis"/>
+    <parameter expression="'three_axis'" name="multiAxisMachiningType"/>
+    <parameter expression="false" name="overrideToolView"/>
+    <parameter expression="'axesZX'" name="view_orientation_mode"/>
+    <parameter expression="false" name="view_orientation_axisZ"/>
+    <parameter expression="false" name="view_orientation_flipZ"/>
+    <parameter expression="'wcs'" name="view_orientation_axesZX_unselected_default"/>
+    <parameter expression="'wcs'" name="view_orientation_axesZY_unselected_default"/>
+    <parameter expression="'wcs'" name="view_orientation_axesXY_unselected_default"/>
+    <parameter expression="false" name="view_orientation_cSys"/>
+    <parameter expression="false" name="view_orientation_surfaceNormal"/>
+    <parameter expression="false" name="view_orientation_axisX"/>
+    <parameter expression="false" name="view_orientation_flipX"/>
+    <parameter expression="false" name="view_orientation_axisY"/>
+    <parameter expression="false" name="view_orientation_flipY"/>
+    <parameter expression="false" name="view_align_to_view"/>
+    <parameter expression="false" name="view_align_to_view_direction"/>
+    <parameter expression="'turn_and_tilt'" name="view_select_angles"/>
+    <parameter expression="0.0" name="view_turn_from_recipe"/>
+    <parameter expression="0.0" name="view_tilt_from_recipe"/>
+    <parameter expression="view_select_angles == 'machine_angles'" name="view_machine_angles"/>
+    <parameter expression="(view_orientation_mode == 'surfaceNormalX' || view_orientation_mode == 'surfaceNormalY') ? 'surfacePointOrigin' : 'jobOrigin'" name="view_origin_mode"/>
+    <parameter expression="false" name="view_origin_point"/>
+    <parameter expression="'top center'" name="view_origin_boxPoint"/>
+    <parameter expression="true" name="unwrap"/>
+    <parameter expression="false" name="wrap_cylinder"/>
+    <parameter expression="0mm" name="wrap_nominalRadius_offset"/>
+    <parameter expression="false" name="tiltTool"/>
+    <parameter expression="true" name="usePolarWhenNecessary"/>
+    <parameter expression="'automatic'" name="polarMode"/>
+    <parameter expression="0deg" name="polarLineAngle"/>
+    <parameter expression="true" name="pockets">
+      <CadContours2D name="cadobject">
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+        <CadFacePocket>
+          <Parameters>
+            <Parameter expression="''" name="userDefinedName"/>
+            <Parameter expression="false" name="selectColoredFaces"/>
+            <Parameter expression="-1" name="selectColoredFacesColor"/>
+            <Parameter expression="false" name="selectCoPlanarFaces"/>
+            <Parameter expression="'tangent'" name="extensionMethod"/>
+          </Parameters>
+        </CadFacePocket>
+      </CadContours2D>
+    </parameter>
+    <parameter expression="true" name="pockets_detectOpenPockets"/>
+    <parameter expression="true" name="pockets_connectOpenPockets"/>
+    <parameter expression="true" name="pockets_errorCheck"/>
+    <parameter expression="false" name="pockets_detectOverlaps"/>
+    <parameter expression="false" name="useRestMachining"/>
+    <parameter expression="tool_diameter * 2" name="restMaterialCutterDiameter"/>
+    <parameter expression="0 mm" name="restMaterialCornerRadius"/>
+    <parameter expression="0deg" name="restMaterialTaperAngle"/>
+    <parameter expression="restMaterialCutterDiameter" name="restMaterialShoulderLength"/>
+    <parameter expression="0mm" name="restMaterialStockToLeave"/>
+    <parameter expression="rampType == 'disabled'" name="useStockContours"/>
+    <parameter expression="false" name="stockContours"/>
+    <parameter expression="'from retract height'" name="clearanceHeight_mode"/>
+    <parameter expression="false" name="clearanceHeight_ref"/>
+    <parameter expression="'top'" name="clearanceHeightFromHighest_checkStock"/>
+    <parameter expression="'bottom'" name="clearanceHeightFromLowest_checkStock"/>
+    <parameter expression="'top'" name="clearanceHeightFromHighest_checkModel"/>
+    <parameter expression="'bottom'" name="clearanceHeightFromLowest_checkModel"/>
+    <parameter expression="'top'" name="clearanceHeightFromHighest_checkFixture"/>
+    <parameter expression="'bottom'" name="clearanceHeightFromLowest_checkFixture"/>
+    <parameter expression="10mm" name="clearanceHeight_offset"/>
+    <parameter expression="15." name="clearanceHeight_value"/>
+    <parameter expression="'from stock top'" name="retractHeight_mode"/>
+    <parameter expression="false" name="retractHeight_ref"/>
+    <parameter expression="'top'" name="retractHeightFromHighest_checkStock"/>
+    <parameter expression="'bottom'" name="retractHeightFromLowest_checkStock"/>
+    <parameter expression="'top'" name="retractHeightFromHighest_checkModel"/>
+    <parameter expression="'bottom'" name="retractHeightFromLowest_checkModel"/>
+    <parameter expression="'top'" name="retractHeightFromHighest_checkFixture"/>
+    <parameter expression="'bottom'" name="retractHeightFromLowest_checkFixture"/>
+    <parameter expression="5mm" name="retractHeight_offset"/>
+    <parameter expression="5." name="retractHeight_value"/>
+    <parameter expression="'from top'" name="feedHeight_mode"/>
+    <parameter expression="false" name="feedHeight_ref"/>
+    <parameter expression="'ignore'" name="feedHeightFromHighest_checkStock"/>
+    <parameter expression="'ignore'" name="feedHeightFromLowest_checkStock"/>
+    <parameter expression="'top'" name="feedHeightFromHighest_checkModel"/>
+    <parameter expression="'bottom'" name="feedHeightFromLowest_checkModel"/>
+    <parameter expression="'ignore'" name="feedHeightFromHighest_checkFixture"/>
+    <parameter expression="'ignore'" name="feedHeightFromLowest_checkFixture"/>
+    <parameter expression="5mm" name="feedHeight_offset"/>
+    <parameter expression="5." name="feedHeight_value"/>
+    <parameter expression="'from stock top'" name="topHeight_mode"/>
+    <parameter expression="false" name="topHeight_ref"/>
+    <parameter expression="'top'" name="topHeightFromHighest_checkStock"/>
+    <parameter expression="'bottom'" name="topHeightFromLowest_checkStock"/>
+    <parameter expression="'ignore'" name="topHeightFromHighest_checkModel"/>
+    <parameter expression="'ignore'" name="topHeightFromLowest_checkModel"/>
+    <parameter expression="'ignore'" name="topHeightFromHighest_checkFixture"/>
+    <parameter expression="'ignore'" name="topHeightFromLowest_checkFixture"/>
+    <parameter expression="0mm" name="topHeight_offset"/>
+    <parameter expression="0.0" name="topHeight_value"/>
+    <parameter expression="'from contour'" name="bottomHeight_mode"/>
+    <parameter expression="false" name="bottomHeight_ref"/>
+    <parameter expression="'bottom'" name="bottomHeightFromHighest_checkStock"/>
+    <parameter expression="'ignore'" name="bottomHeightFromLowest_checkStock"/>
+    <parameter expression="'bottom'" name="bottomHeightFromHighest_checkModel"/>
+    <parameter expression="'bottom'" name="bottomHeightFromLowest_checkModel"/>
+    <parameter expression="'ignore'" name="bottomHeightFromHighest_checkFixture"/>
+    <parameter expression="'ignore'" name="bottomHeightFromLowest_checkFixture"/>
+    <parameter expression="0mm" name="bottomHeight_offset"/>
+    <parameter expression="0.0" name="bottomHeight_value"/>
+    <parameter expression="0.1mm" name="tolerance"/>
+    <parameter expression="tolerance * 0.5" name="contourTolerance"/>
+    <parameter expression="tolerance" name="calculationTolerance"/>
+    <parameter expression="0.01*calculationTolerance" name="thinningTolerance"/>
+    <parameter expression="0.01mm" name="chainingTolerance"/>
+    <parameter expression="'left'" name="compensation"/>
+    <parameter expression="0.0" name="minimumCuttingRadius"/>
+    <parameter expression="0" name="fragmentExtensionDistance"/>
+    <parameter expression="false" name="preserveOrder"/>
+    <parameter expression="false" name="bothWays"/>
+    <parameter expression="tool_diameter * 0.6" name="maximumStepover"/>
+    <parameter expression="false" name="useMorphedSpiralMachining"/>
+    <parameter expression="false" name="allowStepoverCusps"/>
+    <parameter expression="0.1mm" name="smoothingDeviation"/>
+    <parameter expression="rampType != 'profile'" name="spiralCircularPockets"/>
+    <parameter expression="true" name="doMultipleDepths"/>
+    <parameter expression="3 mm" name="maximumStepdown"/>
+    <parameter expression="0" name="numberOfFinishingStepdowns"/>
+    <parameter expression="0.2mm" name="finishingStepdown"/>
+    <parameter expression="tool_taperAngle" name="slopeAngle"/>
+    <parameter expression="false" name="onlyFinishFinal"/>
+    <parameter expression="true" name="roughFinal"/>
+    <parameter expression="true" name="useEvenStepdowns"/>
+    <parameter expression="false" name="orderByDepth"/>
+    <parameter expression="false" name="orderByStep"/>
+    <parameter expression="true" name="doFinishingPasses"/>
+    <parameter expression="'computer'" name="compensationType"/>
+    <parameter expression="(numberOfFinishingStepovers > 0) ? Math.min(tool_diameter * 0.05; finishingStepover * 0.95) : (tool_diameter * 0.05)" name="compensationDeltaRadius"/>
+    <parameter expression="0mm" name="finishingSmoothingDeviation"/>
+    <parameter expression="1" name="numberOfFinishingStepovers"/>
+    <parameter expression="Math.min(tool_diameter * 0.1; maximumStepover)" name="finishingStepover"/>
+    <parameter expression="compensationType != 'computer'" name="leadsForAllFinishingPasses"/>
+    <parameter expression="tool_feedCutting" name="finishFeedrate"/>
+    <parameter expression="false" name="nullPass"/>
+    <parameter expression="0mm" name="finishingOverlap"/>
+    <parameter expression="true" name="useStockToLeave"/>
+    <parameter expression="0.5mm" name="stockToLeave"/>
+    <parameter expression="stockToLeave" name="verticalStockToLeave"/>
+    <parameter expression="false" name="simpleStockToLeave"/>
+    <parameter expression="true" name="smoothingFilter"/>
+    <parameter expression="'fitArcs'" name="smoothingFilterMode"/>
+    <parameter expression="0.5mm" name="smoothingFilterMaxSpacing"/>
+    <parameter expression="3deg" name="smoothingFilterMaxAngle"/>
+    <parameter expression="tolerance * 0.1" name="smoothingFilterTolerance"/>
+    <parameter expression="true" name="useFeedOptimization"/>
+    <parameter expression="25deg" name="reducedFeedChange"/>
+    <parameter expression="tool_diameter * 0.05" name="reducedFeedRadius"/>
+    <parameter expression="tool_diameter * 0.2" name="reducedFeedDistance"/>
+    <parameter expression="tool_feedCutting * 0.25" name="reducedFeedrate"/>
+    <parameter expression="true" name="reduceOnlyInnerCorners"/>
+    <parameter expression="false" name="surfaceSpeedOnArcs"/>
+    <parameter expression="100" name="maximumReducedFeedrateInternalArcFinishing"/>
+    <parameter expression="100" name="maximumIncreasedFeedrateExternalArcFinishing"/>
+    <parameter expression="100" name="maximumReducedFeedrateInternalArc"/>
+    <parameter expression="100" name="maximumIncreasedFeedrateExternalArc"/>
+    <parameter expression="multiAxisMachiningType == 'polar' &amp;&amp; usePolarRapidLinks ? 'always' : 'disabled'" name="highFeedrateMode"/>
+    <parameter expression="'always'" name="highFeedrateModeProxy"/>
+    <parameter expression="machine.defined &amp;&amp; machine.maxFeedrate > 0 ? machine.maxFeedrate : Math.max(tool_feedCutting; Math.max(tool_feedEntry; tool_feedExit))" name="highFeedrate"/>
+    <parameter expression="true" name="allowRapidRetract"/>
+    <parameter expression="3.00 mm" name="safeDistance"/>
+    <parameter expression="true" name="keepToolDown"/>
+    <parameter expression="100.00 mm" name="stayDownDistance"/>
+    <parameter expression="0mm" name="liftHeight"/>
+    <parameter expression="false" name="doLeadIn"/>
+    <parameter expression="tool_diameter * 0.1" name="entry_radius"/>
+    <parameter expression="90.0deg" name="entry_sweep"/>
+    <parameter expression="tool_diameter * 0.1" name="entry_distance"/>
+    <parameter expression="false" name="entry_perpendicular"/>
+    <parameter expression="entry_radius" name="entry_verticalRadius"/>
+    <parameter expression="false" name="doLeadOut"/>
+    <parameter expression="true" name="exit_sameAsEntry"/>
+    <parameter expression="tool_diameter * 0.1" name="exit_radius"/>
+    <parameter expression="90.0deg" name="exit_sweep"/>
+    <parameter expression="tool_diameter * 0.1" name="exit_distance"/>
+    <parameter expression="false" name="exit_perpendicular"/>
+    <parameter expression="exit_radius" name="exit_verticalRadius"/>
+    <parameter expression="'plunge'" name="rampType"/>
+    <parameter expression="tool_rampAngle" name="rampAngle"/>
+    <parameter expression="maximumStepdown > 0 ? maximumStepdown : tool_fluteLength" name="maximumRampZStepdown"/>
+    <parameter expression="2.5mm" name="rampClearanceHeight"/>
+    <parameter expression="0" name="rampRadialClearance"/>
+    <parameter expression="Math.max((tool_diameter - 2 * tool_cornerRadius) * 0.95; tool_diameter * 0.25)" name="helicalRampDiameter"/>
+    <parameter expression="Math.max((tool_diameter - 2 * tool_cornerRadius) * 0.5; tool_diameter * 0.25)" name="minimumRampDiameter"/>
+    <parameter expression="false" name="predrillPositions"/>
+    <parameter expression="false" name="entryPositions"/>
+    <parameter expression="false" name="exitPositions"/>
+    <parameter expression="false" name="generate_connections"/>
+    <parameter expression="'full'" name="connections_retraction_type"/>
+    <parameter expression="'plane'" name="connectionMoveClearanceAreaType"/>
+    <parameter expression="'toolAxisZ'" name="connectionMoveClearanceArea_orientation_mode"/>
+    <parameter expression="(connectionMoveClearanceArea_orientation_mode == 'surfaceNormalX' || connectionMoveClearanceArea_orientation_mode == 'surfaceNormalY') ? 'surfacePointOrigin' : 'jobOrigin'" name="connectionMoveClearanceArea_origin_mode"/>
+    <parameter expression="false" name="connectionMoveClearanceArea_origin_point"/>
+    <parameter expression="'from stock top'" name="connectionMoveClearanceAreaHeight_mode"/>
+    <parameter expression="false" name="connectionMoveClearanceAreaHeight_ref"/>
+    <parameter expression="10mm" name="connectionMoveClearanceAreaHeight_offset"/>
+    <parameter expression="10." name="connectionMoveClearanceAreaHeight_value"/>
+    <parameter expression="'from stock od'" name="connectionMoveClearanceAreaCylinderRadius_mode"/>
+    <parameter expression="false" name="connectionMoveClearanceAreaCylinderRadius_ref"/>
+    <parameter expression="'outer diameter'" name="connectionMoveClearanceAreaCylinderRadiusFromOutermost_checkStock"/>
+    <parameter expression="'outer diameter'" name="connectionMoveClearanceAreaCylinderRadiusFromOutermost_checkModel"/>
+    <parameter expression="'outer diameter'" name="connectionMoveClearanceAreaCylinderRadiusFromOutermost_checkFixture"/>
+    <parameter expression="10mm" name="connectionMoveClearanceAreaCylinderRadius_offset"/>
+    <parameter expression="connectionMoveClearanceAreaCylinderRadius_mode == 'radius' ? connectionMoveClearanceAreaCylinderRadius_value : connectionMoveClearanceAreaCylinderRadius_value * 2" name="connectionMoveClearanceAreaCylinderRadius_direct"/>
+    <parameter expression="10." name="connectionMoveClearanceAreaCylinderRadius_value"/>
+    <parameter expression="'from stock od'" name="connectionMoveClearanceAreaSphereRadius_mode"/>
+    <parameter expression="false" name="connectionMoveClearanceAreaSphereRadius_ref"/>
+    <parameter expression="'outer diameter'" name="connectionMoveClearanceAreaSphereRadiusFromOutermost_checkStock"/>
+    <parameter expression="'outer diameter'" name="connectionMoveClearanceAreaSphereRadiusFromOutermost_checkModel"/>
+    <parameter expression="'outer diameter'" name="connectionMoveClearanceAreaSphereRadiusFromOutermost_checkFixture"/>
+    <parameter expression="10mm" name="connectionMoveClearanceAreaSphereRadius_offset"/>
+    <parameter expression="connectionMoveClearanceAreaSphereRadius_mode == 'radius' ? connectionMoveClearanceAreaSphereRadius_value : connectionMoveClearanceAreaSphereRadius_value * 2" name="connectionMoveClearanceAreaSphereRadius_direct"/>
+    <parameter expression="10." name="connectionMoveClearanceAreaSphereRadius_value"/>
+    <parameter expression="'from stock box'" name="connectionMoveClearanceAreaCuboid_mode"/>
+    <parameter expression="true" name="connectionMoveClearanceAreaCuboid_symmetricalOffsets"/>
+    <parameter expression="1230." name="connectionMoveClearanceAreaCuboidPosX_value"/>
+    <parameter expression="10mm" name="connectionMoveClearanceAreaCuboidPosX_offset"/>
+    <parameter expression="10." name="connectionMoveClearanceAreaCuboidNegX_value"/>
+    <parameter expression="10mm" name="connectionMoveClearanceAreaCuboidNegX_offset"/>
+    <parameter expression="2450." name="connectionMoveClearanceAreaCuboidPosY_value"/>
+    <parameter expression="10mm" name="connectionMoveClearanceAreaCuboidPosY_offset"/>
+    <parameter expression="10." name="connectionMoveClearanceAreaCuboidNegY_value"/>
+    <parameter expression="10mm" name="connectionMoveClearanceAreaCuboidNegY_offset"/>
+    <parameter expression="10." name="connectionMoveClearanceAreaCuboidPosZ_value"/>
+    <parameter expression="10mm" name="connectionMoveClearanceAreaCuboidPosZ_offset"/>
+    <parameter expression="22." name="connectionMoveClearanceAreaCuboidNegZ_value"/>
+    <parameter expression="10mm" name="connectionMoveClearanceAreaCuboidNegZ_offset"/>
+    <parameter expression="false" name="use_tool_stepdown"/>
+    <parameter expression="tool_fluteLength * 0.9" name="tool_stepdown"/>
+    <parameter expression="0.2mm" name="tool_finishingStepdown"/>
+    <parameter expression="false" name="use_tool_stepover"/>
+    <parameter expression="tool_diameter * 0.3" name="tool_stepover"/>
+    <parameter expression="tool_diameter * 0.1" name="tool_finishingStepover"/>
+    <parameter expression="'helix'" name="tool_rampType"/>
+    <parameter expression="2." name="tool_rampAngle"/>
+    <parameter expression="false" name="associatedView"/>
+  </template>
+
+</template-document>

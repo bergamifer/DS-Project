@@ -1,0 +1,21 @@
+### Footprint positions - created on 2026-01-24T16:56:55-0300 ###
+### Printed by KiCad version 9.0.6
+## Unit = mm, Angle = deg.
+## Side : bottom
+# Ref     Val        Package                                           PosX       PosY       Rot  Side
+C2        0.1u       C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   181.7730   -84.5450   90.0000  bottom
+C4        0.1u       C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   188.6850  -116.4900    0.0000  bottom
+C5        0.1u       C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   197.7750   -84.6250   90.0000  bottom
+C19       0.1u       C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   141.2600   -61.6810    0.0000  bottom
+C32       22pF       C_0603_1608Metric_Pad1.08x0.95mm_HandSolder   117.9530  -135.7658  -90.0000  bottom
+R1        1k         R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   158.7900  -132.5600    0.0000  bottom
+R2        220        R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   162.7550  -132.5600  180.0000  bottom
+R3        1k         R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   154.0400  -132.5600  180.0000  bottom
+R5        220        R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   127.7980  -115.8670   90.0000  bottom
+R6        5.1k       R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   159.6750  -106.8500  180.0000  bottom
+R10       5.1k       R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   116.4290  -135.7658   90.0000  bottom
+R11       5.1k       R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   119.4770  -135.7658   90.0000  bottom
+R20       33         R_0603_1608Metric_Pad0.98x0.95mm_HandSolder   165.1360   -60.4950  180.0000  bottom
+U5        AP1117-33  SOT-223-3_TabPin2                             176.0580   -85.8150  180.0000  bottom
+U6        AP1117-50  SOT-223-3_TabPin2                             192.0600   -85.8950  180.0000  bottom
+## End
