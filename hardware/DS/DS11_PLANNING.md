@@ -118,5 +118,77 @@ Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agreg
 
 ---
 
-**Last updated**: 2026-06-22
-**Estado**: esquemático DS11 prácticamente cerrado; pendiente layout (placement TVS, pistas 24V), limpieza ERC y gates de fabricación. Reclamo JLCPCB cerrado en USD 355.
+## 8. Checklist final pre-JLCPCB (consolidado 2026-07-03)
+
+> Unifica: este plan (§1-§5), la revisión de netlist asistida (hallazgos y racional en
+> [docs/ds11_upgrades.md](../../docs/ds11_upgrades.md)), y las decisiones tomadas en las
+> sesiones de firmware de julio 2026. Verificado contra el esquemático committeado
+> (commit `e415806`) donde se indica. **Este es EL checklist — no mantener otros.**
+
+### 8.1 Decisiones de esquemático — YA APLICADAS ✅ (verificadas en `AK5538.kicad_sch`)
+
+- [x] Acople DC por línea de entrada: **Cc 2.2µF ×16** (C294-C309)
+- [x] R serie limitadora por línea: **Rs 470Ω ×16** (R115-R130) — cumple <10mA AKM
+- [x] R amortiguación rama MCLK→AK5538: **R131 = 33Ω**
+- [x] ESD **PRTR5V0U2X ×16** (ambos RJ45 de cada par) + filtro RF 100pF ×16 (C274-C289)
+- [x] D8 = SMBJ24A (C726830) en esquemático — reconfirmar en BOM final (§8.4)
+- [x] SS34 en serie con FB2, B5819W en ST-Link 5V, VTREF directo (topología 3× 5V OR-ead)
+- [x] BOOT0: botón K3 + pulldown — SE MANTIENE (decisión 2026-07-02, "por las dudas")
+- [x] LED power hardwired, test points, LEDs RJ45 en PE12, reset ESP32 en K1
+
+### 8.2 Decisiones de esquemático — PENDIENTES antes de cerrar ⬜
+
+- [ ] **Cap diferencial 1nF P↔N por par de entrada** (×8, pegado al ADC) — único faltante
+      del front-end; mejora CMRR en RF. Prioridad media: decidir agregar o aceptar el riesgo.
+- [ ] **🔴 Polaridad alternada pares/impares + swap JSPK09/10** (hallazgo de netlist, ver
+      ds11_upgrades.md): decidir AHORA si se corrige en PCB/arnés o se compensa por firmware
+      (`speaker_sign[32]` ya existe; el modo AUTOFOCUS además la mide y corrige solo). Si el
+      fix de PCB es barato, hacerlo — no depender de tablas para algo resoluble en cobre.
+      Como mínimo: documentar la convención de pines JSPK esperada por el arnés.
+- [ ] **Footprint/pads para bulk extra (100µF) cerca de FB3** (+5VA_DAC): seguro barato
+      contra el ripple de los 32 class-D sobre el rail analógico de los DACs — se puebla
+      solo si la medición post-armado lo pide.
+- [ ] Consistencia de docs: §1.7 de este plan dice PRTR VCC→+3V3, el netlist los tiene en
+      +3.3VA — confirmar cuál es el conectado real y corregir el texto (funcionalmente ambos
+      sirven; definir a qué rail se quiere derivar el surge).
+- [ ] Nota en esquemático: "AK5538 requiere config por I2C en cada boot: CKS=512fs (R02=0x31)
+      + TDM256 (R03=0x40), addr 7-bit 0x11" — lección del bring-up DS10 (root cause CKS).
+
+### 8.3 Decisión de sistema — alimentación (sin cambio de PCB)
+
+- [ ] **MP2315S a 24V = margen cero** (26V abs max; el SMBJ24A clampea recién a ~26.7V).
+      Mitigación elegida para DS11: **alimentar el sistema a 19-20V** (el buck y todo el
+      diseño lo aceptan sin cambios) y/o limitador de potencia global en firmware.
+      Documentar la tensión nominal elegida en la serigrafía/manual. Buck más grande = DS12.
+
+### 8.4 Gates de fabricación (lecciones tanda 1 — NO SALTEAR)
+
+- [ ] **DFM Analysis 3D de JLCPCB** (no el preview de compra): orientación pin-1 de TODOS los
+      ICs — especialmente U1-U4 (PCM1690), IC3 (AK5538), U7. Acá se introdujo la rotación 180°.
+- [ ] **BOM por C-number**: cada LCSC part number vs Value del esquemático (así entró el
+      SM6T15A donde iba SMBJ24A).
+- [ ] **Rotation corrections del P&P** para footprints nuevos: RJ45×4, USB-C vertical,
+      terminal block MSTBVA.
+- [ ] Silkscreen pin-1 **grande y asimétrico** en los 4 PCM1690 + AK5538.
+- [ ] Confirm Production File / Parts Placement / Photo Confirmation = Yes.
+- [ ] Layout: 16 TVS pegados a cada RJ45; pistas 24V ≥2.5mm J31↔J32; RJ45 abre hacia afuera
+      (3D + impresión 1:1); retornos de los 32 PAMs sin cruzar la isla analógica ADC/DAC.
+- [ ] ERC limpio (endpoint_off_grid §1.9) + DRC limpio + **netlist regenerado y committeado**
+      (el `DS.txt` actual es export del 2026-07-02, anterior a los últimos cambios).
+- [ ] Al recibir: gate de bring-up §0 (rieles a GND + orientación de ICs) ANTES de energizar.
+      Si hay defecto: fotos + reclamo ANTES de tocar las placas.
+
+### 8.5 Sincronización con firmware (lado STM32/ESP32, rama `feature/beamforming`)
+
+- [ ] **Geometría del array**: el firmware asume 4×8 patrón ladrillo, X_pitch=80mm,
+      Y_pitch=160mm, filas 2&4 +40mm a la derecha (marco del oyente). Si el layout físico
+      difiere, actualizar `mic_pos/spk` en `firmware/Core/Src/main.c` (es una tabla).
+- [ ] Al llegar la DS11: `WALKER_NUM_CH` y `CAL_NUM_CH` de 8 → 32; correr **channel walker**
+      para validar mapeo+polaridad real; **AUTOFOCUS** mide TOF y polaridad por parlante.
+- [ ] PE12 pasa de ANALOG a salida GPIO (driver de los LEDs RJ45) — cambio de una línea en
+      el init, anotado en [docs/beamforming_roadmap.md](../../docs/beamforming_roadmap.md).
+
+---
+
+**Last updated**: 2026-07-03 (checklist §8 consolidado post-revisión de netlist + decisiones de julio)
+**Estado**: esquemático DS11 con front-end de entrada completo (Cc+Rs+R131 verificados); pendiente: decisión polaridad/swap (§8.2), layout (placement TVS, pistas 24V), limpieza ERC, gates de fabricación. Reclamo JLCPCB cerrado en USD 355.
