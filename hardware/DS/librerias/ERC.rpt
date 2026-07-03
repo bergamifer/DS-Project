@@ -1,0 +1,167 @@
+ERC report (2026-04-02T00:48:46-0300, Encoding UTF8)
+
+***** Sheet /
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(6350 mils, 1000 mils): Symbol #PWR01 Pin 1 [Power input, Line]
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(9350 mils, 2025 mils): Vertical Wire, length 125 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(9350 mils, 1950 mils): Vertical Wire, length 75 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(9750 mils, 2025 mils): Horizontal Wire, length 400 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(9750 mils, 1950 mils): Vertical Wire, length 75 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(9750 mils, 2025 mils): Horizontal Wire, length 400 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(10150 mils, 1950 mils): Vertical Wire, length 75 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(10150 mils, 2025 mils): Horizontal Wire, length 400 mils
+[endpoint_off_grid]: Symbol pin or wire end off connection grid
+    ; warning
+    @(10550 mils, 1950 mils): Vertical Wire, length 75 mils
+
+***** Sheet /DAC2/
+[pin_to_pin]: Pins of type Output and Output are connected
+    ; error
+    @(3200 mils, 4150 mils): Symbol U4 Pin 19 [AMUTEO, Output, Line]
+    @(3200 mils, 4150 mils): Symbol U4 Pin 19 [AMUTEO, Output, Line]
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(5400 mils, 4500 mils): Symbol #PWR090 Pin 1 [Power input, Line]
+
+***** Sheet /DAC0/
+[pin_to_pin]: Pins of type Output and Output are connected
+    ; error
+    @(3200 mils, 4150 mils): Symbol U4 Pin 19 [AMUTEO, Output, Line]
+    @(3200 mils, 4150 mils): Symbol U4 Pin 19 [AMUTEO, Output, Line]
+
+***** Sheet /DAC1/
+[pin_to_pin]: Pins of type Output and Output are connected
+    ; error
+    @(3200 mils, 4150 mils): Symbol U4 Pin 19 [AMUTEO, Output, Line]
+    @(3200 mils, 4150 mils): Symbol U4 Pin 19 [AMUTEO, Output, Line]
+[pin_to_pin]: Pins of type Bidirectional and Power output are connected
+    ; warning
+    @(3200 mils, 4550 mils): Symbol U4 Pin 23 [TEST/ADR1/RSV, Bidirectional, Line]
+    @(4500 mils, 4700 mils): Symbol U11 Pin 2 [VO, Power output, Line]
+
+***** Sheet /DAC3/
+[pin_to_pin]: Pins of type Bidirectional and Power output are connected
+    ; warning
+    @(3200 mils, 4550 mils): Symbol U4 Pin 23 [TEST/ADR1/RSV, Bidirectional, Line]
+    @(4500 mils, 4700 mils): Symbol U11 Pin 2 [VO, Power output, Line]
+
+***** Sheet /esp32-mini/
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(10400 mils, 1100 mils): Symbol #PWR0115 Pin 1 [Power input, Line]
+
+***** Sheet /stm32_custom/
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(3400 mils, 1750 mils): Symbol U7 Pin 21 [VDDA, Power input, Line]
+[multiple_net_names]: Both +3V3 and VBAT are attached to the same items; +3V3 will be used in the netlist
+    ; warning
+    @(3100 mils, 1750 mils): Symbol #PWR0128 Pin 1 [Power input, Line]
+    @(2800 mils, 1450 mils): Label 'VBAT'
+[multiple_net_names]: Both DAC0_SAI_FS and DAC1_SAI_FS are attached to the same items; DAC0_SAI_FS will be used in the netlist
+    ; warning
+    @(2200 mils, 3450 mils): Hierarchical Label 'DAC0_SAI_FS'
+    @(1500 mils, 3500 mils): Hierarchical Label 'DAC1_SAI_FS'
+[multiple_net_names]: Both DAC0_SAI_SCK and DAC1_SAI_SCK are attached to the same items; DAC0_SAI_SCK will be used in the netlist
+    ; warning
+    @(2200 mils, 3550 mils): Hierarchical Label 'DAC0_SAI_SCK'
+    @(1500 mils, 3600 mils): Hierarchical Label 'DAC1_SAI_SCK'
+[multiple_net_names]: Both DAC2_SAI_FS and DAC3_SAI_FS are attached to the same items; DAC2_SAI_FS will be used in the netlist
+    ; warning
+    @(2200 mils, 5950 mils): Hierarchical Label 'DAC2_SAI_FS'
+    @(1550 mils, 6000 mils): Hierarchical Label 'DAC3_SAI_FS'
+[multiple_net_names]: Both DAC2_SAI_SCK and DAC3_SAI_SCK are attached to the same items; DAC2_SAI_SCK will be used in the netlist
+    ; warning
+    @(2200 mils, 6050 mils): Hierarchical Label 'DAC2_SAI_SCK'
+    @(1550 mils, 6100 mils): Hierarchical Label 'DAC3_SAI_SCK'
+[multiple_net_names]: Both AMUTEO and PC10 are attached to the same items; AMUTEO will be used in the netlist
+    ; warning
+    @(5850 mils, 7150 mils): Global Label 'AMUTEO'
+    @(4000 mils, 6550 mils): Label 'PC10'
+[multiple_net_names]: Both ~{RST} and PC11 are attached to the same items; ~{RST} will be used in the netlist
+    ; warning
+    @(6400 mils, 6900 mils): Global Label '~{RST}'
+    @(4000 mils, 6650 mils): Label 'PC11'
+[multiple_net_names]: Both AMUTEI and PC12 are attached to the same items; AMUTEI will be used in the netlist
+    ; warning
+    @(5900 mils, 7000 mils): Global Label 'AMUTEI'
+    @(4000 mils, 6750 mils): Label 'PC12'
+
+***** Sheet /DS_Power/
+[pin_not_connected]: Pin not connected
+    ; error
+    @(2050 mils, 2300 mils): Symbol J31 Pin 3 [Passive, Line]
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(2600 mils, 2200 mils): Symbol #PWR0178 Pin 1 [Power input, Line]
+[pin_not_connected]: Pin not connected
+    ; error
+    @(2050 mils, 3150 mils): Symbol J32 Pin 3 [Passive, Line]
+[power_pin_not_driven]: Input Power pin not driven by any Output Power pins
+    ; error
+    @(2350 mils, 4700 mils): Symbol #PWR0177 Pin 1 [Power input, Line]
+[multiple_net_names]: Both +5V and VIN are attached to the same items; +5V will be used in the netlist
+    ; warning
+    @(8350 mils, 3350 mils): Symbol #PWR0199 Pin 1 [Power input, Line]
+    @(3200 mils, 6200 mils): Label 'VIN'
+[multiple_net_names]: Both +5VA and VDD are attached to the same items; +5VA will be used in the netlist
+    ; warning
+    @(7050 mils, 1600 mils): Symbol #PWR0195 Pin 1 [Power input, Line]
+    @(9900 mils, 3550 mils): Symbol #PWR0203 Pin 1 [Power input, Line]
+
+***** Sheet /ALL_AMPS/
+
+***** Sheet /ADC_AK5538/
+[multiple_net_names]: Both SAI1_MCLK and MCLK are attached to the same items; SAI1_MCLK will be used in the netlist
+    ; warning
+    @(6500 mils, 1650 mils): Global Label 'SAI1_MCLK'
+    @(6500 mils, 1650 mils): Label 'MCLK'
+
+***** Sheet /ALL_AMPS/Amp_Bank_A1/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A2/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A3/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A4/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A5/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A6/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A7/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A8/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A9/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A10/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A11/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A12/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A13/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A14/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A15/
+
+***** Sheet /ALL_AMPS/Amp_Bank_A/
+
+ ** ERC messages: 32  Errors 11  Warnings 21

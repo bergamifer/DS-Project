@@ -1,0 +1,64 @@
+# Created by https://www.toptal.com/developers/gitignore/api/kicad
+# Edit at https://www.toptal.com/developers/gitignore?templates=kicad
+
+### KiCad ###
+# For PCBs designed using KiCad: https://www.kicad.org/
+# Format documentation: https://kicad.org/help/file-formats/
+
+# Temporary files
+*.000
+*.bak
+*.bck
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*-backups
+*.kicad_prl
+*.sch-bak
+*~
+_autosave-*
+*.tmp
+*-save.pro
+*-save.kicad_pcb
+fp-info-cache
+
+
+#Agrego este
+.gitignore
+
+# Netlist files (exported from Eeschema)
+*.net
+
+# Autorouter files (exported from Pcbnew)
+*.dsn
+*.ses
+
+# Exported BOM files
+*.xml
+*.csv
+
+### KiCad Patch ###
+rescue-backup/
+
+*.tsv
+bom/
+
+# Gerber export output
+out/
+gerber/
+
+.DS_Store
+
+# KiCad lock files
+*.lck
+
+# KiCad old schematic backups
+*.kicad_sch_old
+
+# KiCad autosave directories
+\#auto_saved_files#
+
+# End of https://www.toptal.com/developers/gitignore/api/kicad
+# Copia local del release DS10 (redundante con tag DS10, 104MB)
+Versiones/
+# Archivos de recuperación de crash de KiCad
+*.recovered.*.kicad_sch

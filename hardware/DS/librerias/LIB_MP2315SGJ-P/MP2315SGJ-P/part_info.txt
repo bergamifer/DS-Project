@@ -1,0 +1,9 @@
+Manufacturer=Monolithic Power Systems (MPS)
+PartNumber=MP2315SGJ-P
+PartCategory=Integrated Circuit
+PackageCategory=SOT23 (8-Pin)
+PinCount=8
+Version=1.2
+Released=2023-06-15 06:23:36
+Downloaded=2026-03-20 00:01:33
+3D=Y

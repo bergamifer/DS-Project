@@ -1,0 +1,9 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP AK5538VN
+D ADC, Audio 32 b 768k DSD, PCM 64-QFN (9x9)
+K
+F https://www.akm.com/content/dam/documents/products/audio/audio-adc/ak5538vn/ak5538vn-en-datasheet.pdf
+$ENDCMP
+#
+#End Doc Library

@@ -1,0 +1,9 @@
+Manufacturer=Asahi Kasei Microdevices
+PartNumber=AK5538VN
+PartCategory=Integrated Circuit
+PackageCategory=Quad Flat No-Lead
+PinCount=65
+Version=1.2
+Released=2023-10-05 04:07:11
+Downloaded=2026-03-04 21:26:37
+3D=Y
