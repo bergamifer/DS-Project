@@ -12010,10 +12010,9 @@
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "1da661a3-3c1e-4b28-a849-7579414a2c33")
 		(property "Reference" "K4"
-			(at 233.68 35.5599 90)
+			(at 234.442 34.544 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -12023,9 +12022,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "SW_Push"
-			(at 233.68 36.8299 90)
-			(hide yes)
+		(property "Value" "Reset_STM32"
+			(at 236.728 30.48 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14973,10 +14971,9 @@
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "4409049d-ca20-4a32-9e57-c347d71741fb")
 		(property "Reference" "K3"
-			(at 212.09 35.5599 90)
+			(at 213.106 34.036 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14986,9 +14983,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "SW_Push"
-			(at 212.09 36.8299 90)
-			(hide yes)
+		(property "Value" "BOOT_STM32"
+			(at 215.392 24.638 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -18546,7 +18542,7 @@
 			)
 		)
 		(property "Value" "0.1uF"
-			(at 221.488 33.528 90)
+			(at 220.98 33.274 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -20110,7 +20106,7 @@
 		(dnp no)
 		(uuid "a720d6fc-6e61-4f8f-9526-c1fc0d3d81e2")
 		(property "Reference" "C49"
-			(at 199.644 29.972 0)
+			(at 199.644 30.988 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -20121,7 +20117,7 @@
 			)
 		)
 		(property "Value" "0.1uF"
-			(at 199.136 31.75 0)
+			(at 198.374 33.02 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -21041,7 +21037,6 @@
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "b3cc043c-7f83-4bc5-853f-75ef909df4c9")
 		(property "Reference" "K2"
 			(at 191.77 43.1799 90)
@@ -21054,9 +21049,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "SW_Push"
-			(at 191.77 44.4499 90)
-			(hide yes)
+		(property "Value" "OPT_SW"
+			(at 191.77 45.466 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects

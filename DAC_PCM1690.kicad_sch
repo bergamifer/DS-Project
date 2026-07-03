@@ -10247,7 +10247,7 @@
 		(dnp no)
 		(uuid "5bf2ab7e-ce18-400f-8007-b2b0e03819c8")
 		(property "Reference" "U1"
-			(at 81.28 22.86 0)
+			(at 105.156 52.324 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -10257,7 +10257,7 @@
 			)
 		)
 		(property "Value" "PCM1690"
-			(at 81.28 25.4 0)
+			(at 105.156 54.864 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
