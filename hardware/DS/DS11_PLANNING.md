@@ -140,11 +140,12 @@ Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agreg
 
 - [ ] **Cap diferencial 1nF P↔N por par de entrada** (×8, pegado al ADC) — único faltante
       del front-end; mejora CMRR en RF. Prioridad media: decidir agregar o aceptar el riesgo.
-- [ ] **🔴 Polaridad alternada pares/impares + swap JSPK09/10** (hallazgo de netlist, ver
-      ds11_upgrades.md): decidir AHORA si se corrige en PCB/arnés o se compensa por firmware
-      (`speaker_sign[32]` ya existe; el modo AUTOFOCUS además la mide y corrige solo). Si el
-      fix de PCB es barato, hacerlo — no depender de tablas para algo resoluble en cobre.
-      Como mínimo: documentar la convención de pines JSPK esperada por el arnés.
+- [x] ~~🔴 Polaridad alternada pares/impares + swap JSPK09/10~~ **RESUELTO POR DISEÑO
+      (aclaración del usuario, 2026-07-03)**: la "inversión" del canal impar es una **doble
+      inversión deliberada** — el JST del parlante recibe +/− en la polaridad correcta. El
+      pinout del JST está definido por los parlantes reciclados que se usan: **"+ − − +"**.
+      No es un bug: es la convención del arnés. El firmware queda con `speaker_sign[32]`=+1
+      y el AUTOFOCUS lo verificará empíricamente de todas formas (mide polaridad real).
 - [ ] **Footprint/pads para bulk extra (100µF) cerca de FB3** (+5VA_DAC): seguro barato
       contra el ripple de los 32 class-D sobre el rail analógico de los DACs — se puebla
       solo si la medición post-armado lo pide.
@@ -171,10 +172,18 @@ Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agreg
       terminal block MSTBVA.
 - [ ] Silkscreen pin-1 **grande y asimétrico** en los 4 PCM1690 + AK5538.
 - [ ] Confirm Production File / Parts Placement / Photo Confirmation = Yes.
-- [ ] Layout: 16 TVS pegados a cada RJ45; pistas 24V ≥2.5mm J31↔J32; RJ45 abre hacia afuera
-      (3D + impresión 1:1); retornos de los 32 PAMs sin cruzar la isla analógica ADC/DAC.
-- [ ] ERC limpio (endpoint_off_grid §1.9) + DRC limpio + **netlist regenerado y committeado**
-      (el `DS.txt` actual es export del 2026-07-02, anterior a los últimos cambios).
+- [x] Layout — **VERIFICADO por revisión de plots 600dpi (2026-07-03,
+      `plots_png_600/`)**: In1 = plano GND sólido sin cortes ✓; In2 = islas de power bien
+      particionadas (3V3 digital / analógica / +5VA amps) ✓; 24V daisy-chain J12↔J11 en
+      pour ancho (≥8mm, sobra vs los 2.5mm requeridos) ✓; RJ45 abre hacia afuera en el borde
+      inferior ✓; TVS (D10/D13...) pegados al conector ✓; R131 colocada en el tronco MCLK
+      (regla de bifurcación) ✓; floorplan separa amps (derecha) de la analógica de entrada
+      (abajo-izq) ✓; QR + labels en silk ✓. Queda para el 3D/impresión 1:1: verificación
+      mecánica del RJ45×4 y los conectores nuevos.
+- [x] **Netlist regenerado** (export 2026-07-03 18:02, committeado como `DS.txt`) — R131
+      verificado en su net: pin 1 → `/ADC_AK5538/MCLK` (solo IC3.24), pin 2 → tronco
+      `SAI1_MCLK` (JP2 + RN1-4). Topología exacta a lo acordado.
+- [ ] ERC limpio (endpoint_off_grid §1.9) + DRC limpio.
 - [ ] Al recibir: gate de bring-up §0 (rieles a GND + orientación de ICs) ANTES de energizar.
       Si hay defecto: fotos + reclamo ANTES de tocar las placas.
 
