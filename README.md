@@ -164,6 +164,7 @@ docs/
   historico/                    # DS9: pin audit, pin map, PCM1802, esquemático PDF
 stm32/                          # Referencia RM0433 (clocks, SAI, DMA, I2C, GPIO)
 webserver/                      # Control web multi-dispositivo (Flask + SQLite) — ver su README
+sitio/                          # Página pública del proyecto (HTML autocontenido, fuente del artifact)
 ```
 
 ---
