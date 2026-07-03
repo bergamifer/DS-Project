@@ -1,11 +1,19 @@
-# DS10 Beamforming Audio Processor
+# DS-Project — Beamforming Audio (firmware + hardware)
 
 Sistema de audio beamforming de 32 canales basado en **STM32H743** + **ESP32-C3-MINI-1**.
 Control via WiFi (HTTP), pipeline DMA circular, latencia ~20ms extremo a extremo.
 
+> **Repo unificado (2026-07-03):** este repo (antes `DS-Firmware`, ahora **privado**
+> como `DS-Project`) incorpora el proyecto KiCad de hardware completo en
+> [`hardware/DS/`](hardware/DS/) — historial de commits preservado vía `git subtree`
+> desde el repo `DS` original. Un solo lugar para firmware (STM32 + ESP32) y diseño
+> de PCB (DS9-DS11).
+
 > **Placa activa: DS10** (en bring-up, junio 2026). DS9 quedó como histórico.
 > Estado completo del bring-up: [docs/ds10_bringup_findings.md](docs/ds10_bringup_findings.md).
 > Recomendaciones para la placa de producción: [docs/ds11_upgrades.md](docs/ds11_upgrades.md).
+> Roadmap de beamforming (Fases 0-4, implementadas en `feature/beamforming`):
+> [docs/beamforming_roadmap.md](docs/beamforming_roadmap.md).
 
 ---
 
@@ -127,6 +135,9 @@ idf.py flash -p /dev/cu.usbmodemYYYY && idf.py monitor -p /dev/cu.usbmodemYYYY
 ## Estructura del Repositorio
 
 ```
+hardware/DS/                    # Proyecto KiCad completo (historial propio via subtree)
+  DS.kicad_pro/.kicad_sch/.kicad_pcb   # Esquemático + PCB activo (DS11 en curso)
+  DS10_DESIGN_REVIEW.md, DS11_PLANNING.md, ...  # Docs propios del diseño de hardware
 firmware/                       # STM32H743 firmware
   Core/Src/main.c               # Pipeline: SAI, DMA, beamforming, diagnostico de boot
   Core/Src/uart_protocol.c      # Parser binario ESP32->STM32 + recovery de overrun
@@ -135,7 +146,7 @@ firmware/                       # STM32H743 firmware
   Core/Src/stm32h7xx_it.c       # IRQ handlers + HardFault dump (UART7, mutea amps)
   Core/Inc/pin_definitions.h    # Fuente de verdad de todos los pines DS10
 firmware_esp32c3/               # ESP32-C3 firmware
-  main/main.c                   # WiFi STA + HTTP server + UART bridge
+  main/main.c                   # WiFi STA + HTTP server + UART bridge + UI web (fase 4)
 docs/
   ds10_bringup_findings.md      # Registro completo del bring-up (7 hallazgos)
   ds11_upgrades.md              # Recomendaciones para la placa de produccion
