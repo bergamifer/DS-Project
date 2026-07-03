@@ -272,6 +272,8 @@ static int8_t speaker_sign[BEAM_NUM_CHANNELS];       // +1 all — DS11 alternat
 static float spk_x_mm[BEAM_NUM_CHANNELS];            // built by Beam_InitTxGeometry
 static float spk_y_mm[BEAM_NUM_CHANNELS];
 static float spk_center_x_mm = 0, spk_center_y_mm = 0;
+// Last TX focal point — reported in CMD_STATUS telemetry
+static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
 
 /* ===== AUTOFOCUS scan state =====
  * Sequence per speaker: SETTLE (silence, room decay) → ARM (next fill of the
@@ -417,6 +419,7 @@ static void Beam_UpdateDelays(int16_t az_deg);
 static void Beam_InitTxGeometry(void);
 static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
 static void UI_ApplyState(uint8_t idx);
+static void UI_ApplyCustomBeam(const ds_beam_req_t *req);
 static void Cal_Init(void);
 static void Cal_StartScan(void);
 static void Cal_Process(void);
@@ -871,6 +874,50 @@ int main(void)
         if (k2_now == 0) {                         // falling edge = press
           UI_ApplyState((ui_state_idx + 1) % UI_NUM_STATES);
         }
+      }
+    }
+
+    // ===== Remote control from ESP32 (Fase 4) =====
+    {
+      int32_t midx = UART_Protocol_GetModeRequest();
+      if (midx >= 0) {
+        if (midx < (int32_t)UI_NUM_STATES) {
+          UI_ApplyState((uint8_t)midx);
+        } else {
+          sprintf(uart_buf, "ESP32: mode %ld out of range (0-%u)\r\n",
+                  (long)midx, (unsigned)(UI_NUM_STATES - 1));
+          UART_Print(uart_buf);
+        }
+      }
+
+      ds_beam_req_t breq;
+      if (UART_Protocol_GetBeamRequest(&breq)) {
+        UI_ApplyCustomBeam(&breq);
+      }
+
+      if (UART_Protocol_StatusRequested()) {
+        ds_status_t st;
+        st.proto_ver = PROTO_VERSION;
+        st.mode_idx = ui_state_idx;
+        st.num_modes = UI_NUM_STATES;
+        st.rx_az_deg = beam_az_deg;
+        st.fx_mm = tx_focus_x_mm;
+        st.fy_mm = tx_focus_y_mm;
+        st.fz_mm = tx_focus_z_mm;
+        st.underruns = underrun_count;
+        st.sai_errors = error_count;
+        st.ovf = (uint8_t)HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN);
+        st.cal_state = (uint8_t)cal_state;
+        for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
+          int32_t pk = 0;
+          for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
+            int32_t v = audio_buffer_3b_rx[f * ADC_CHANNELS + ch] >> 8;
+            if (v < 0) v = -v;
+            if (v > pk) pk = v;
+          }
+          st.adc_pk[ch] = pk;
+        }
+        UART_Protocol_SendStatus(&st);
       }
     }
 
@@ -2039,6 +2086,9 @@ static void Beam_InitTxGeometry(void) {
  * geometric sanity-checking. Runs only on state changes (float OK).
  */
 static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
+  tx_focus_x_mm = fx_mm;
+  tx_focus_y_mm = fy_mm;
+  tx_focus_z_mm = fz_mm;
   float px = spk_center_x_mm + (float)fx_mm;
   float py = spk_center_y_mm + (float)fy_mm;
   float pz = (float)fz_mm;
@@ -2069,6 +2119,33 @@ static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
             t[4] >> 8, (t[4] & 0xFF) * 100 / 256, t[5] >> 8, (t[5] & 0xFF) * 100 / 256,
             t[6] >> 8, (t[6] & 0xFF) * 100 / 256, t[7] >> 8, (t[7] & 0xFF) * 100 / 256);
     UART_Print(uart_buf);
+  }
+}
+
+/**
+ * @brief Apply a custom (non-preset) beam request from the ESP32.
+ *
+ * Same flag hygiene as UI_ApplyState: exactly one output mode active, any
+ * running AUTOFOCUS scan aborted. ui_state_idx is left untouched — the next
+ * K2 press resumes cycling from the last preset (documented behavior).
+ */
+static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
+  walker_enabled = 0;
+  adc_monitor_enabled = 0;
+  autofocus_enabled = 0;
+  cal_state = CAL_IDLE;
+  cal_capturing = 0;
+  if (!beam_enabled) memset(beam_line, 0, sizeof(beam_line));
+  beam_enabled = 1;
+  if (req->type == 1) {
+    tx_steer_enabled = 1;
+    Beam_UpdateDelays(0);                 // RX source: broadside
+    Beam_UpdateTxFocus(req->fx_mm, req->fy_mm, req->fz_mm);
+    UART_Print("MODE: TX focus custom (via ESP32)\r\n");
+  } else {
+    tx_steer_enabled = 0;
+    Beam_UpdateDelays(req->az_deg);
+    UART_Print("MODE: RX beam custom (via ESP32)\r\n");
   }
 }
 
