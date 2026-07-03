@@ -67,9 +67,13 @@ Hoy el cambio de modo es solo por botón K2. Para hacerlo remoto (pedido 2026-07
 2. **ESP32** (`firmware_esp32c3/main/main.c`): endpoint `POST /mode` con JSON `{"mode": N}` → arma la trama `CMD_SET_MODE`; `GET /status` extendido para pedir `CMD_GET_STATUS` por UART y devolver el estado real del STM32 (hoy `/status` solo refleja estado local del ESP32). Los nombres de los modos pueden hardcodearse en el ESP32 (espejo de `ui_states[]`) o agregarse a la respuesta de status — versionar con un byte de versión de protocolo para que ESP32 y STM32 puedan flashearse por separado.
 3. **STM32→ESP32 (estados/eventos)**: hoy el STM32 solo manda debug ASCII por UART4. Definir trama binaria de evento `CMD_EVENT = 0x05` (ej. "scan AUTOFOCUS terminado", "modo cambiado por K2") para que el webserver se entere de cambios locales sin polling.
 
-### Fase 4 — Protocolo / ESP32 / web
+### Fase 4 — Protocolo / ESP32 / web ✅ implementada 2026-07-02 (branch `feature/beamforming`)
 
-`uart_protocol.h` hoy: `CFG_NUM_CHANNELS=16`, mutes uint16. Extender con comandos versionados: `CMD_SET_BEAM {mode, az, el, dist_mm, nivel}` (uso normal), `CMD_RAW_CFG_32` (delays/gains/mutes de 32ch, para experimentos), `CMD_CAL` (offsets por canal). ESP32: endpoint `POST /beam` con UI de sliders; definir trama binaria de status (underruns, OVF, peaks) para que `/status` tenga telemetría real.
+Comandos nuevos sobre el framing existente: **CMD_SET_MODE (0x02)** — cambia entre los 12 estados remotamente, entra por `UI_ApplyState()` (la misma función que K2, sin estado duplicado); **CMD_SET_BEAM (0x07)** — steering custom fuera de presets (RX az arbitrario o foco TX x/y/z en mm) vía `UI_ApplyCustomBeam()`; **CMD_GET_STATUS (0x03) → CMD_STATUS (0x04)** — telemetría `ds_status_t` de 53 bytes versionada con `proto_ver` (modo, az RX, foco TX, underruns, errores SAI, OVF, estado del AUTOFOCUS, peaks de los 8 ADC). El parser STM32 ahora acepta payload len=0.
+
+ESP32: parser de tramas binarias en RX (ACK/NACK + STATUS con checksum) conviviendo con el debug ASCII; request/response sincronizado por semáforos. Endpoints: `POST /mode {"mode":N}`, `POST /beam {"type":"rx","az":30}` / `{"type":"tx","fx":0,"fy":0,"fz":1000}`, `GET /status` (telemetría real). **`GET /` sirve una UI web autocontenida**: botones de los 12 modos con indicador del activo, sliders de az RX y foco TX, VU meter de las 8 entradas y panel de estado con refresh de 1s — control completo desde el teléfono.
+
+Pendiente de esta fase: `CMD_RAW_CFG_32` (el `CMD_UPDATE_CFG` de 16 canales sigue vigente para eso), `CMD_EVENT` push STM32→ESP32 (hoy la web se entera por polling), y los nombres de modos duplicados en el ESP32 (espejo de `ui_states[]` — actualizar juntos, o mover los nombres a la respuesta de STATUS en una versión futura del protocolo).
 
 ---
 
