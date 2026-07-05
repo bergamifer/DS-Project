@@ -58,59 +58,66 @@ se cancela exactamente. Precisión esperable: ~1 cm.
 
 ## 2. Capa RELOJ — ¿cuándo dispara cada parlante?
 
-El problema **más duro** y el que define qué obras son posibles:
+> **ARQUITECTURA REAL (aclarada por Fernando, 2026-07-05):** la señal de audio se
+> distribuye **analógica** por el daisy-chain (J9, passthrough pasivo); cada nodo la
+> digitaliza, beamformea y reproduce **con su propio cristal**. NO se manda MCLK por
+> el cable (24.576 MHz por daisy-chain = pesadilla de integridad de señal); JP2 existe
+> solo como salvavidas experimental de banco.
 
-- Cristales independientes → deriva típica 20-50 ppm → **1 ms cada 20-50 s**.
-  Sin reloj común, la fase entre nodos se va a la deriva: un foco único formado por
-  2+ muros se desarma en segundos.
+### Por qué la distribución analógica se auto-sincroniza
 
-### El hardware ya tiene el camino: JP2 — pero solo resuelve media historia
+El modelo mental correcto: **cada nodo es una línea de retardo analógica**. Analógico
+entra, analógico sale, retardado τ = N/fs_local (N = latencia del pipeline en muestras).
+El reloj local solo importa durante los ~20 ms que la señal vive adentro del nodo — el
+error de fase entre nodos **no se acumula** con el tiempo (a diferencia del contenido
+generado internamente):
 
-Verificado en el netlist (`DS.txt`): JP2 es un puente de soldadura simple (sin buffer,
-sin selector de dirección) — pin 1 al trunk interno `SAI1_MCLK` (el mismo que alimenta
-los 4 DACs vía RN1-4 y el ADC vía R131), pin 2 al conector J5 pin 7. Puentearlo permite
-exportar/inyectar el MCLK de 24.576 MHz entre placas por el mismo tendido físico del
-daisy-chain de 24 V.
+    Δτ entre nodos = latencia × Δppm = 20 ms × 40 ppm ≈ 0,8 µs ≈ 0,27 mm
 
-**Corrección importante (2026-07-05) sobre lo que esto alcanza a resolver.** MCLK es
-la referencia de sobremuestreo que llega al SCKI del DAC/ADC — pero **no** es la señal
-que fija el instante de cada muestra: eso lo hace **BCK/FS** (el reloj de bit y el
-frame sync del TDM), que cada STM32 sigue generando de forma independiente, con su
-propio cristal/PLL3, aunque su JP2 esté puenteado. Compartir solo MCLK probablemente
-**no alcanza** para lock de fase completo entre nodos — el drift de BCK/FS (ppm de
-cada cristal) queda igual, un nivel más abajo. Esto es una hipótesis de ingeniería
-razonada, no un hecho confirmado con el datasheet del PCM1690 en mano.
+Dos órdenes de magnitud por debajo del tamaño del foco. La fase del "grid" de muestreo
+de cada ADC (que sí precede lentamente entre nodos) **no aparece en la salida**:
+muestrear y reconstruir con el mismo reloj reproduce x(t−τ) exacto para señal limitada
+en banda. La deriva térmica del cristal mueve ese sub-µs, no lo integra.
 
-Lo que sí resolvería el lock completo:
-1. **Compartir también BCK+FS** (no solo MCLK) y correr el SAI de los nodos esclavos
-   en modo *slave* externo — el firmware ya sabe hacer esto *dentro de un mismo chip*
-   (SAI1_B/SAI2_B como slaves de SAI1_A/SAI2_A, "arrancar slave antes que master");
-   falta validar si se puede extender esa sincronización **entre chips** por cable.
-2. **Disciplinar el PLL3 de cada esclavo** contra el MCLK entrante (clock recovery
-   por software/hardware) — más trabajo de firmware, pero el esclavo termina generando
-   su propio BCK/FS ya enclavado al mismo reloj físico que el master.
+**Conclusión: para obras alimentadas por la señal analógica del daisy-chain — el caso
+de uso real; el pipeline TX ya lee de `beam_line`, que viene del ADC — NO hace falta
+ningún cable de clock.**
 
-**Cómo se decide esto en la práctica**: es exactamente el experimento de la Fase A de
-abajo. Con 2 nodos y JP2 puenteado, medir con un mic + correlación cruzada (mismo
-método del AUTOFOCUS) si el desfasaje entre nodos se mantiene estable o sigue
-derivando con el tiempo. Si deriva, confirma que hace falta compartir BCK/FS también.
+### Los dos "peros" reales (ninguno pide cable de clock)
 
-Independientemente de cuál solución haga falta, **sigue existiendo** el problema de
-alinear el **t=0** (que todos cuenten la muestra cero juntos). Dos opciones:
-1. **Pulso de sync** por GPIO en el mismo cable (hardware trivial, agregar a DS12).
-2. **Alineación acústica** (sin hardware nuevo): comando de red arranca todos
-   "aproximadamente"; después el nodo A emite un chirp y el nodo B lo captura →
-   el offset de arranque queda **medido** y se compensa como delay constante por
-   nodo. Estable mientras el reloj compartido no se desconecte.
+1. **La latencia por nodo debe ser constante y conocida.** El offset RX-DMA↔TX-DMA se
+   congela al arrancar y puede diferir entre nodos (hasta ~medio buffer, ms). Es un
+   offset **constante** (no deriva) → se absorbe como delay por nodo:
+   - por diseño: arranque determinístico del TX enganchado al callback del RX, o
+   - por medición: AUTOFOCUS / chirp de red al encender (ya diseñado).
+2. **El contenido generado internamente sí deriva.** Tonos de test, walker, chirps:
+   no pasan por el ADC → corren con cristal libre → entre nodos derivan ~1 ms cada
+   20-50 s. Los modos de test multi-nodo se alinean solo por envolvente; las obras
+   van por la vía analógica. (AUTOFOCUS normal es por-nodo — mic y parlante en el
+   mismo reloj — sin problema.)
 
-### Sin MCLK compartido (setup rápido / nodos lejanos)
-- Coherencia **intra-nodo** perfecta (ya la hay) + alineación **inter-nodo** de
-  envolvente (~1 ms) vía sync de red estilo NTP contra el director.
-- Alcanza para: trayectorias entre muros, texturas espaciales, focos *por muro*.
-- No alcanza para: un foco único sumando 2+ muros en fase.
+   *Nota para calibración cruzada* (mic en nodo A midiendo parlantes del nodo B): la
+   deriva durante el scan (50 ppm × 30 s ≈ 1,5 ms) contamina la comparación entre
+   canales tempranos y tardíos → scans cortos o re-referenciar intercalando un canal
+   fijo.
 
-**Regla de diseño para las obras**: foco fino = dentro de un muro; gestos grandes =
-entre muros. Con JP2 encadenado, esa restricción desaparece.
+### Si algún día hiciera falta un clock físico (no ahora)
+
+Solo si el proyecto migra a **distribución digital** del audio (más canales
+independientes por nodo que los 8 analógicos). Para ese caso la opción correcta ya
+está documentada en DS11_PLANNING (interconexión): **TDM re-driven sobre LVDS** por
+Cat5e STP — MCLK+BICK+LRCK+DATA en los 4 pares, regenerado por cada caja (repeater),
+terminación 100 Ω, drivers tipo DS90LV047/048, conector RJ45, mismo tendido. El clock
+viaja embebido en el link y los SAI esclavos corren de reloj externo (BCK/FS
+incluidos — resuelve de paso la objeción MCLK-no-es-BCK/FS de la revisión anterior).
+Nunca 24.576 MHz crudo single-ended por el chain.
+
+### JP2, entonces
+
+Queda como lo que Fernando lo diseñó: un **hedge experimental** — probar clock común
+entre 2 placas en banco, sin promesa de señal limpia en cable largo. No es parte de la
+arquitectura de la instalación. (Verificado en netlist: puente simple sin buffer,
+pin1→trunk `SAI1_MCLK`, pin2→J5.7.)
 
 ---
 
@@ -132,7 +139,7 @@ entre muros. Con JP2 encadenado, esa restricción desaparece.
 
 | Fase | Con qué | Qué validar |
 |---|---|---|
-| A | 2 nodos | MCLK compartido por JP2 (¿integridad de señal en el cable? R de amortiguación), alineación t=0 acústica, **primer foco de 64 parlantes** |
+| A | 2 nodos | Misma señal analógica a ambos → mic + correlación cruzada: verificar Δτ inter-nodo estable (sub-µs) durante 30+ min y a través de reboots; medir el offset de latencia por nodo; **primer foco de 64 parlantes alimentado por señal externa** |
 | B | 2-4 nodos + 1 mic por nodo | Auto-survey acústico two-way → geometría automática; comparar contra cinta métrica |
 | C | 10-15 nodos | Director OSC + partituras espaciales; estrés de red WiFi (si satura → los ESP32 a un AP dedicado o Ethernet-over-cat5 del daisy chain) |
 
@@ -141,7 +148,7 @@ entre muros. Con JP2 encadenado, esa restricción desaparece.
 2. Timestamps de emisión/captura en cuentas de muestra (para two-way ranging).
 3. Chirps con códigos ortogonales (medir 32 canales en 1 s).
 4. mDNS + `device_id` único por nodo (ya existe `DEVICE_ID`).
-5. Selector master/slave de MCLK por comando (hoy JP2 es un jumper físico — ok para v1).
+5. Arranque determinístico del pipeline (latencia RX→TX fija en muestras) o chirp de auto-alineación de latencia al boot.
 6. Sync de arranque: comando "arm" + trigger común (red o GPIO).
 
 ---
@@ -150,7 +157,7 @@ entre muros. Con JP2 encadenado, esa restricción desaparece.
 
 - Streaming de audio multicanal por red (las obras v1 usan el generador interno +
   delays; el contenido por red es otra etapa).
-- Sub-muestra entre nodos vía software puro (con JP2 no hace falta; sin JP2 no se puede).
+- Cable de clock entre nodos: la distribución analógica lo hace innecesario para el caso de uso real (§2).
 - Posicionamiento del público (otra capa, va por el lado de la app / UWB / visión).
 
 Ver también: [`app_ios.md`](app_ios.md) (roadmap de la app), `NodesStore.swift`
