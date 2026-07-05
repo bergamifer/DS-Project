@@ -8,16 +8,12 @@
 <meta name="author" content="Fernando Bergami">
 <meta name="theme-color" content="#0a0d12">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%8A%3C/text%3E%3C/svg%3E">
-<!-- Open Graph / redes: para WhatsApp, Instagram, etc. -->
 <meta property="og:type" content="website">
 <meta property="og:locale" content="es_AR">
 <meta property="og:title" content="Domosonica &#8212; el espacio como instrumento">
 <meta property="og:description" content="Domosonica es una instalaci&#243;n sonora: un campo de ~500 parlantes que enfoca el sonido en puntos del aire. Un instrumento nuevo, buscando qui&#233;n le componga.">
-<!-- Para preview con imagen al compartir, sub&#237; una imagen y descoment&#225; (URL absoluta):
-<meta property="og:image" content="https://TUDOMINIO.com/domosonica-preview.jpg"> -->
 <meta name="twitter:card" content="summary_large_image">
 <style>
-  /* Reset m\0000ednimo que el artifact aportaba y ac\0000e1 hay que traer nosotros */
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#0a0d12}
   img{max-width:100%}
@@ -34,7 +30,7 @@
     --wood:#c9a06b;       /* madera MDF: lo f\0000edsico, lo editorial */
     --wave:#6fe0ce;       /* luz teal: el fen\0000f3meno ac\0000fastico */
     --wave-hot:#eafff8;
-    --serif:"Palatino","Palatino Linotype","Book Antiqua",Georgia,serif;
+    --display:"Avenir Next",Avenir,"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
     color-scheme:dark;
@@ -57,7 +53,7 @@
   .top{position:absolute;inset:0 0 auto 0;z-index:3;display:flex;justify-content:space-between;align-items:baseline;
        padding:1.15rem clamp(1.2rem,5vw,3rem);pointer-events:none}
   .top a{pointer-events:auto;border-bottom:none}
-  .wordmark{font:italic 400 1.05rem var(--serif);color:var(--air);letter-spacing:.02em}
+  .wordmark{font:600 .78rem var(--mono);color:var(--air);letter-spacing:.26em;text-transform:uppercase}
   .top nav{display:flex;gap:1.6rem}
   .top nav a{font:500 .72rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
   .top nav a:hover{color:var(--wave)}
@@ -69,9 +65,9 @@
   .hero-copy{position:absolute;left:clamp(1.2rem,5vw,4rem);bottom:clamp(4.2rem,12vh,7rem);z-index:2;
              max-width:min(620px,86vw);pointer-events:none}
   .eyebrow{font:600 .7rem/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--wood);margin:0 0 1.1rem}
-  h1{font:400 clamp(2.9rem,8vw,6.4rem)/1 var(--serif);color:var(--air);margin:0 0 .8rem;letter-spacing:.005em;
+  h1{font:200 clamp(2.9rem,8vw,6.4rem)/1.02 var(--display);color:var(--air);margin:0 0 .8rem;letter-spacing:.005em;
      text-shadow:0 2px 40px rgba(5,8,12,.85)}
-  .tagline{font:italic 400 clamp(1.15rem,2.4vw,1.5rem)/1.35 var(--serif);color:var(--air);margin:0 0 .9rem;text-wrap:balance}
+  .tagline{font:300 clamp(1.1rem,2.3vw,1.45rem)/1.4 var(--display);letter-spacing:.01em;color:var(--air);margin:0 0 .9rem;text-wrap:balance}
   .sub{font:400 .98rem/1.65 var(--sans);color:var(--muted);margin:0;max-width:46ch;text-shadow:0 1px 18px rgba(5,8,12,.9)}
   .hud{position:absolute;right:clamp(1rem,3vw,2rem);bottom:1.1rem;z-index:2;font:400 .72rem/1.5 var(--mono);
        color:rgba(111,224,206,.8);text-align:right;font-variant-numeric:tabular-nums;pointer-events:none;
@@ -89,20 +85,20 @@
   .eb{font:600 .7rem/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--wood);
       display:flex;align-items:center;gap:1rem;margin:0 0 1.5rem}
   .eb::after{content:"";height:1px;flex:1;background:linear-gradient(90deg,var(--line),transparent)}
-  h2{font:400 clamp(1.7rem,3.4vw,2.35rem)/1.18 var(--serif);color:var(--air);margin:0 0 1.3rem;text-wrap:balance}
-  h3{font:400 1.18rem/1.3 var(--serif);color:var(--air);margin:0}
+  h2{font:300 clamp(1.65rem,3.3vw,2.25rem)/1.2 var(--display);color:var(--air);margin:0 0 1.3rem;text-wrap:balance}
+  h3{font:500 1.06rem/1.35 var(--display);color:var(--air);margin:0}
 
   /* n\0000fameros */
   .datos{display:flex;gap:clamp(1.8rem,4vw,3.2rem);overflow-x:auto;padding:1.3rem 0 1.1rem;margin-top:2.4rem;
          border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
   .dato{flex:none}
-  .dato b{display:block;font:400 1.45rem/1.25 var(--serif);color:var(--air);font-weight:400;font-variant-numeric:tabular-nums}
+  .dato b{display:block;font:300 1.5rem/1.25 var(--display);color:var(--air);font-weight:400;font-variant-numeric:tabular-nums}
   .dato span{font:500 .68rem/1.4 var(--mono);color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
 
   /* pasos */
   .pasos{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(1.4rem,3vw,2.6rem);margin-top:2.2rem}
   @media(max-width:700px){.pasos{grid-template-columns:1fr}}
-  .paso .n{font:italic 400 2.1rem/1 var(--serif);color:var(--wood)}
+  .paso .n{font:400 1.4rem/1 var(--mono);color:var(--wood)}
   .paso h3{margin:.5rem 0 .5rem}
   .paso p{font-size:.94rem;line-height:1.65;margin:0;color:var(--muted)}
 

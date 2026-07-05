@@ -165,6 +165,7 @@ docs/
 stm32/                          # Referencia RM0433 (clocks, SAI, DMA, I2C, GPIO)
 webserver/                      # Control web multi-dispositivo (Flask + SQLite) — ver su README
 sitio/                          # Página pública del proyecto (HTML autocontenido, fuente del artifact)
+ios/                            # App iOS "Domosonica" (SwiftUI) — control remoto vía ESP32; ver docs/app_ios.md
 ```
 
 ---
