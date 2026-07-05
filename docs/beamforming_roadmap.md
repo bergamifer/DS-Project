@@ -83,4 +83,17 @@ Pendiente de esta fase: `CMD_RAW_CFG_32` (el `CMD_UPDATE_CFG` de 16 canales sigu
 
 ---
 
+## Horizonte siguiente: multi-nodo (10-15 muros)
+
+Una vez validada la Fase 1 en un nodo, el escalón siguiente es coordinar varios muros
+DS11 sin cable de clock (distribución analógica autosincronizante) — arquitectura,
+presupuesto de fase, y plan de fases A/B/C completo en
+[multinode.md](multinode.md). El primer cambio de firmware que ese documento pide,
+y que conviene hacer ni bien esta Fase 1 esté validada, es el **arranque
+determinístico del pipeline** (TX arranca en el flanco del primer callback de RX,
+§2 de ese doc) — deja el nodo listo para el experimento de 2 placas sin esperar a
+tener la DS11 en mano.
+
+---
+
 *Roadmap derivado de la auditoría de firmware asistida (Fable, 2026-07-02) — ver también [ds11_upgrades.md](ds11_upgrades.md) para los hallazgos de hardware de la misma revisión.*

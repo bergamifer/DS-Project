@@ -164,13 +164,22 @@ pin1→trunk `SAI1_MCLK`, pin2→J5.7.)
 | B | 2-4 nodos + 1 mic por nodo | Auto-survey acústico two-way → geometría automática; comparar contra cinta métrica |
 | C | 10-15 nodos | Director OSC + partituras espaciales; estrés de red WiFi (si satura → los ESP32 a un AP dedicado o Ethernet-over-cat5 del daisy chain) |
 
-### TODOs de firmware que habilita esto
-1. `CMD_GET_CAL_RESULT` — exportar delays/signos/calidad del AUTOFOCUS (hoy solo serial).
-2. Timestamps de emisión/captura en cuentas de muestra (para two-way ranging).
-3. Chirps con códigos ortogonales (medir 32 canales en 1 s).
-4. mDNS + `device_id` único por nodo (ya existe `DEVICE_ID`).
-5. Arranque determinístico del pipeline (latencia RX→TX fija en muestras) o chirp de auto-alineación de latencia al boot.
-6. Sync de arranque: comando "arm" + trigger común (red o GPIO).
+### TODOs de firmware que habilita esto (orden sugerido)
+0. **Arranque determinístico del pipeline** (TX arranca en el flanco del primer
+   callback half-complete del RX, ver §2 Nivel 1) — el más barato de todos (~20
+   líneas, sin hardware nuevo) y el que más valor deja listo: dado que ya iguala
+   la latencia entre nodos por construcción, es el paso a hacer primero, apenas
+   la Fase 1 (RX delay-and-sum) esté validada en un nodo — no hace falta esperar
+   a tener la DS11 en mano para implementarlo y probarlo.
+1. Lectura de `NDTR` de los DMA RX/TX para verificar el punto 0 sin señal de audio.
+2. Campo de "delay de ejecución" en `CMD_SET_MODE`/`CMD_SET_BEAM` (conmutación
+   coordinada "a las T", ver §2) — chico, habilita demos multi-nodo sin jitter WiFi.
+3. `CMD_GET_CAL_RESULT` — exportar delays/signos/calidad del AUTOFOCUS (hoy solo serial).
+4. Timestamps de emisión/captura en cuentas de muestra (para two-way ranging).
+5. Chirps con códigos ortogonales (medir 32 canales en 1 s).
+6. mDNS + `device_id` único por nodo (ya existe `DEVICE_ID`).
+7. Sync de arranque: comando "arm" + trigger común (red o GPIO) — solo si algún día
+   se agrega un pulso de sync físico (DS12+); no aplica a la arquitectura analógica actual.
 
 ---
 
