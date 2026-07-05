@@ -64,19 +64,44 @@ El problema **más duro** y el que define qué obras son posibles:
   Sin reloj común, la fase entre nodos se va a la deriva: un foco único formado por
   2+ muros se desarma en segundos.
 
-### La solución ya está prevista en el hardware: JP2
-La DS11 tiene **JP2: exportar/inyectar MCLK por J5.7**. Un nodo master exporta su
-MCLK de 24.576 MHz; los demás lo inyectan en cadena (mismo tendido físico que el
-daisy-chain de 24 V). Con MCLK compartido, **todos los nodos corren muestra-exactos
-para siempre** — coherencia de fase total, el campo entero es UN array de ~500.
+### El hardware ya tiene el camino: JP2 — pero solo resuelve media historia
 
-Lo que falta con MCLK compartido: alinear el **t=0** (que todos cuenten la muestra
-cero juntos). Dos opciones:
+Verificado en el netlist (`DS.txt`): JP2 es un puente de soldadura simple (sin buffer,
+sin selector de dirección) — pin 1 al trunk interno `SAI1_MCLK` (el mismo que alimenta
+los 4 DACs vía RN1-4 y el ADC vía R131), pin 2 al conector J5 pin 7. Puentearlo permite
+exportar/inyectar el MCLK de 24.576 MHz entre placas por el mismo tendido físico del
+daisy-chain de 24 V.
+
+**Corrección importante (2026-07-05) sobre lo que esto alcanza a resolver.** MCLK es
+la referencia de sobremuestreo que llega al SCKI del DAC/ADC — pero **no** es la señal
+que fija el instante de cada muestra: eso lo hace **BCK/FS** (el reloj de bit y el
+frame sync del TDM), que cada STM32 sigue generando de forma independiente, con su
+propio cristal/PLL3, aunque su JP2 esté puenteado. Compartir solo MCLK probablemente
+**no alcanza** para lock de fase completo entre nodos — el drift de BCK/FS (ppm de
+cada cristal) queda igual, un nivel más abajo. Esto es una hipótesis de ingeniería
+razonada, no un hecho confirmado con el datasheet del PCM1690 en mano.
+
+Lo que sí resolvería el lock completo:
+1. **Compartir también BCK+FS** (no solo MCLK) y correr el SAI de los nodos esclavos
+   en modo *slave* externo — el firmware ya sabe hacer esto *dentro de un mismo chip*
+   (SAI1_B/SAI2_B como slaves de SAI1_A/SAI2_A, "arrancar slave antes que master");
+   falta validar si se puede extender esa sincronización **entre chips** por cable.
+2. **Disciplinar el PLL3 de cada esclavo** contra el MCLK entrante (clock recovery
+   por software/hardware) — más trabajo de firmware, pero el esclavo termina generando
+   su propio BCK/FS ya enclavado al mismo reloj físico que el master.
+
+**Cómo se decide esto en la práctica**: es exactamente el experimento de la Fase A de
+abajo. Con 2 nodos y JP2 puenteado, medir con un mic + correlación cruzada (mismo
+método del AUTOFOCUS) si el desfasaje entre nodos se mantiene estable o sigue
+derivando con el tiempo. Si deriva, confirma que hace falta compartir BCK/FS también.
+
+Independientemente de cuál solución haga falta, **sigue existiendo** el problema de
+alinear el **t=0** (que todos cuenten la muestra cero juntos). Dos opciones:
 1. **Pulso de sync** por GPIO en el mismo cable (hardware trivial, agregar a DS12).
 2. **Alineación acústica** (sin hardware nuevo): comando de red arranca todos
    "aproximadamente"; después el nodo A emite un chirp y el nodo B lo captura →
    el offset de arranque queda **medido** y se compensa como delay constante por
-   nodo. Estable mientras el MCLK sea común.
+   nodo. Estable mientras el reloj compartido no se desconecte.
 
 ### Sin MCLK compartido (setup rápido / nodos lejanos)
 - Coherencia **intra-nodo** perfecta (ya la hay) + alineación **inter-nodo** de
