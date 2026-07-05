@@ -154,6 +154,13 @@ Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agreg
       sirven; definir a qué rail se quiere derivar el surge).
 - [ ] Nota en esquemático: "AK5538 requiere config por I2C en cada boot: CKS=512fs (R02=0x31)
       + TDM256 (R03=0x40), addr 7-bit 0x11" — lección del bring-up DS10 (root cause CKS).
+- [ ] **Tap de línea VOUT (nuevo 2026-07-05, multi-nodo)**: header 2 pines **DNP** desde
+      VOUT ch0 del PCM1690 (antes del PAM) vía **R serie ~1 kΩ** + GND. Tres usos con un
+      cable patch a una entrada de J9: (1) **self-test** de toda la cadena DAC→ADC con el
+      chirp/correlación del AUTOFOCUS; (2) verificación empírica de la latencia del nodo;
+      (3) **"oscilador en la cabecera"**: el nodo 1 genera contenido y lo inyecta al
+      daisy-chain analógico → los 15 nodos lo beamformean coherente (resuelve la deriva
+      del contenido generado internamente). Ver docs/multinode.md §2. Costo: 2 pads + 1 R.
 
 ### 8.3 Decisión de sistema — alimentación (sin cambio de PCB)
 

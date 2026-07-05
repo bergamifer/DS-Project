@@ -87,14 +87,35 @@ ningún cable de clock.**
 
 1. **La latencia por nodo debe ser constante y conocida.** El offset RX-DMA↔TX-DMA se
    congela al arrancar y puede diferir entre nodos (hasta ~medio buffer, ms). Es un
-   offset **constante** (no deriva) → se absorbe como delay por nodo:
-   - por diseño: arranque determinístico del TX enganchado al callback del RX, o
-   - por medición: AUTOFOCUS / chirp de red al encender (ya diseñado).
-2. **El contenido generado internamente sí deriva.** Tonos de test, walker, chirps:
-   no pasan por el ADC → corren con cristal libre → entre nodos derivan ~1 ms cada
-   20-50 s. Los modos de test multi-nodo se alinean solo por envolvente; las obras
-   van por la vía analógica. (AUTOFOCUS normal es por-nodo — mic y parlante en el
-   mismo reloj — sin problema.)
+   offset **constante** (no deriva). Insight clave: los group delays de los conversores
+   son constantes de datasheet idénticas en todas las placas — lo único variable es la
+   fase RX↔TX dentro del STM32, visible por firmware. Jerarquía de soluciones (2026-07-05):
+   - **Nivel 1 — arranque determinístico** (solo firmware): arrancar RX primero, esperar
+     su primer callback de half-complete, arrancar los 4 TX en ese flanco → misma
+     latencia en todos los nodos por construcción, jitter sub-µs.
+   - **Nivel 2 — medición por registros** (gratis): leer NDTR del DMA RX y TX en el
+     mismo instante → fase relativa exacta en muestras → compensar en el offset de la
+     delay line. Verificación/auto-corrección del nivel 1.
+   - **Nivel 3 — loop DAC→ADC** (idea de Fernando): NO necesario para ecualizar entre
+     nodos (los conversores idénticos se cancelan), pero valioso como **self-test** de
+     toda la cadena (chirp+correlación del AUTOFOCUS por el loop = test de fábrica en
+     1 s) y como habilitador del truco del oscilador (abajo). Implementación DS11
+     recomendada: **header 2 pines DNP tapeando VOUT ch0 del PCM1690 vía R serie ~1 kΩ**
+     → cable patch a una entrada de J9 cuando se necesita; salida de línea el resto
+     del tiempo. Menos invasivo que un loop fijo en placa.
+2. **El contenido generado internamente sí deriva** (tonos de test, walker, chirps:
+   no pasan por el ADC → cristal libre → ~1 ms cada 20-50 s entre nodos). Dos
+   mitigaciones que lo resuelven (2026-07-05):
+   - **Conmutación coordinada "a las T"**: el comando lleva delay de ejecución
+     ("aplicá en 500 ms") y cada nodo ejecuta con timer local → el jitter WiFi
+     (10-100 ms) desaparece; el error residual es 50 ppm × 0,5 s = 25 µs. Cambio
+     chico al protocolo (campo extra en CMD_SET_MODE/SET_BEAM).
+   - **El truco del oscilador en la cabecera** (la solución de fondo): no generar en
+     15 lugares — el nodo cabecera genera por su DAC → sale por el tap de línea
+     (nivel 3 de arriba) → entra al daisy-chain analógico → los 15 nodos lo
+     beamformean como señal externa. El contenido generado viaja por la vía
+     autosincronizante y la coherencia vuelve gratis.
+   (AUTOFOCUS normal es por-nodo — mic y parlante en el mismo reloj — sin problema.)
 
    *Nota para calibración cruzada* (mic en nodo A midiendo parlantes del nodo B): la
    deriva durante el scan (50 ppm × 30 s ≈ 1,5 ms) contamina la comparación entre
@@ -159,6 +180,21 @@ pin1→trunk `SAI1_MCLK`, pin2→J5.7.)
   delays; el contenido por red es otra etapa).
 - Cable de clock entre nodos: la distribución analógica lo hace innecesario para el caso de uso real (§2).
 - Posicionamiento del público (otra capa, va por el lado de la app / UWB / visión).
+
+## 6. Viabilidad del fenómeno acústico (evaluación 2026-07-05)
+
+| Factor | Números |
+|---|---|
+| Banda útil | ~300 Hz – 2,1 kHz (paso intra-muro 8 cm → λ/2); <300 Hz enfoca el "array sala" (apertura de metros); >2,1 kHz lóbulos de rejilla |
+| Tamaño del foco | 1 muro @ 2 m: haz ~50-60 cm lateral sin resolución axial. **15 muros rodeando: foco 3D real ~10-20 cm @ 1-2 kHz** |
+| Ganancia focal | +30 dB por muro (32 coherentes) + hasta +23 dB entre muros → el foco emerge del campo difuso aun en salas vivas |
+| Presupuesto de fase @ 1 kHz | reloj 0,8 µs ✓ · latencia ecualizada <10 µs ✓ · geometría ±1 cm = 29 µs ≈ 10° ✓ · aire ±2 °C ≈ 25 µs ✓ → coherencia >90 % alcanzable; AUTOFOCUS (medido) absorbe todo junto |
+| Focos múltiples | por partición de muros (hoy) o multi-tap por canal (2-3 delays sumados; CPU al ~9 %, hay margen) |
+| Riesgos rankeados | 1) geometría ±1-3 cm (auto-survey/AUTOFOCUS) · 2) variabilidad de parlantes reciclados (polaridad medida ✓, falta trim de sensibilidad) · 3) sala muy viva (RIR de la app lo diagnostica) · 4) SPL 2,5 W/canal = niveles íntimos |
+
+**Veredicto: viable con confianza alta.** Sin bloqueantes físicos; los desafíos duros
+(latencia, geometría, coordinación) tienen camino de ingeniería cerrado, la mayoría por
+firmware. Y cada incertidumbre de la tabla es medible con el propio instrumento.
 
 Ver también: [`app_ios.md`](app_ios.md) (roadmap de la app), `NodesStore.swift`
 (transformación y fan-out), [`ds11_upgrades.md`](ds11_upgrades.md) (JP2/MCLK).
