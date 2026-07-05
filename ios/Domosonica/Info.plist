@@ -11,5 +11,7 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Domosonica se conecta al instrumento (puente ESP32) en tu red local para controlar modos y focos de sonido.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>El micrófono se usa para medir la respuesta acústica de la sala (RIR) y, en el futuro, para afinar el foco del instrumento.</string>
 </dict>
 </plist>

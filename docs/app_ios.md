@@ -51,6 +51,26 @@ protocolo UART binario directamente. Tres pantallas (tabs):
 
 ---
 
+## 1.5 — v1.5 (2026-07-05): espacial expandida + RIR + multi-nodo
+
+- **Ícono**: campo de interferencia enfocando (generado por script, `icon-1024.png`).
+- **Espacial**: cámara orbital (modo Foco/Cámara + pinch zoom), **focos guardados**
+  (chips, persistidos), **trayectorias**: grabar el gesto del dedo → reproducir en loop
+  (interpolado) → streamear a los nodos; estela 3D de la trayectoria; follow-me demo.
+- **Multi-nodo** (`NodesStore.swift`): registro de nodos con pose (x, z, yaw) en la sala,
+  editor visual, foco global transformado al **marco local de cada nodo** y enviado en
+  fan-out paralelo con rate limit. Los muros se dibujan en la escena con su gradiente
+  de delays por nodo. Estrategia completa de escalado: [`multinode.md`](multinode.md).
+- **Pestaña Sala (RIR)** (`RIR.swift` + `RIRView.swift`): sweep exponencial (Farina,
+  60 Hz-16 kHz, 3 s) por el parlante del iPhone → grabación `.measurement` →
+  deconvolución por DFT (vDSP) → impulso, curva de Schroeder, **RT60 broadband y por
+  bandas** (250-4k), veredicto "¿esta sala focaliza?". Umbral: RT60 mid <0,6 s seca /
+  <1,2 apta / <1,8 reverberante / más: la sala domina. Funciona en el simulador
+  (usa mic/parlantes de la Mac). Excitación por el instrumento: TODO firmware.
+- `NSMicrophoneUsageDescription` agregada al Info.plist.
+
+---
+
 ## 2. Cómo instalar en el iPhone
 
 1. Abrir `ios/Domosonica.xcodeproj` en Xcode. Si Xcode ofrece descargar la

@@ -15,6 +15,8 @@ struct RootView: View {
                 .tabItem { Label("Control", systemImage: "dial.medium") }
             SpatialView()
                 .tabItem { Label("Espacial", systemImage: "cube.transparent") }
+            RIRView()
+                .tabItem { Label("Sala", systemImage: "waveform.badge.mic") }
             SettingsView()
                 .tabItem { Label("Ajustes", systemImage: "gearshape") }
         }
