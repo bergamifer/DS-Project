@@ -78,9 +78,27 @@ y MIDI (3 bytes/mensaje). A 115200 hay ~10× de margen. La "eficiencia" es firmw
 - Pines ya comprometidos: GPIO0/1 (UART al STM32), GPIO10→D1 (LED), GPIO9→R106 (boot
   strap), GPIO18/19 (USB D-/D+ para programación), EN (reset).
 
-**Hedge opcional (gratis solo en fab)**: rutear GPIO4 → un GPIO libre del STM32 como
-línea **IRQ/atención** para eventos de baja latencia (note-on BLE-MIDI, push `CMD_EVENT`)
-sin polling. No necesario; el UART alcanza.
+### Línea GPIO4→PC13: opcional, y NO hace falta la inversa
+
+**Aclaración importante (2026-07-07): el UART ya es interrupt-driven en ambos sentidos.**
+Cuando el STM32 manda un byte, el UART del ESP32 lo recibe por IRQ/DMA (no pollea), y
+viceversa. O sea: el STM32 avisa cualquier evento al ESP32 con solo mandar un mensaje
+(~87 µs/byte) — **no hace falta línea IRQ inversa (STM32→ESP32)**. Y la línea *forward*
+(GPIO4→PC13) también es redundante para "notificar un evento".
+
+Lo único que un GPIO dedicado hace mejor que el UART: (1) **pulso de timing sin jitter**
+(un flanco es instantáneo; un mensaje UART tiene latencia de parseo + jitter de cola)
+para un futuro disparo sample-accurate entre nodos; (2) **wake de sleep** (PC13 es WKUP).
+Para BLE-MIDI el UART sobra.
+
+**Si igual se rutea (hedge de timing, verificado en netlist 2026-07-07):**
+- **GPIO4 (U5 pin 18, push-pull, no strapping) → PC13 (U7 pad 7)**. PC13 libre; VBAT
+  atado a +3V3 → PC13 usable como GPIO normal; sin otro `Px13` en uso → EXTI13 libre.
+  PC13 como **entrada/EXTI** (el drive limitado de PC13/14/15 no aplica: recibe, no maneja).
+- **R serie ~220 Ω** (100-330), cerca del ESP32 — protección de contención en el boot
+  asíncrono de los dos procesadores. Idle definido con **pull interno del STM32** en PC13
+  (activa-baja: pull-up + pulso a bajo), sin pull externo. Ambos 3.3V → directo.
+- **No rutear la inversa** — el UART cubre STM32→ESP32.
 
 ---
 

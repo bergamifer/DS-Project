@@ -168,12 +168,13 @@ Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agreg
       plano **In1 (GND sólido) esté recortado** debajo de la antena. Un plano de masa entero
       bajo una antena de PCB destruye el alcance de WiFi *y* BLE. Cero costo si el pour ya
       respeta el keepout del footprint; solo hay que mirarlo. Ver docs/esp32_roles.md.
-- [ ] **Opcional — línea IRQ ESP32→STM32** (hedge gratis a nivel fab, imposible después):
-      rutear 1 GPIO libre del ESP32 (GPIO4/5/6/7 están sin conexión al otro lado) a un pin
-      libre del STM32 como línea de "atención" para eventos de baja latencia (note-on de
-      BLE-MIDI, push `CMD_EVENT`) sin polling. **No necesario** — el UART GPIO0/1 compartido
-      alcanza de sobra para control-rate (subir baud + fire-and-forget es firmware). Decidir
-      si vale las 1-2 pistas. Ver docs/esp32_roles.md §"Enlace con el STM32".
+- [ ] **Opcional — línea de timing ESP32→STM32** (hedge gratis a nivel fab): rutear
+      **GPIO4 (U5 pin 18) → PC13 (U7 pad 7)** con **R serie ~220 Ω** cerca del ESP32.
+      Verificado en netlist (2026-07-07): PC13 libre, VBAT@+3V3 (PC13 usable como GPIO),
+      EXTI13 sin conflicto; PC13 como entrada/EXTI con pull interno (activa-baja). **No es
+      necesaria**: el UART GPIO0/1 ya es interrupt-driven en ambos sentidos, así que sirve
+      solo para un futuro disparo de timing sin jitter. **NO rutear la inversa** (STM32→ESP32):
+      el UART ya cubre esa notificación. Ver docs/esp32_roles.md §"Enlace con el STM32".
 
 ### 8.3 Decisión de sistema — alimentación (sin cambio de PCB)
 
