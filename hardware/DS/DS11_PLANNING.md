@@ -161,6 +161,19 @@ Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agreg
       (3) **"oscilador en la cabecera"**: el nodo 1 genera contenido y lo inyecta al
       daisy-chain analógico → los 15 nodos lo beamformean coherente (resuelve la deriva
       del contenido generado internamente). Ver docs/multinode.md §2. Costo: 2 pads + 1 R.
+- [ ] 🔴 **Keepout de antena del ESP32-C3-MINI-1 (U5) — VERIFICAR EN LAYOUT** (habilita
+      BLE-MIDI + ESP-NOW, que son solo firmware sobre la radio existente). U5 en (126, 40),
+      a 5.4 mm del borde superior con la antena hacia el borde (bien ubicado). Confirmar que
+      **NO hay cobre en la zona de antena del módulo en NINGUNA capa** — en particular que el
+      plano **In1 (GND sólido) esté recortado** debajo de la antena. Un plano de masa entero
+      bajo una antena de PCB destruye el alcance de WiFi *y* BLE. Cero costo si el pour ya
+      respeta el keepout del footprint; solo hay que mirarlo. Ver docs/esp32_roles.md.
+- [ ] **Opcional — línea IRQ ESP32→STM32** (hedge gratis a nivel fab, imposible después):
+      rutear 1 GPIO libre del ESP32 (GPIO4/5/6/7 están sin conexión al otro lado) a un pin
+      libre del STM32 como línea de "atención" para eventos de baja latencia (note-on de
+      BLE-MIDI, push `CMD_EVENT`) sin polling. **No necesario** — el UART GPIO0/1 compartido
+      alcanza de sobra para control-rate (subir baud + fire-and-forget es firmware). Decidir
+      si vale las 1-2 pistas. Ver docs/esp32_roles.md §"Enlace con el STM32".
 
 ### 8.3 Decisión de sistema — alimentación (sin cambio de PCB)
 
