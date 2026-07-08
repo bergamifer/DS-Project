@@ -191,6 +191,14 @@ Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agreg
       SM6T15A donde iba SMBJ24A).
 - [ ] **Rotation corrections del P&P** para footprints nuevos: RJ45×4, USB-C vertical,
       terminal block MSTBVA.
+- [ ] **RN1-4 (arrays 62Ω 4x0603) → 16 resistencias discretas de 75Ω** (decisión 2026-07-07:
+      los arrays no están en stock). Cada RN es un array de 4 elementos **aislados** (no bus)
+      que amortigua las 4 líneas SAI de un DAC → mapea 1:1 a 4 discretas (R1=SAI_FS, R2=SAI_SCK,
+      R3=SAI_SD, R4=MCLK; ver ruteo en netlist). 62→75Ω OK en las 4 líneas: el RC extra en MCLK
+      (24.576MHz) es ~0.75ns « 40.7ns de período. Plus: las discretas 75Ω 0402 suelen ser
+      *basic part* (sin fee) y tienen menos riesgo de rotación que los arrays. **A cuidar en
+      layout**: cabe en la zona densa de los DACs, y mantener las 4 líneas de cada DAC de
+      largo/skew parecido (el array las igualaba por construcción). Verificar footprint pin-1.
 - [ ] Silkscreen pin-1 **grande y asimétrico** en los 4 PCM1690 + AK5538.
 - [ ] Confirm Production File / Parts Placement / Photo Confirmation = Yes.
 - [x] Layout — **VERIFICADO por revisión de plots 600dpi (2026-07-03,
