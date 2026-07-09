@@ -24,6 +24,10 @@
 #define CMD_GET_STATUS      0x03    /* payload: none (len=0) */
 #define CMD_STATUS          0x04    /* STM32 → ESP32 response, ds_status_t */
 #define CMD_SET_BEAM        0x07    /* payload: ds_beam_req_t (custom steer) */
+#define CMD_ESP_INFO        0x08    /* ESP32 → STM32: IP en ASCII. NO se ACKea a
+                                     * propósito: el ESP32 lo empuja sin pedir nada,
+                                     * y un ACK espurio le daría el ack_sem a un
+                                     * comando HTTP concurrente esperando el suyo. */
 #define CMD_ACK             0x06
 #define CMD_NACK            0x15
 
@@ -32,6 +36,7 @@
 #define CFG_PAYLOAD_SIZE    52
 #define CFG_NUM_CHANNELS    16
 #define PROTO_VERSION       1
+#define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
  * @brief Device configuration received from ESP32
@@ -133,5 +138,11 @@ uint8_t UART_Protocol_StatusRequested(void);
  * @brief Send a CMD_STATUS frame to the ESP32 (blocking, ~5ms @115200).
  */
 void UART_Protocol_SendStatus(const ds_status_t *st);
+
+/**
+ * @brief IP del ESP32, reportada por CMD_ESP_INFO.
+ * @return Cadena NUL-terminada; "" mientras no se haya recibido ninguna.
+ */
+const char* UART_Protocol_GetEspIp(void);
 
 #endif /* UART_PROTOCOL_H */

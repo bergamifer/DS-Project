@@ -998,9 +998,13 @@ int main(void)
       uint8_t verbose = ((hb_count++ % 10) == 0);
 
       // Expected: 50 half + 50 full per second (20ms buffer cycle @ 48kHz TDM8)
-      sprintf(uart_buf, "[%lus] Half: %lu/s, Full: %lu/s, Err: %lu, Undr: %lu, RX: %lu bytes\r\n",
+      // snprintf: con la IP anexada la linea puede exceder los 128B de uart_buf.
+      const char *esp_ip = UART_Protocol_GetEspIp();
+      snprintf(uart_buf, sizeof(uart_buf),
+              "[%lus] Half: %lu/s, Full: %lu/s, Err: %lu, Undr: %lu, RX: %lu bytes | ESP: %s\r\n",
               HAL_GetTick() / 1000, half_per_sec, full_per_sec,
-              error_count, underrun_count, UART_Protocol_GetRxByteCount());
+              error_count, underrun_count, UART_Protocol_GetRxByteCount(),
+              esp_ip[0] ? esp_ip : "--");
       UART_Print(uart_buf);
 
       // 8-channel ADC peak meter — printed EVERY second (one line) so an

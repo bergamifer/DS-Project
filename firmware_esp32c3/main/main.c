@@ -61,10 +61,14 @@
 #define CMD_GET_STATUS   0x03   // payload: vacio (len=0)
 #define CMD_STATUS       0x04   // STM32→ESP32: ds_status_t
 #define CMD_SET_BEAM     0x07   // payload: 9 bytes (type, az, fx, fy, fz)
+#define CMD_ESP_INFO     0x08   // ESP32→STM32: IP en ASCII. El STM32 NO lo ACKea
+                                // a proposito: un ACK espurio le robaria el ack_sem
+                                // a un comando HTTP concurrente. Ver uart_protocol.h
 #define CMD_ACK          0x06
 #define CMD_NACK         0x15
 #define NUM_CHANNELS     16
 #define PROTO_MAX_PAYLOAD 64
+#define ESP_IP_PUSH_MS   10000  // reenvio periodico: si el STM32 resetea, recupera la IP
 
 typedef struct {
     uint8_t  master_gain;
@@ -112,6 +116,18 @@ static SemaphoreHandle_t ack_sem;      // ACK/NACK recibido
 static SemaphoreHandle_t status_sem;   // CMD_STATUS recibido
 static volatile bool     last_ack_ok = false;
 static ds_status_t       last_status;  // valido tras tomar status_sem
+
+// Serializa las tramas hacia el STM32. Sin esto, el push periodico de la IP
+// (monitor task) puede intercalarse con la transaccion comando→ACK de un handler
+// HTTP y corromper ambas. Recursivo: uart_send_and_wait_ack() llama a
+// uart_send_frame() ya teniendo el lock.
+static SemaphoreHandle_t uart_tx_mutex;
+#define UART_TX_LOCK()    do { if (uart_tx_mutex) xSemaphoreTakeRecursive(uart_tx_mutex, portMAX_DELAY); } while (0)
+#define UART_TX_UNLOCK()  do { if (uart_tx_mutex) xSemaphoreGiveRecursive(uart_tx_mutex); } while (0)
+
+// IP propia, publicada al STM32 para que aparezca en su heartbeat.
+static char my_ip[16] = {0};
+static void uart_push_esp_ip(void);   // definida junto a uart_send_frame()
 
 // ============== WiFi ==============
 
@@ -260,6 +276,7 @@ static void stm32_monitor_task(void *arg)
     int     line_idx = 0;
     uint32_t total_bytes = 0;
     uint32_t last_report = 0;
+    uint32_t last_ip_push = 0;
 
     printf("[ESP32] Monitor STM32 iniciado (UART%d RX=GPIO%d, %d baud)\n",
            STM32_UART_NUM, STM32_UART_RX, STM32_UART_BAUD);
@@ -273,6 +290,13 @@ static void stm32_monitor_task(void *arg)
         if (now - last_report >= 5000) {
             last_report = now;
             printf("[ESP32] STM32 monitor: %lu bytes recibidos total\n", total_bytes);
+        }
+
+        // Publicar la IP al STM32 (para su heartbeat). Periodico, asi un reset
+        // del STM32 la recupera sin reiniciar el ESP32.
+        if (my_ip[0] && (last_ip_push == 0 || now - last_ip_push >= ESP_IP_PUSH_MS)) {
+            last_ip_push = now;
+            uart_push_esp_ip();
         }
 
         if (len <= 0) continue;
@@ -381,7 +405,16 @@ static void uart_send_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
     frame[fi++] = calc_checksum(payload, len);   // len=0 → 0
     frame[fi++] = PROTO_FOOTER_1;
     frame[fi++] = PROTO_FOOTER_2;
+    UART_TX_LOCK();
     uart_write_bytes(STM32_UART_NUM, frame, fi);
+    UART_TX_UNLOCK();
+}
+
+// Publica la IP al STM32 (aparece en su heartbeat). Sin ACK: es un push.
+static void uart_push_esp_ip(void)
+{
+    if (!my_ip[0]) return;
+    uart_send_frame(CMD_ESP_INFO, (const uint8_t *)my_ip, strlen(my_ip));
 }
 
 // Envia un comando y espera el ACK/NACK del STM32.
@@ -389,11 +422,15 @@ static void uart_send_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
 static int uart_send_and_wait_ack(uint8_t cmd, const uint8_t *payload,
                                   uint16_t len, int timeout_ms)
 {
+    // Lock sobre toda la transaccion: nadie puede meter una trama entre el
+    // comando y su ACK.
+    UART_TX_LOCK();
     xSemaphoreTake(ack_sem, 0);                 // drenar ACK viejo
     uart_send_frame(cmd, payload, len);
-    if (xSemaphoreTake(ack_sem, timeout_ms / portTICK_PERIOD_MS) != pdTRUE)
-        return -1;
-    return last_ack_ok ? 1 : 0;
+    int rc = (xSemaphoreTake(ack_sem, timeout_ms / portTICK_PERIOD_MS) != pdTRUE)
+             ? -1 : (last_ack_ok ? 1 : 0);
+    UART_TX_UNLOCK();
+    return rc;
 }
 
 // ============== JSON Parsing ==============
@@ -750,6 +787,9 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         led_wifi_state = 1;  // fijo ON: conectado
         printf("[ESP32] WiFi conectado — IP: " IPSTR "\n", IP2STR(&event->ip_info.ip));
+        // Guardar la IP; el monitor task la empuja al STM32 (no mandamos desde
+        // el event task para no bloquearlo con el UART).
+        snprintf(my_ip, sizeof(my_ip), IPSTR, IP2STR(&event->ip_info.ip));
         retry_num = 0;
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -852,6 +892,7 @@ void app_main(void)
     // Semaforos request/response del protocolo binario (antes del monitor task)
     ack_sem = xSemaphoreCreateBinary();
     status_sem = xSemaphoreCreateBinary();
+    uart_tx_mutex = xSemaphoreCreateRecursiveMutex();
 
     // Tarea de monitoreo: lee UART1 RX y forwardea con prefijo [STM32]
     xTaskCreate(stm32_monitor_task, "stm32_mon", 4096, NULL, 5, NULL);

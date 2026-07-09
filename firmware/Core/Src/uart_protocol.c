@@ -48,6 +48,10 @@ static ds_beam_req_t     beam_req;
 static volatile uint8_t  beam_req_flag = 0;
 static volatile uint8_t  status_req_flag = 0;
 
+/* IP del ESP32 (CMD_ESP_INFO). Escrita en contexto ISR, leída en el main loop:
+ * el NUL se pone último, así un lector nunca ve una cadena sin terminar. */
+static char esp_ip[ESP_IP_MAXLEN + 1] = {0};
+
 /* Pre-formatted print buffer for non-blocking IT transmission */
 #define PRINT_BUF_SIZE 1200
 static char print_buf[PRINT_BUF_SIZE];
@@ -224,6 +228,12 @@ static void process_byte(uint8_t byte)
             status_req_flag = 1;   /* main loop builds + sends CMD_STATUS */
             rx_frame_count++;
             /* No ACK: the CMD_STATUS frame itself is the response */
+        } else if (rx_command == CMD_ESP_INFO &&
+                   rx_payload_len >= 7 && rx_payload_len <= ESP_IP_MAXLEN) {
+            /* IP en ASCII, push del ESP32. Sin ACK (ver uart_protocol.h). */
+            memcpy(esp_ip, rx_payload, rx_payload_len);
+            esp_ip[rx_payload_len] = '\0';   /* NUL último: nunca se lee a medias */
+            rx_frame_count++;
         } else {
             rx_error_count++;
             send_nack();
@@ -251,6 +261,11 @@ static void send_nack(void)
 static void dbg_print(const char *str)
 {
     HAL_UART_Transmit(huart_dbg, (uint8_t*)str, strlen(str), 100);
+}
+
+const char* UART_Protocol_GetEspIp(void)
+{
+    return esp_ip;
 }
 
 /* ============================================================
