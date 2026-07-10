@@ -201,6 +201,8 @@ typedef struct {
   uint8_t tx;                     // 1 = TX steered output (Phase 2)
   int16_t fx_mm, fy_mm, fz_mm;    // TX focal point, relative to array center
   uint8_t af;                     // 1 = AUTOFOCUS mic-scan mode
+  uint8_t tone;                   // 1 = internal tone source feeds beam_line
+  uint16_t tone_hz;               // tone frequency (keep ≤2140: d=λ/2 limit)
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor (+30dB)",          .monitor = 1 },
@@ -226,6 +228,17 @@ static const ui_state_t ui_states[] = {
   // chirp scan of every speaker → TOF-derived delays + polarity, then a
   // steered tone focused at the mic. Re-enter the mode to re-scan.
   { .name = "AUTOFOCUS scan (mic->ADC c0)",  .af = 1 },
+  // Internal tone → beam_line → the TX steering path runs UNCHANGED (Q8
+  // fractional delays, gains, signs): directionality validation with no mic
+  // on the board (docs/ds10_tone_beam_plan.md). fy=-240 puts the focus in
+  // the plane of row 1 — the only populated row; a linear array cannot
+  // discriminate Y anyway. 2kHz spot @1m: ±14cm; 1kHz: ±27cm (ratio ~2 is
+  // the self-validating test). APPEND ONLY: the ESP32/web/app mirror these
+  // indices.
+  { .name = "TX tone 2k focus @1m",         .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 2000, .fx_mm = 0, .fy_mm = -240, .fz_mm = 1000 },
+  { .name = "TX tone 1k focus @1m",         .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 1000, .fx_mm = 0, .fy_mm = -240, .fz_mm = 1000 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 static volatile uint8_t ui_state_idx = 0;
@@ -247,7 +260,20 @@ static volatile uint8_t beam_enabled = 0;
 static int32_t beam_line[DELAY_LINE_SIZE] __attribute__((aligned(32)));
 static uint16_t rx_delay[MIC_COUNT] = {0};        // per-mic delay in samples
 static volatile int16_t beam_az_deg = 0;
-static volatile uint8_t beam_out_shift = 5;       // output boost, same as monitor
+/* Output boost for the ADC-fed beam (weak). MUST be 0 in tone modes: the
+ * internal tone is already -6dBFS and ×32 would clip hard into the PAMs —
+ * UI_ApplyState() sets this per mode. */
+static volatile uint8_t beam_out_shift = 5;
+
+/* ===== Internal tone source (TX directionality without a mic) =====
+ * Writes beam_line[] at the same positions/cadence as the RX beam, so the
+ * TX steering path is reused as-is and the delay stays a true TIME delay at
+ * any frequency (unlike the CAL_DONE tone, whose phase trick is 1kHz-only).
+ * Phase accumulator in table-index Q16 over sine_table_1khz[48] (one exact
+ * 1kHz period @48k): step per sample = f/1000 indices. Main-loop context. */
+static volatile uint8_t  tone_enabled = 0;
+static volatile uint16_t tone_freq_hz = 2000;
+static uint32_t tone_phase_q16 = 0;
 // Input/mic X positions in mm (linear placeholder — see MIC_SPACING_MM note)
 static float mic_pos_x_mm[MIC_COUNT] = {
   0.0f * MIC_SPACING_MM, 1.0f * MIC_SPACING_MM, 2.0f * MIC_SPACING_MM,
@@ -2307,6 +2333,11 @@ static void UI_ApplyState(uint8_t idx) {
   beam_enabled = st->beam;
   adc_monitor_enabled = st->monitor;
   autofocus_enabled = st->af;
+  if (st->tone) { tone_freq_hz = st->tone_hz; tone_phase_q16 = 0; }
+  tone_enabled = st->tone;
+  /* Tone source is -6dBFS: the +30dB boost that lifts the weak ADC beam
+   * would clip ×32 into the PAMs (plan §3.1). */
+  beam_out_shift = st->tone ? 0 : 5;
   if (!st->af) {                     // leaving AUTOFOCUS aborts any scan
     cal_state = CAL_IDLE;
     cal_capturing = 0;
@@ -2328,6 +2359,20 @@ static void UI_ApplyState(uint8_t idx) {
  * Feeds all 8 circular delay lines from ADC input.
  * Must be called BEFORE Fill_Audio_Beamform in the same processing cycle.
  */
+/* One tone sample, peak 2^22 = -6dBFS: linear interpolation on the 48-entry
+ * table. (s1−s0) spans up to ~2^19 × frac 2^16 → 64-bit intermediate. The
+ * wrap needs a single subtract for any f < 48kHz (inc < 48<<16). */
+static inline int32_t Tone_NextSample(void) {
+  uint32_t inc = ((uint32_t)tone_freq_hz << 16) / 1000u;
+  uint32_t idx = tone_phase_q16 >> 16;              // < 48, wrapped below
+  int32_t  fr  = (int32_t)(tone_phase_q16 & 0xFFFF);
+  int32_t  s0  = sine_table_1khz[idx];
+  int32_t  s1  = sine_table_1khz[(idx + 1u) % 48u];
+  tone_phase_q16 += inc;
+  if (tone_phase_q16 >= (48u << 16)) tone_phase_q16 -= (48u << 16);
+  return s0 + (int32_t)(((int64_t)(s1 - s0) * fr) >> 16);
+}
+
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
   uint32_t wp = delay_write_pos;
   for (uint32_t i = 0; i < samples; i++) {
@@ -2352,7 +2397,13 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
    * The rx_delay[m] look BACK into history just written/older (≤64 samples,
    * window is 1024) so no wrap hazard. 8 MAC/sample = 3840 MACs per half —
    * negligible (~0.1% CPU). Runs in main-loop context, after mic lines. */
-  if (beam_enabled) {
+  if (tone_enabled) {
+    /* Internal source: fill beam_line exactly where the RX beam would write
+     * it — the TX fills read it back with their focal delays untouched. */
+    for (uint32_t i = 0; i < samples; i++) {
+      beam_line[(wp + i) & DELAY_LINE_MASK] = Tone_NextSample();
+    }
+  } else if (beam_enabled) {
     for (uint32_t i = 0; i < samples; i++) {
       int32_t acc = 0;
       for (uint32_t m = 0; m < MIC_COUNT; m++) {

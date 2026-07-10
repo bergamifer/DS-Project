@@ -119,7 +119,14 @@ actualizar **ambos** en el mismo commit.
 
 ## 4. Implementación por fases
 
-### Fase A — núcleo (imprescindible)
+### Fase A — núcleo ✅ IMPLEMENTADA 2026-07-10 (los 3 targets compilan)
+Modos **12 = "TX tone 2k focus @1m"** y **13 = "TX tone 1k focus @1m"** (K2 o
+`POST /mode`). Generador `Tone_NextSample()` (acumulador de fase Q16, interp.
+lineal, pico -6dBFS) escribe `beam_line` en `Process_ADC_Half()`;
+`beam_out_shift` pasa a 0 en modos de tono (§3.1) y vuelve a 5 al salir.
+Espejos actualizados: `MODE_NAMES[]` + web UI (N=14) del ESP32, `DSModes` de la
+app iOS. El steering custom sigue siendo `CMD_SET_BEAM` / sliders (fy=-240 al
+barrer, ver §3.2). Detalle original de la fase:
 1. Estado `tone_enabled`, `tone_freq_hz`, `tone_phase_q16` + `tone_next_sample()`.
 2. Rama en `Process_ADC_Half()` que escribe `beam_line` (§2).
 3. Campo `.tone` + `.tone_hz` en `ui_state_t`; `beam_out_shift = st->tone ? 0 : 5`.

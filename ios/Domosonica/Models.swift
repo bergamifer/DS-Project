@@ -68,6 +68,8 @@ enum DSModes {
         DSMode(id: 9,  short: "Foco der",    detail: "TX +0,5 m @ 1 m",    kind: .tx),
         DSMode(id: 10, short: "Foco cerca",  detail: "TX centro @ 0,3 m",  kind: .tx),
         DSMode(id: 11, short: "AUTOFOCUS",   detail: "scan con micrófono", kind: .autofocus),
+        DSMode(id: 12, short: "Tono 2k",     detail: "foco @ 1 m, ±14 cm", kind: .tx),
+        DSMode(id: 13, short: "Tono 1k",     detail: "foco @ 1 m, ±27 cm", kind: .tx),
     ]
     static let autofocusIndex = 11
 }
