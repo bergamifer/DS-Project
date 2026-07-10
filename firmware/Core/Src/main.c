@@ -921,6 +921,27 @@ int main(void)
         UI_ApplyCustomBeam(&breq);
       }
 
+      // ===== Master volume: PCM1690 attenuation (all modes, walker incl.) =====
+      // Applied here (main loop) not the ISR: I2C writes must not run in IRQ.
+      int8_t vol_db;
+      if (UART_Protocol_GetVolumeRequest(&vol_db)) {
+        // ATDAx = 255 − dB×2 (0.5 dB/step). db≤−64 → mute (0x80).
+        uint8_t atten;
+        if (vol_db <= -64) {
+          atten = PCM1690_ATTEN_MUTE;
+        } else {
+          int16_t a = (vol_db > 0) ? 0 : vol_db;      // clamp positives to 0 dB
+          atten = (uint8_t)(255 + a * 2);             // a negative → below 0xFF
+        }
+        for (uint32_t d = 0; d < 4; d++)
+          for (uint8_t ch = 1; ch <= 8; ch++)
+            PCM1690_SetAttenuation(&hi2c1, dac_addrs[d], ch, atten);
+        snprintf(uart_buf, sizeof(uart_buf),
+                 "VOLUME: %d dB → ATDA=0x%02X (todos los canales)\r\n",
+                 (int)vol_db, atten);
+        UART_Print(uart_buf);
+      }
+
       if (UART_Protocol_StatusRequested()) {
         ds_status_t st;
         st.proto_ver = PROTO_VERSION;

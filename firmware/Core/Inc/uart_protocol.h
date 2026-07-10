@@ -28,6 +28,9 @@
                                      * propósito: el ESP32 lo empuja sin pedir nada,
                                      * y un ACK espurio le daría el ack_sem a un
                                      * comando HTTP concurrente esperando el suyo. */
+#define CMD_SET_VOLUME      0x09    /* payload: int8 dB (0..-63, ≤-64 = mute). Control
+                                     * maestro sobre la atenuación del PCM1690 — afecta
+                                     * TODOS los modos por igual (walker incluido). */
 #define CMD_ACK             0x06
 #define CMD_NACK            0x15
 
@@ -144,5 +147,12 @@ void UART_Protocol_SendStatus(const ds_status_t *st);
  * @return Cadena NUL-terminada; "" mientras no se haya recibido ninguna.
  */
 const char* UART_Protocol_GetEspIp(void);
+
+/**
+ * @brief Poll for a CMD_SET_VOLUME request.
+ * @param db  destino: dB pedidos (0..-63, ≤-64 = mute).
+ * @return 1 y llena *db una vez por request, 0 si no hay ninguno pendiente.
+ */
+uint8_t UART_Protocol_GetVolumeRequest(int8_t *db);
 
 #endif /* UART_PROTOCOL_H */

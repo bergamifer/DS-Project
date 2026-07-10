@@ -64,6 +64,8 @@
 #define CMD_ESP_INFO     0x08   // ESP32→STM32: IP en ASCII. El STM32 NO lo ACKea
                                 // a proposito: un ACK espurio le robaria el ack_sem
                                 // a un comando HTTP concurrente. Ver uart_protocol.h
+#define CMD_SET_VOLUME   0x09   // payload: int8 dB (0..-63, <=-64 = mute). Volumen
+                                // maestro via atenuacion del PCM1690 (todos los modos).
 #define CMD_ACK          0x06
 #define CMD_NACK         0x15
 #define NUM_CHANNELS     16
@@ -661,6 +663,40 @@ static esp_err_t beam_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /volume {"db":-20} — volumen maestro via atenuacion del PCM1690.
+// Afecta TODOS los modos (walker incluido), a diferencia de master_gain.
+static esp_err_t volume_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    cJSON *db   = root ? cJSON_GetObjectItem(root, "db") : NULL;
+    int   want  = (db && cJSON_IsNumber(db)) ? db->valueint : 1;  // 1 = invalido
+    if (root) cJSON_Delete(root);
+
+    char resp[160];
+    if (want > 0 || want < -64) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"db 0..-63, o -64 = mute\"}");
+    } else {
+        int8_t payload = (int8_t)want;
+        int ack = uart_send_and_wait_ack(CMD_SET_VOLUME,
+                                         (const uint8_t *)&payload, 1, 300);
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"%s\",\"db\":%d}",
+                 ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"), want);
+        printf("[ESP32] POST /volume %d dB -> %s\n", want,
+               ack == 1 ? "ACK" : "sin ACK");
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 // ============== UI web embebida (GET /) ==============
 // Pagina autocontenida (sin CDN): botones de modo + sliders de beam + telemetria.
 static const char INDEX_HTML[] =
@@ -682,6 +718,11 @@ static const char INDEX_HTML[] =
 ".row{display:flex;gap:8px;align-items:center}.row button{flex:0 0 auto}"
 "</style></head><body>"
 "<h1>DS Beamformer <span id=link style='font-size:.6em;color:#888'>...</span></h1>"
+"<div class=card><h2>Volumen maestro</h2>"
+"<div class=row><input type=range id=vol min=-63 max=0 value=0 step=1>"
+"<span class=val id=volv>0 dB</span></div>"
+"<div class=row style='margin-top:6px'><button onclick=setVol(-64)>Mute</button>"
+"<button onclick=setVol(+vol.value)>Aplicar</button></div></div>"
 "<div class=card><h2>Modo</h2><div class=grid id=modes></div></div>"
 "<div class=card><h2>RX beam (az&deg;)</h2>"
 "<div class=row><input type=range id=az min=-90 max=90 value=0 step=5>"
@@ -705,6 +746,8 @@ static const char INDEX_HTML[] =
 "for(let i=0;i<8;i++){const d=document.createElement('div');d.className='bar';d.id='b'+i;mt.appendChild(d);}"
 "['az','fx','fy','fz'].forEach(id=>{const e=document.getElementById(id);"
 "e.oninput=()=>document.getElementById(id+'v').textContent=e.value+(id=='az'?'\\u00b0':'');});"
+"vol.oninput=()=>volv.textContent=vol.value+' dB';"
+"function setVol(d){fetch('/volume',{method:'POST',body:JSON.stringify({db:d})});}"
 "function setRx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'rx',az:+az.value})});}"
 "function setTx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'tx',fx:+fx.value,fy:+fy.value,fz:+fz.value})});}"
 "function poll(){fetch('/status').then(r=>r.json()).then(s=>{"
@@ -748,6 +791,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/command", .method = HTTP_POST, .handler = command_handler },
             { .uri = "/mode",    .method = HTTP_POST, .handler = mode_handler    },
             { .uri = "/beam",    .method = HTTP_POST, .handler = beam_handler    },
+            { .uri = "/volume",  .method = HTTP_POST, .handler = volume_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
             { .uri = "/ping",    .method = HTTP_GET,  .handler = ping_handler    },
         };
