@@ -8,19 +8,26 @@
 
 ## Revisión de circuito DS11 vía netlist (Fable, 2026-07-02)
 
-**Fuente:** análisis del netlist KiCad exportado ([DS11_netlist.net](DS11_netlist.net), 606 componentes / 610 nets, sheet "Master DS11"), asistido por IA (modelo Fable). Revisión de diseño solamente — nada de esto se aplicó todavía al PCB, son recomendaciones a incorporar antes de fabricar.
+**Fuente:** análisis del netlist KiCad exportado ([hardware/DS/DS.txt](../hardware/DS/DS.txt), export 2026-07-02, 606 componentes / 610 nets, sheet "Master DS11"), asistido por IA (modelo Fable).
 
-### 🔴 Crítico — Falta bias/alimentación para micrófonos en J9
+> **Actualización 2026-07-03 — estado verificado contra el esquemático committeado** (`hardware/DS/AK5538.kicad_sch`, commit `e415806`):
+> - ✅ **Acople DC implementado**: Cc 2.2µF ×16 (C294-C309), uno por línea de entrada
+> - ✅ **R serie implementada**: Rs 470Ω ×16 (R115-R130) — límite <10mA del AKM cubierto
+> - ✅ **R de amortiguación MCLK→AK5538 implementada**: R131 = 33Ω (verificar en netlist fresco que quede en serie con IC3.24)
+> - ❌ **Cap diferencial 1nF P↔N: pendiente** (única pieza del front-end que falta, prioridad media)
+> - El checklist pre-fabricación unificado vive en [hardware/DS/DS11_PLANNING.md](../hardware/DS/DS11_PLANNING.md) — este documento queda como archivo de hallazgos/racional.
 
-Los 4 RJ45 (J9) no tienen ningún rail hacia el conector — todos los pines no-señal van a GND. Con el acople DC (Cc) agregado, el auto-bias interno del AK5538 (~1.25V) queda del lado del chip y no puede polarizar un electret pasivo. Consecuencia: los pods de micrófono deben ser activos/autoalimentados, o hay que agregar bias local (R ~2.2kΩ a 3.3VA del lado J9 del cap) o alimentación por el cable (5VA vía ferrite en un pin del RJ45). Definir según el tipo de mic que se va a usar en producción.
+### ~~🔴 Crítico~~ ✅ RESUELTO POR DECISIÓN (2026-07-02) — Bias/alimentación para micrófonos en J9
 
-### 🔴 Crítico — Polaridad alternada entre canales pares/impares en la salida
+Los 4 RJ45 (J9) no tienen ningún rail hacia el conector. Con el acople DC (Cc), el auto-bias interno del AK5538 (~1.25V) queda del lado del chip y no puede polarizar un electret pasivo. **Decisión del usuario: las entradas son de NIVEL DE LÍNEA (fuentes activas/autoalimentadas — mezcladora, PC, pods con alimentación propia), no cápsulas pasivas → no hace falta bias y no se agrega.** Si a futuro se quisiera soportar electret pasivo directo: R ~2.2kΩ a 3.3VA del lado J9 del cap. Nota práctica para fuentes desbalanceadas: referenciar la pata N del par a masa local por el mismo camino Cc+Rs (no dejarla flotando).
 
-Verificado en los 64 nets DAC→PAM→JSPK: el amp del canal impar de cada banco recibe VOUT+ en IN− (inversión), y su OUT− termina en el pin 1 del conector JSPK (doble inversión → en fase); el canal par entra derecho y su OUT+ va al pin 4. Si el arnés de parlantes asume polaridad uniforme (1=+, 2=−, 3=+, 4=−), la mitad de los parlantes queda en contrafase y destruye el patrón de beamforming. **Acción: verificar contra el arnés antes de armar; test de polaridad físico por canal antes de beamformar (channel walker, ver [beamforming_roadmap.md](beamforming_roadmap.md)).**
+### ~~🔴 Crítico~~ ✅ RESUELTO POR DISEÑO (2026-07-03) — Polaridad alternada entre canales pares/impares
 
-### 🔴 Crítico — Mapeo canal lógico → conector físico no es directo
+Verificado en los 64 nets DAC→PAM→JSPK: el amp del canal impar de cada banco recibe VOUT+ en IN− (inversión), y su OUT− termina en el pin 1 del conector JSPK (doble inversión → en fase); el canal par entra derecho y su OUT+ va al pin 4. Si el arnés de parlantes asume polaridad uniforme (1=+, 2=−, 3=+, 4=−), la mitad de los parlantes queda en contrafase y destruye el patrón de beamforming. **Aclaración del usuario (2026-07-03): es una doble inversión deliberada — al JST del parlante llegan +/− en la polaridad correcta. El pinout JST "+ − − +" lo definen los parlantes reciclados usados. No es un bug.** El channel walker / AUTOFOCUS lo verificará empíricamente de todas formas.
 
-VC (U1/DAC2, SAI2_A ch16-23) tiene un swap: ch1-2→JSPK10 y ch3-4→JSPK09 (invertidos respecto al resto). El firmware necesita una tabla explícita canal DSP → posición física del parlante — sin ella los delays de beamforming apuntan a parlantes equivocados. Direcciones I2C de los 4 PCM1690 confirmadas por strapping y coinciden con firmware (U2=0x98, U3=0x9C, U1=0x9A, U4=0x9E) ✓.
+### ~~🔴 Crítico~~ ✅ ACLARADO (2026-07-03) — Mapeo canal lógico → conector físico
+
+VC (U1/DAC2, SAI2_A ch16-23) tiene un swap: ch1-2→JSPK10 y ch3-4→JSPK09 (invertidos respecto al resto). El usuario confirma que el orden de los JSPK es parte del diseño del arnés (junto con la polaridad de arriba). El firmware valida el mapeo real con el channel walker, y el AUTOFOCUS mide delays/polaridad por parlante directamente — la tabla física se carga desde esa medición, no desde suposiciones. Direcciones I2C de los 4 PCM1690 confirmadas por strapping y coinciden con firmware (U2=0x98, U3=0x9C, U1=0x9A, U4=0x9E) ✓.
 
 ### 🔴 Crítico — MP2315S (buck 24V→5VA) en su límite absoluto de entrada
 
@@ -30,9 +37,9 @@ VC (U1/DAC2, SAI2_A ch16-23) tiene un swap: ch1-2→JSPK10 y ch3-4→JSPK09 (inv
 
 Solo hay 100pF de modo común por pata (a GND); el mismatch entre esos dos caps convierte modo común→diferencial en RF, degradando CMRR. Agregar ~1nF diferencial (P↔N) pegado al ADC, además del acople DC y R serie ya planeados (ver sección de nivel de salida más abajo — la parte de acople DC + R serie ya fue confirmada para agregar en cada placa).
 
-### 🟡 Importante — Rama MCLK del ADC sin terminación serie
+### ~~🟡 Importante~~ ✅ IMPLEMENTADO (2026-07-02) — Rama MCLK del ADC sin terminación serie
 
-Las 4 ramas de MCLK a los DACs tienen 62Ω de amortiguación; la rama al AK5538 (IC3.24) cuelga directo del net compartido (6 cargas a 24.576MHz). Riesgo de ringing si el layout tiene stubs largos — es el chip más sensible a jitter del sistema. Verificar en layout; si hace falta, 22-33Ω cerca de PE2.
+Las 4 ramas de MCLK a los DACs tienen 62Ω de amortiguación; la rama al AK5538 (IC3.24) colgaba directa. **Implementado: R131 = 33Ω** (verificado en `AK5538.kicad_sch`). Regla de colocación acordada: la R va pegada al punto donde la rama se separa del tronco de MCLK (no pegada al chip receptor) — verificar el placement en layout, y el valor final se ajusta con scope una vez armada la placa.
 
 ### 🟡 Importante — PLL3 fraccional mete jitter en el MCLK compartido
 
@@ -176,15 +183,11 @@ DAC de nuevo a 0dB.
 
 ## Checklist de verificación pre-producción DS11
 
-- [ ] BOM: SMBJ24A en D8 (no-sustitución)
-- [ ] BOM: LEDs con part numbers individuales por color (lección DS9)
-- [ ] Silkscreen pin-1 reforzado en los 4 PCM1690 + AK5538
-- [ ] Esquemático: nota "AK5538 requiere config TDM por I2C (addr 7-bit 0x11)"
-- [ ] Esquemático: corregir las constantes erradas del design review DS10 (MCLK=24.576MHz, I2C4=AF6, AK addr=0x11)
-- [ ] Atenuador DAC→PAM dimensionado y simulado (A1)
-- [ ] Front-end de entrada ADC definido según transductor final (M1)
-- [ ] LED de diagnóstico en GPIO directo (A4)
-- [ ] Firmware de validación: el actual `main` ya bootea, auto-diagnostica (scans I2C + register dumps + heartbeat) y genera test tone — sirve como firmware de test de fábrica
+> **MOVIDO (2026-07-03):** el checklist pre-fabricación unificado y vigente vive en
+> **[hardware/DS/DS11_PLANNING.md](../hardware/DS/DS11_PLANNING.md)** (§ "Checklist final
+> pre-JLCPCB") — ahí se consolidaron los ítems de este documento, los gates anti-error de
+> fabricación (lecciones de la tanda 1 de DS10), y las decisiones de la revisión de netlist.
+> Este documento queda como **archivo de hallazgos y racional** — no mantener dos checklists.
 
 ---
 

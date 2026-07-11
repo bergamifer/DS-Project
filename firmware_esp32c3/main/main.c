@@ -20,6 +20,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "freertos/semphr.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_wifi.h"
@@ -56,7 +57,20 @@
 #define PROTO_FOOTER_1   0x0D
 #define PROTO_FOOTER_2   0x0A
 #define CMD_UPDATE_CFG   0x01
+#define CMD_SET_MODE     0x02   // payload: uint8 indice de modo
+#define CMD_GET_STATUS   0x03   // payload: vacio (len=0)
+#define CMD_STATUS       0x04   // STM32→ESP32: ds_status_t
+#define CMD_SET_BEAM     0x07   // payload: 9 bytes (type, az, fx, fy, fz)
+#define CMD_ESP_INFO     0x08   // ESP32→STM32: IP en ASCII. El STM32 NO lo ACKea
+                                // a proposito: un ACK espurio le robaria el ack_sem
+                                // a un comando HTTP concurrente. Ver uart_protocol.h
+#define CMD_SET_VOLUME   0x09   // payload: int8 dB (0..-63, <=-64 = mute). Volumen
+                                // maestro via atenuacion del PCM1690 (todos los modos).
+#define CMD_ACK          0x06
+#define CMD_NACK         0x15
 #define NUM_CHANNELS     16
+#define PROTO_MAX_PAYLOAD 64
+#define ESP_IP_PUSH_MS   10000  // reenvio periodico: si el STM32 resetea, recupera la IP
 
 typedef struct {
     uint8_t  master_gain;
@@ -65,6 +79,60 @@ typedef struct {
     uint8_t  gains[NUM_CHANNELS];
     uint16_t mutes;
 } ds_config_t;
+
+// Espejo de ds_status_t del STM32 (uart_protocol.h) — 54 bytes packed LE (v2).
+// Extender SOLO appendeando campos (proto_ver versiona el layout).
+typedef struct __attribute__((packed)) {
+    uint8_t  proto_ver;
+    uint8_t  mode_idx;
+    uint8_t  num_modes;
+    int16_t  rx_az_deg;
+    int16_t  fx_mm, fy_mm, fz_mm;
+    uint32_t underruns;
+    uint32_t sai_errors;
+    uint8_t  ovf;
+    uint8_t  cal_state;
+    int32_t  adc_pk[8];
+    int8_t   master_vol_db;   // v2: volumen maestro actual (0..-63, <=-64 mute)
+} ds_status_t;
+
+// Espejo de ui_states[] del STM32 — actualizar junto con el firmware STM32.
+// El indice es lo que viaja en CMD_SET_MODE; el nombre es solo para la UI.
+static const char *MODE_NAMES[] = {
+    "ADC monitor (+30dB)",
+    "Channel walker (1s/ch)",
+    "RX beam az=0 (broadside)",
+    "RX beam az=+30",
+    "RX beam az=-30",
+    "RX beam az=+60",
+    "RX beam az=-60",
+    "TX focus centro @1m",
+    "TX focus izq 0.5m @1m",
+    "TX focus der 0.5m @1m",
+    "TX focus centro CERCA 0.3m",
+    "AUTOFOCUS scan (mic->c0)",
+    "TX tono 2k dither foco @1m",
+    "TX tono 1k dither foco @1m",
+};
+#define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
+
+// Sincronizacion request/response con el STM32
+static SemaphoreHandle_t ack_sem;      // ACK/NACK recibido
+static SemaphoreHandle_t status_sem;   // CMD_STATUS recibido
+static volatile bool     last_ack_ok = false;
+static ds_status_t       last_status;  // valido tras tomar status_sem
+
+// Serializa las tramas hacia el STM32. Sin esto, el push periodico de la IP
+// (monitor task) puede intercalarse con la transaccion comando→ACK de un handler
+// HTTP y corromper ambas. Recursivo: uart_send_and_wait_ack() llama a
+// uart_send_frame() ya teniendo el lock.
+static SemaphoreHandle_t uart_tx_mutex;
+#define UART_TX_LOCK()    do { if (uart_tx_mutex) xSemaphoreTakeRecursive(uart_tx_mutex, portMAX_DELAY); } while (0)
+#define UART_TX_UNLOCK()  do { if (uart_tx_mutex) xSemaphoreGiveRecursive(uart_tx_mutex); } while (0)
+
+// IP propia, publicada al STM32 para que aparezca en su heartbeat.
+static char my_ip[16] = {0};
+static void uart_push_esp_ip(void);   // definida junto a uart_send_frame()
 
 // ============== WiFi ==============
 
@@ -136,7 +204,76 @@ static void uart_init(void)
            STM32_UART_TX, STM32_UART_RX, STM32_UART_BAUD);
 }
 
-// Tarea que lee continuamente del STM32 y forwardea al terminal con prefijo [STM32]
+// ============== Parser de tramas binarias STM32→ESP32 ==============
+// El STM32 manda por UART4: ACK/NACK (trama corta AA 55 cmd 0D 0A, sin len)
+// y CMD_STATUS (trama completa con len+payload+checksum). Todo lo que no
+// matchee framing se trata como ASCII (fallback de debug).
+
+typedef enum {
+    FR_IDLE, FR_HDR2, FR_CMD, FR_LEN_L, FR_LEN_H,
+    FR_PAYLOAD, FR_CKSUM, FR_FTR1, FR_FTR2
+} fr_state_t;
+
+static fr_state_t fr_state = FR_IDLE;
+static uint8_t  fr_cmd, fr_cksum;
+static uint16_t fr_len, fr_idx;
+static uint8_t  fr_payload[PROTO_MAX_PAYLOAD];
+
+// Devuelve true si el byte fue consumido por la capa de tramas
+static bool frame_feed(uint8_t b)
+{
+    switch (fr_state) {
+    case FR_IDLE:
+        if (b == PROTO_HEADER_1) { fr_state = FR_HDR2; return true; }
+        return false;                       // ASCII passthrough
+    case FR_HDR2:
+        fr_state = (b == PROTO_HEADER_2) ? FR_CMD : FR_IDLE;
+        return true;
+    case FR_CMD:
+        fr_cmd = b;
+        if (b == CMD_ACK || b == CMD_NACK) fr_state = FR_FTR1;  // trama corta
+        else fr_state = FR_LEN_L;
+        return true;
+    case FR_LEN_L:
+        fr_len = b; fr_state = FR_LEN_H; return true;
+    case FR_LEN_H:
+        fr_len |= ((uint16_t)b << 8);
+        fr_idx = 0;
+        if (fr_len == 0) fr_state = FR_CKSUM;
+        else if (fr_len <= PROTO_MAX_PAYLOAD) fr_state = FR_PAYLOAD;
+        else fr_state = FR_IDLE;            // len invalido → resync
+        return true;
+    case FR_PAYLOAD:
+        fr_payload[fr_idx++] = b;
+        if (fr_idx >= fr_len) fr_state = FR_CKSUM;
+        return true;
+    case FR_CKSUM:
+        fr_cksum = b; fr_state = FR_FTR1; return true;
+    case FR_FTR1:
+        fr_state = (b == PROTO_FOOTER_1) ? FR_FTR2 : FR_IDLE;
+        return true;
+    case FR_FTR2:
+        fr_state = FR_IDLE;
+        if (b != PROTO_FOOTER_2) return true;
+        // Trama completa — despachar
+        if (fr_cmd == CMD_ACK || fr_cmd == CMD_NACK) {
+            last_ack_ok = (fr_cmd == CMD_ACK);
+            xSemaphoreGive(ack_sem);
+        } else if (fr_cmd == CMD_STATUS && fr_len == sizeof(ds_status_t)) {
+            uint8_t x = 0;
+            for (uint16_t i = 0; i < fr_len; i++) x ^= fr_payload[i];
+            if (x == fr_cksum) {
+                memcpy(&last_status, fr_payload, sizeof(ds_status_t));
+                xSemaphoreGive(status_sem);
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+// Tarea que lee continuamente del STM32: tramas binarias → dispatcher,
+// resto → forwardea al terminal con prefijo [STM32]
 static void stm32_monitor_task(void *arg)
 {
     uint8_t raw[128];
@@ -144,6 +281,7 @@ static void stm32_monitor_task(void *arg)
     int     line_idx = 0;
     uint32_t total_bytes = 0;
     uint32_t last_report = 0;
+    uint32_t last_ip_push = 0;
 
     printf("[ESP32] Monitor STM32 iniciado (UART%d RX=GPIO%d, %d baud)\n",
            STM32_UART_NUM, STM32_UART_RX, STM32_UART_BAUD);
@@ -159,6 +297,13 @@ static void stm32_monitor_task(void *arg)
             printf("[ESP32] STM32 monitor: %lu bytes recibidos total\n", total_bytes);
         }
 
+        // Publicar la IP al STM32 (para su heartbeat). Periodico, asi un reset
+        // del STM32 la recupera sin reiniciar el ESP32.
+        if (my_ip[0] && (last_ip_push == 0 || now - last_ip_push >= ESP_IP_PUSH_MS)) {
+            last_ip_push = now;
+            uart_push_esp_ip();
+        }
+
         if (len <= 0) continue;
         total_bytes += len;
 
@@ -171,6 +316,7 @@ static void stm32_monitor_task(void *arg)
         }
 
         for (int i = 0; i < len; i++) {
+            if (frame_feed(raw[i])) continue;   // byte de trama binaria
             char c = (char)raw[i];
 
             if (c == '\n') {
@@ -250,6 +396,48 @@ static void uart_send_config(const ds_config_t *cfg)
     printf("...\n");
 }
 
+// Trama generica: Header + Cmd + Len + Payload + Checksum + Footer
+static void uart_send_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    uint8_t frame[8 + PROTO_MAX_PAYLOAD];
+    int fi = 0;
+    frame[fi++] = PROTO_HEADER_1;
+    frame[fi++] = PROTO_HEADER_2;
+    frame[fi++] = cmd;
+    frame[fi++] = len & 0xFF;
+    frame[fi++] = (len >> 8) & 0xFF;
+    if (len) { memcpy(&frame[fi], payload, len); fi += len; }
+    frame[fi++] = calc_checksum(payload, len);   // len=0 → 0
+    frame[fi++] = PROTO_FOOTER_1;
+    frame[fi++] = PROTO_FOOTER_2;
+    UART_TX_LOCK();
+    uart_write_bytes(STM32_UART_NUM, frame, fi);
+    UART_TX_UNLOCK();
+}
+
+// Publica la IP al STM32 (aparece en su heartbeat). Sin ACK: es un push.
+static void uart_push_esp_ip(void)
+{
+    if (!my_ip[0]) return;
+    uart_send_frame(CMD_ESP_INFO, (const uint8_t *)my_ip, strlen(my_ip));
+}
+
+// Envia un comando y espera el ACK/NACK del STM32.
+// Devuelve: 1 = ACK, 0 = NACK, -1 = timeout.
+static int uart_send_and_wait_ack(uint8_t cmd, const uint8_t *payload,
+                                  uint16_t len, int timeout_ms)
+{
+    // Lock sobre toda la transaccion: nadie puede meter una trama entre el
+    // comando y su ACK.
+    UART_TX_LOCK();
+    xSemaphoreTake(ack_sem, 0);                 // drenar ACK viejo
+    uart_send_frame(cmd, payload, len);
+    int rc = (xSemaphoreTake(ack_sem, timeout_ms / portTICK_PERIOD_MS) != pdTRUE)
+             ? -1 : (last_ack_ok ? 1 : 0);
+    UART_TX_UNLOCK();
+    return rc;
+}
+
 // ============== JSON Parsing ==============
 
 static bool parse_and_send_command(const char *json_str)
@@ -271,7 +459,7 @@ static bool parse_and_send_command(const char *json_str)
     if (command)    printf("[ESP32]   command:        %s\n", command->valuestring);
     if (device_id)  printf("[ESP32]   device_id:      %s\n", device_id->valuestring);
     if (mute)       printf("[ESP32]   mute:           %s\n", cJSON_IsTrue(mute) ? "true" : "false");
-    if (master_gain)printf("[ESP32]   master_gain:    %.2f\n", master_gain->valuedouble);
+    if (master_gain)printf("[ESP32]   master_gain:    %.2f (DEPRECADO: el STM32 ya no lo aplica — usar POST /volume)\n", master_gain->valuedouble);
     if (focal_dist) printf("[ESP32]   focal_distance: %.2f m\n", focal_dist->valuedouble);
 
     ds_config_t cfg = {0};
@@ -354,20 +542,237 @@ static esp_err_t command_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// GET /status — pide CMD_GET_STATUS al STM32 y devuelve la telemetria real
 static esp_err_t status_handler(httpd_req_t *req)
 {
-    printf("[ESP32] HTTP GET /status\n");
-    char buf[256];
-    snprintf(buf, sizeof(buf),
-        "{\"status\":\"ok\",\"device_id\":\"" DEVICE_ID "\","
-        "\"uart_baud\":%d,"
-        "\"uart_tx_gpio\":%d,\"uart_rx_gpio\":%d,"
-        "\"uptime_ms\":%lu}",
-        STM32_UART_BAUD,
-        STM32_UART_TX, STM32_UART_RX,
-        (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
+    xSemaphoreTake(status_sem, 0);              // drenar status viejo
+    uart_send_frame(CMD_GET_STATUS, NULL, 0);
+
+    char buf[640];
+    if (xSemaphoreTake(status_sem, 400 / portTICK_PERIOD_MS) == pdTRUE) {
+        const ds_status_t *s = &last_status;
+        const char *mname = (s->mode_idx < NUM_MODES)
+                          ? MODE_NAMES[s->mode_idx] : "?";
+        snprintf(buf, sizeof(buf),
+            "{\"stm32\":\"ok\",\"device_id\":\"" DEVICE_ID "\","
+            "\"proto_ver\":%u,\"mode\":%u,\"mode_name\":\"%s\",\"num_modes\":%u,"
+            "\"rx_az\":%d,\"focus\":{\"fx\":%d,\"fy\":%d,\"fz\":%d},"
+            "\"underruns\":%lu,\"sai_errors\":%lu,\"ovf\":%u,\"cal_state\":%u,"
+            "\"vol_db\":%d,"
+            "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
+            "\"uptime_ms\":%lu}",
+            s->proto_ver, s->mode_idx, mname, s->num_modes,
+            s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
+            (unsigned long)s->underruns, (unsigned long)s->sai_errors,
+            s->ovf, s->cal_state, (int)s->master_vol_db,
+            (long)s->adc_pk[0], (long)s->adc_pk[1], (long)s->adc_pk[2],
+            (long)s->adc_pk[3], (long)s->adc_pk[4], (long)s->adc_pk[5],
+            (long)s->adc_pk[6], (long)s->adc_pk[7],
+            (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
+    } else {
+        snprintf(buf, sizeof(buf),
+            "{\"stm32\":\"timeout\",\"device_id\":\"" DEVICE_ID "\","
+            "\"uptime_ms\":%lu}",
+            (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
+    }
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, strlen(buf));
+    return ESP_OK;
+}
+
+// POST /mode {"mode":N} — cambia el modo de operacion (indice de ui_states)
+static esp_err_t mode_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    cJSON *mode = root ? cJSON_GetObjectItem(root, "mode") : NULL;
+    int idx = (mode && cJSON_IsNumber(mode)) ? mode->valueint : -1;
+    if (root) cJSON_Delete(root);
+
+    char resp[192];
+    if (idx < 0 || idx >= (int)NUM_MODES) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"mode 0-%d\"}",
+                 (int)NUM_MODES - 1);
+    } else {
+        uint8_t payload = (uint8_t)idx;
+        int ack = uart_send_and_wait_ack(CMD_SET_MODE, &payload, 1, 300);
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"%s\",\"mode\":%d,\"mode_name\":\"%s\"}",
+                 ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"),
+                 idx, MODE_NAMES[idx]);
+        printf("[ESP32] POST /mode %d (%s) -> %s\n", idx, MODE_NAMES[idx],
+               ack == 1 ? "ACK" : "sin ACK");
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
+// POST /beam — steering custom fuera de los presets
+//   {"type":"rx","az":30}                      → beam RX a 30°
+//   {"type":"tx","fx":0,"fy":0,"fz":1000}      → foco TX en (0,0,1000)mm
+static esp_err_t beam_handler(httpd_req_t *req)
+{
+    char buf[256];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"bad json\"}");
+        return ESP_OK;
+    }
+    cJSON *type = cJSON_GetObjectItem(root, "type");
+    bool is_tx = type && type->valuestring && strcmp(type->valuestring, "tx") == 0;
+    cJSON *jaz = cJSON_GetObjectItem(root, "az");
+    cJSON *jfx = cJSON_GetObjectItem(root, "fx");
+    cJSON *jfy = cJSON_GetObjectItem(root, "fy");
+    cJSON *jfz = cJSON_GetObjectItem(root, "fz");
+    int16_t az = jaz ? (int16_t)jaz->valueint : 0;
+    int16_t fx = jfx ? (int16_t)jfx->valueint : 0;
+    int16_t fy = jfy ? (int16_t)jfy->valueint : 0;
+    int16_t fz = jfz ? (int16_t)jfz->valueint : 1000;
+    cJSON_Delete(root);
+
+    // Payload ds_beam_req_t: type(1) + az(2) + fx(2) + fy(2) + fz(2), LE
+    uint8_t p[9];
+    p[0] = is_tx ? 1 : 0;
+    p[1] = az & 0xFF;  p[2] = (az >> 8) & 0xFF;
+    p[3] = fx & 0xFF;  p[4] = (fx >> 8) & 0xFF;
+    p[5] = fy & 0xFF;  p[6] = (fy >> 8) & 0xFF;
+    p[7] = fz & 0xFF;  p[8] = (fz >> 8) & 0xFF;
+    int ack = uart_send_and_wait_ack(CMD_SET_BEAM, p, sizeof(p), 300);
+
+    char resp[160];
+    snprintf(resp, sizeof(resp),
+             "{\"status\":\"%s\",\"type\":\"%s\",\"az\":%d,"
+             "\"fx\":%d,\"fy\":%d,\"fz\":%d}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"),
+             is_tx ? "tx" : "rx", az, fx, fy, fz);
+    printf("[ESP32] POST /beam %s -> %s\n", is_tx ? "tx" : "rx",
+           ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
+// POST /volume {"db":-20} — volumen maestro via atenuacion del PCM1690.
+// Afecta TODOS los modos (walker incluido), a diferencia de master_gain.
+static esp_err_t volume_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    cJSON *db   = root ? cJSON_GetObjectItem(root, "db") : NULL;
+    int   want  = (db && cJSON_IsNumber(db)) ? db->valueint : 1;  // 1 = invalido
+    if (root) cJSON_Delete(root);
+
+    char resp[160];
+    if (want > 0 || want < -64) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"db 0..-63, o -64 = mute\"}");
+    } else {
+        int8_t payload = (int8_t)want;
+        int ack = uart_send_and_wait_ack(CMD_SET_VOLUME,
+                                         (const uint8_t *)&payload, 1, 300);
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"%s\",\"db\":%d}",
+                 ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"), want);
+        printf("[ESP32] POST /volume %d dB -> %s\n", want,
+               ack == 1 ? "ACK" : "sin ACK");
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
+// ============== UI web embebida (GET /) ==============
+// Pagina autocontenida (sin CDN): botones de modo + sliders de beam + telemetria.
+static const char INDEX_HTML[] =
+"<!DOCTYPE html><html lang=es><head><meta charset=utf-8>"
+"<meta name=viewport content='width=device-width,initial-scale=1'>"
+"<title>DS Beamformer</title><style>"
+"body{font-family:system-ui,sans-serif;background:#111;color:#eee;margin:0;padding:16px;max-width:640px;margin-inline:auto}"
+"h1{font-size:1.3em}h2{font-size:1em;color:#9cf;margin:18px 0 8px}"
+".grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}"
+"button{background:#224;border:1px solid #446;color:#eee;border-radius:8px;padding:10px 8px;font-size:.9em;cursor:pointer}"
+"button:active{background:#33a}button.on{background:#2a6;border-color:#4c8}"
+".card{background:#1a1a2a;border-radius:10px;padding:12px;margin:10px 0}"
+"label{display:block;margin:8px 0 2px;font-size:.85em;color:#aaa}"
+"input[type=range]{width:100%}"
+".val{color:#9cf;font-weight:600}"
+".meter{display:flex;gap:3px;height:36px;align-items:flex-end;margin-top:6px}"
+".bar{flex:1;background:#2a6;min-height:2px;border-radius:2px 2px 0 0}"
+"#st{font-size:.8em;color:#888;white-space:pre-wrap}"
+".row{display:flex;gap:8px;align-items:center}.row button{flex:0 0 auto}"
+"</style></head><body>"
+"<h1>DS Beamformer <span id=link style='font-size:.6em;color:#888'>...</span></h1>"
+"<div class=card><h2>Volumen maestro</h2>"
+"<div class=row><input type=range id=vol min=-63 max=0 value=0 step=1>"
+"<span class=val id=volv>0 dB</span></div>"
+"<div class=row style='margin-top:6px'><button onclick=setVol(-64)>Mute</button>"
+"<button onclick=setVol(+vol.value)>Aplicar</button></div></div>"
+"<div class=card><h2>Modo</h2><div class=grid id=modes></div></div>"
+"<div class=card><h2>RX beam (az&deg;)</h2>"
+"<div class=row><input type=range id=az min=-90 max=90 value=0 step=5>"
+"<span class=val id=azv>0&deg;</span><button onclick=setRx()>Aplicar</button></div></div>"
+"<div class=card><h2>TX focus (mm rel centro)</h2>"
+"<label>X (izq&minus;/der+): <span class=val id=fxv>0</span></label>"
+"<input type=range id=fx min=-1500 max=1500 value=0 step=50>"
+"<label>Y (fila1&minus;/fila4+): <span class=val id=fyv>0</span></label>"
+"<input type=range id=fy min=-1000 max=1000 value=0 step=50>"
+"<label>Z (distancia): <span class=val id=fzv>1000</span></label>"
+"<input type=range id=fz min=200 max=4000 value=1000 step=50>"
+"<div class=row style='margin-top:8px'><button onclick=setTx()>Aplicar foco TX</button></div></div>"
+"<div class=card><h2>Entradas ADC (peak)</h2><div class=meter id=meter></div>"
+"<div id=st>esperando estado...</div></div>"
+"<script>"
+"const N=14,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither'];"
+"const md=document.getElementById('modes');"
+"for(let i=0;i<N;i++){const b=document.createElement('button');b.textContent=names[i];b.id='m'+i;"
+"b.onclick=()=>fetch('/mode',{method:'POST',body:JSON.stringify({mode:i})}).then(poll);md.appendChild(b);}"
+"const mt=document.getElementById('meter');"
+"for(let i=0;i<8;i++){const d=document.createElement('div');d.className='bar';d.id='b'+i;mt.appendChild(d);}"
+"['az','fx','fy','fz'].forEach(id=>{const e=document.getElementById(id);"
+"e.oninput=()=>document.getElementById(id+'v').textContent=e.value+(id=='az'?'\\u00b0':'');});"
+"function setVol(d){fetch('/volume',{method:'POST',body:JSON.stringify({db:d})});}"
+"let volT=0,volTouch=0;"
+"vol.oninput=()=>{volv.textContent=vol.value+' dB';volTouch=Date.now();"
+"if(Date.now()-volT>200){volT=Date.now();setVol(+vol.value);}};"
+"vol.onchange=()=>{volTouch=Date.now();setVol(+vol.value);};"
+"function setRx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'rx',az:+az.value})});}"
+"function setTx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'tx',fx:+fx.value,fy:+fy.value,fz:+fz.value})});}"
+"function poll(){fetch('/status').then(r=>r.json()).then(s=>{"
+"document.getElementById('link').textContent=s.stm32=='ok'?'\\u25cf online':'\\u25cb '+s.stm32;"
+"if(s.stm32!='ok')return;"
+"for(let i=0;i<N;i++)document.getElementById('m'+i).className=(i==s.mode)?'on':'';"
+"if(s.vol_db!=null&&s.vol_db>-64&&Date.now()-volTouch>3000){vol.value=s.vol_db;volv.textContent=s.vol_db+' dB';}"
+"const pk=s.adc_pk||[];for(let i=0;i<8;i++){const v=Math.max(2,Math.min(36,Math.log10((pk[i]||1)+1)/7*36));"
+"document.getElementById('b'+i).style.height=v+'px';}"
+"document.getElementById('st').textContent="
+"'modo: '+s.mode_name+'  |  vol: '+(s.vol_db<=-64?'MUTE':s.vol_db+'dB')+'  |  foco: ('+s.focus.fx+','+s.focus.fy+','+s.focus.fz+')mm'"
+"+'\\nunderruns: '+s.underruns+'  errores SAI: '+s.sai_errors+'  OVF: '+s.ovf+'  cal: '+s.cal_state;"
+"}).catch(()=>{document.getElementById('link').textContent='\\u25cb sin conexion';});}"
+"setInterval(poll,1000);poll();"
+"</script></body></html>";
+
+static esp_err_t root_handler(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_send(req, INDEX_HTML, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
@@ -388,16 +793,23 @@ static httpd_handle_t start_webserver(void)
 
     if (httpd_start(&server, &config) == ESP_OK) {
         httpd_uri_t uris[] = {
+            { .uri = "/",        .method = HTTP_GET,  .handler = root_handler    },
             { .uri = "/command", .method = HTTP_POST, .handler = command_handler },
+            { .uri = "/mode",    .method = HTTP_POST, .handler = mode_handler    },
+            { .uri = "/beam",    .method = HTTP_POST, .handler = beam_handler    },
+            { .uri = "/volume",  .method = HTTP_POST, .handler = volume_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
             { .uri = "/ping",    .method = HTTP_GET,  .handler = ping_handler    },
         };
-        for (int i = 0; i < 3; i++)
+        for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++)
             httpd_register_uri_handler(server, &uris[i]);
 
         printf("[ESP32] HTTP server listo\n");
+        printf("[ESP32]   GET  /         — UI web (control de modos + beam)\n");
         printf("[ESP32]   POST /command  — config JSON → STM32\n");
-        printf("[ESP32]   GET  /status   — estado\n");
+        printf("[ESP32]   POST /mode     — {\"mode\":0-%d}\n", (int)NUM_MODES - 1);
+        printf("[ESP32]   POST /beam     — {\"type\":\"rx\",\"az\":30} | {\"type\":\"tx\",\"fx\":0,\"fy\":0,\"fz\":1000}\n");
+        printf("[ESP32]   GET  /status   — telemetria real del STM32\n");
         printf("[ESP32]   GET  /ping     — health check\n");
         return server;
     }
@@ -427,6 +839,9 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         led_wifi_state = 1;  // fijo ON: conectado
         printf("[ESP32] WiFi conectado — IP: " IPSTR "\n", IP2STR(&event->ip_info.ip));
+        // Guardar la IP; el monitor task la empuja al STM32 (no mandamos desde
+        // el event task para no bloquearlo con el UART).
+        snprintf(my_ip, sizeof(my_ip), IPSTR, IP2STR(&event->ip_info.ip));
         retry_num = 0;
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -525,6 +940,11 @@ void app_main(void)
     // ORE (overrun error) que silencia el link en cold boot.
     printf("[ESP32] Esperando boot STM32 (3s)...\n");
     vTaskDelay(3000 / portTICK_PERIOD_MS);
+
+    // Semaforos request/response del protocolo binario (antes del monitor task)
+    ack_sem = xSemaphoreCreateBinary();
+    status_sem = xSemaphoreCreateBinary();
+    uart_tx_mutex = xSemaphoreCreateRecursiveMutex();
 
     // Tarea de monitoreo: lee UART1 RX y forwardea con prefijo [STM32]
     xTaskCreate(stm32_monitor_task, "stm32_mon", 4096, NULL, 5, NULL);

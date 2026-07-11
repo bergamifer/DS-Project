@@ -137,28 +137,35 @@ idf.py flash -p /dev/cu.usbmodemYYYY && idf.py monitor -p /dev/cu.usbmodemYYYY
 ```
 hardware/DS/                    # Proyecto KiCad completo (historial propio via subtree)
   DS.kicad_pro/.kicad_sch/.kicad_pcb   # Esquemático + PCB activo (DS11 en curso)
-  DS10_DESIGN_REVIEW.md, DS11_PLANNING.md, ...  # Docs propios del diseño de hardware
+  DS11_PLANNING.md              # Plan DS11 + CHECKLIST PRE-JLCPCB UNIFICADO (§8)
+  DS10_DESIGN_REVIEW.md, DS10_BRINGUP.md, PowerSpecs.md, ...  # Docs del diseño
+  DS.txt                        # Último netlist exportado (referencia para análisis)
 firmware/                       # STM32H743 firmware
-  Core/Src/main.c               # Pipeline: SAI, DMA, beamforming, diagnostico de boot
-  Core/Src/uart_protocol.c      # Parser binario ESP32->STM32 + recovery de overrun
+  Core/Src/main.c               # Pipeline SAI/DMA + beamforming (fases 0-3) + AUTOFOCUS
+  Core/Src/uart_protocol.c      # Protocolo binario ESP32<->STM32 (config/modo/beam/status)
   Core/Src/pcm1690.c            # Driver I2C para 4x PCM1690
   Core/Src/eeprom_config.c      # Persistencia de config (I2C4 AF6)
   Core/Src/stm32h7xx_it.c       # IRQ handlers + HardFault dump (UART7, mutea amps)
   Core/Inc/pin_definitions.h    # Fuente de verdad de todos los pines DS10
 firmware_esp32c3/               # ESP32-C3 firmware
-  main/main.c                   # WiFi STA + HTTP server + UART bridge + UI web (fase 4)
+  main/main.c                   # WiFi + HTTP + UART bridge + UI web embebida (fase 4)
 docs/
-  ds10_bringup_findings.md      # Registro completo del bring-up (7 hallazgos)
-  ds11_upgrades.md              # Recomendaciones para la placa de produccion
+  reporte_2026-07.md            # REPORTE: camino recorrido y registro de decisiones
+  beamforming_roadmap.md        # Fases 0-4 del beamforming (todas implementadas)
+  ds10_bringup_findings.md      # Registro completo del bring-up DS10 (8 hallazgos)
+  ds11_upgrades.md              # Hallazgos y racional de la revision DS11 (netlist)
   ds10_pin_map.md               # Mapa completo de pines DS10
-  audio_architecture.md         # Arquitectura de audio v4.0
-  ak5538vn_ref.md               # Referencia AK5538VN ADC (config TDM verificada)
+  audio_architecture.md         # Arquitectura de audio
+  ak5538vn_ref.md               # Referencia AK5538VN ADC (config CKS+TDM verificada)
   pcm1690_ref.md                # Referencia PCM1690 DAC
   gpio_control.md               # Control GPIO (DAC RST/MUTE, amps, ADC)
-  DS_Hardware_Map_v2.md         # Mapa de hardware (DS10 + histórico DS9)
-  ds9_pin_audit.md, ds9_pin_map.md, pcm1802_registers.md   # Histórico DS9
+  DS_Hardware_Map_v2.md         # Mapa de hardware (única copia — la de hardware/DS es puntero)
+  memory_map.md                 # Layout de RAM del H743 (regla DMA vs DTCM)
+  historico/                    # DS9: pin audit, pin map, PCM1802, esquemático PDF
 stm32/                          # Referencia RM0433 (clocks, SAI, DMA, I2C, GPIO)
-webserver/                      # Control web (Flask + SQLite)
+webserver/                      # Control web multi-dispositivo (Flask + SQLite) — ver su README
+sitio/                          # Página pública del proyecto (HTML autocontenido, fuente del artifact)
+ios/                            # App iOS "Domosonica" (SwiftUI) — control remoto vía ESP32; ver docs/app_ios.md
 ```
 
 ---
@@ -167,11 +174,11 @@ webserver/                      # Control web (Flask + SQLite)
 
 | Problema | Estado |
 |---|---|
-| Solo 1/4 PCM1690 poblado (rotación JLCPCB) | Reclamo en curso; firmware soporta los 4 |
-| Beamforming usa mapeo stub (ch8-31 leen mic0) | Issue #13 — implementar matriz real |
+| Solo 1/4 PCM1690 poblado (rotación JLCPCB) | Reclamo cerrado (USD 355); DACs de repuesto pedidos a Mouser; firmware soporta los 4 |
+| ~~Beamforming stub~~ | ✅ Fases 0-4 implementadas en `feature/beamforming` (delay-and-sum RX, TX steering, AUTOFOCUS, control web) — pendiente validación en hardware |
 | Skew de fase entre SAI1 y SAI2 (ch0-15 vs 16-31) | Issue #14 — sync por SAI_GCR si hace falta |
-| Protocolo ESP32 limitado a 16ch / mutes 16-bit | Pendiente expansión a 32ch |
-| Underruns en bursts de print verbose | Benignos (DMA reusa half-buffer) |
+| Protocolo ESP32: config de 16ch / mutes 16-bit | `CMD_SET_BEAM`/`CMD_SET_MODE` ya cubren el uso normal; raw de 32ch pendiente (`CMD_RAW_CFG_32`) |
+| Underruns residuales (~4) en el bloque verboso de cada 10s | Benignos (DMA reusa half-buffer); recortados de ~15 a ~4 |
 
 ---
 

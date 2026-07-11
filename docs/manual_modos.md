@@ -1,0 +1,204 @@
+# Manual de modos de operación — DS10 (firmware STM32)
+
+> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (14 modos, índices 0–13).
+> Última actualización: 2026-07-10.
+
+## Cómo se cambia de modo
+
+| Vía | Mecanismo |
+|-----|-----------|
+| **Botón K2** (PA4, presionar = LOW) | Avanza un modo por pulsación, con wrap 13→0. Debounce de 30 ms. |
+| **HTTP** (web/app vía ESP32) | `POST /mode` con `{"mode":N}` → trama `CMD_SET_MODE` por UART4. |
+| **UART4 directo** | Trama binaria `CMD_SET_MODE` (0x02), payload = 1 byte con el índice. |
+
+Cada cambio imprime en UART7: `MODE [n/14]: <nombre>`.
+
+**Persistencia**: el último modo se guarda en EEPROM con debounce de 3 s
+(`CFG_SAVE_DEBOUNCE_MS`, compartido con volumen y config) — ciclar rápido con
+K2 o arrastrar un slider no gasta escrituras ni mete ráfagas de underruns;
+solo se persiste el estado en el que te quedaste. Al boot se restaura el último modo,
+**excepto AUTOFOCUS** (modo 11): dispararía un scan con chirps sin el micrófono
+puesto, así que cae a modo 0 y la EEPROM se reescribe con 0.
+
+**Regla de exclusión**: `UI_ApplyState()` garantiza que exactamente un modo de
+salida está activo (flags `monitor` / `walker` / `beam` / `af`). Al entrar a un
+modo beam desde otro que no lo era, `beam_line` se limpia a cero.
+
+## Tabla resumen
+
+| # | Nombre (UART) | Fuente | Salida | Notas |
+|---|---------------|--------|--------|-------|
+| 0 | `ADC monitor (+30dB)` | ADC ch0–7 en vivo | Cada canal DAC reproduce su canal ADC | Boost ×32, modo por defecto |
+| 1 | `Channel walker (1s/ch)` | Tono 1 kHz interno | Un canal por vez, 1 s cada uno | Valida mapeo canal→parlante |
+| 2 | `RX beam az=0 (broadside)` | Beam delay-and-sum de los 8 ADC | Beam mono en todos los canales | Boost ×32 |
+| 3 | `RX beam az=+30` | ídem, steering +30° | ídem | |
+| 4 | `RX beam az=-30` | ídem, −30° | ídem | |
+| 5 | `RX beam az=+60` | ídem, +60° | ídem | |
+| 6 | `RX beam az=-60` | ídem, −60° | ídem | |
+| 7 | `TX focus center @1m` | RX beam broadside | 32 canales con delays focales | Foco (0, 0, 1000) mm |
+| 8 | `TX focus left 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
+| 9 | `TX focus right 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
+| 10 | `TX focus center NEAR 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
+| 11 | `AUTOFOCUS scan (mic->ADC c0)` | Chirp por parlante + mic | Scan → tono enfocado medido | Requiere mic en ADC c0 |
+| 12 | `TX tone 2k focus @1m` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
+| 13 | `TX tone 1k focus @1m` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
+
+**IMPORTANTE (append-only)**: los índices están espejados en el ESP32, la web y
+la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
+
+---
+
+## Modo 0 — ADC monitor (+30 dB)
+
+Ruta directa ADC→DAC para *escuchar* lo que captura el AK5538. Cada canal de
+salida reproduce su canal ADC homólogo (DAC ch0 ← ADC ch0, etc.; los canales
+de salida 8–31 repiten ADC ch0). La señal del ADC es débil (hum ~−55 dBFS),
+así que se aplica `adc_monitor_shift = 5` (×32 ≈ +30 dB) y clamp a ±FS 24-bit.
+
+- **Uso**: verificar cadena de entrada, mapear entrada física → slot TDM
+  (junto con la línea `ADCpk` del heartbeat).
+- Es el modo por defecto de primer boot.
+
+## Modo 1 — Channel walker (1 s/canal)
+
+Tono de 1 kHz a −6 dBFS en **un solo canal de salida por vez**, avanzando cada
+`WALKER_SECONDS_PER_CH` (1 s). Recorre `WALKER_NUM_CH` canales — **8 en DS10**
+(solo U2/DAC0 poblado); subir a 32 en DS11 para validar el mapa completo de
+parlantes y el cableado JSPK.
+
+- UART7 imprime en cada avance: `WALKER: chN (DACd slotS)`.
+- **Uso**: validar mapeo canal→parlante y, con osciloscopio o mic, la polaridad.
+- El volumen maestro (`POST /volume`) también afecta este modo.
+
+## Modos 2–6 — RX beam (delay-and-sum, presets de azimut)
+
+Beamforming **de recepción** sobre los 8 canales del ADC. `Beam_UpdateDelays()`
+calcula delays far-field por micrófono: τ_m = x_m·sin(az)/c, normalizados a
+mínimo 0, redondeados a muestras @48 kHz (tope `MAX_DELAY_SAMPLES = 64`).
+
+- Geometría de mics: **placeholder** — array lineal en X, pitch 50 mm
+  (`mic_pos_x_mm[]`). Editar esa tabla cuando se defina la geometría real.
+- La suma de los 8 canales se escala (`>>8` por término y `>>3` al total) para
+  que señal coherente idéntica en los 8 mics salga ~unity, y se escribe en
+  `beam_line[]`.
+- Salida: el beam mono en **todos** los canales de salida, con boost ×32
+  (`beam_out_shift = 5`) — la fuente ADC es débil.
+- Azimut: 0 = broadside; positivo hacia índices de mic más altos.
+- El heartbeat agrega la línea `BEAM az=<az> pk=<pico>`: con la misma señal
+  inyectada en todos los mics, steering "hacia la fuente" ≈ ADCpk de un canal;
+  steering lejos → cae. Esa diferencia es la validación del delay-and-sum.
+- **Override experimental**: si llega `CMD_UPDATE_CFG` estando en modo beam,
+  `delays[0..7]` del config se aplican como delays RX crudos por mic
+  (pisan la tabla calculada hasta el próximo cambio de modo).
+
+## Modos 7–10 — TX focus (steering de transmisión, presets)
+
+Beamforming **de transmisión** near-field: la fuente es el RX beam a broadside
+(az = 0), y cada canal de salida la reproduce retrasada para que los frentes de
+onda converjan en el punto focal.
+
+- `Beam_UpdateTxFocus()`: d_k = |foco − parlante_k|/c; delay_k = max(d) − d_k
+  (el parlante más lejano dispara primero). Delays en **Q8** (1 LSB = 1/256 de
+  muestra ≈ 0.03 mm de camino acústico), interpolación lineal entre muestras
+  adyacentes de `beam_line`. Tope `TX_MAX_DELAY_SAMPLES = 128`.
+- Geometría de parlantes: 4×8 patrón ladrillo (`Beam_InitTxGeometry`), pitch
+  X 80 mm / Y 160 mm, filas 2 y 4 corridas +40 mm. Mapeo ch = fila·8 + col
+  (**placeholder** — validar con el walker en DS11).
+- Marco de referencia: el del OYENTE mirando los conos. +X = derecha del
+  oyente, +Y = hacia la fila 4, +Z = hacia el oyente. Coordenadas del foco
+  relativas al centro del array.
+- Se aplican por canal: gain (`beam_config.gains`), mute, master gain/mute
+  global y `speaker_sign` (polaridad, +1 por defecto; el AUTOFOCUS la mide).
+- Boost ×32 igual que los modos RX (fuente ADC débil).
+- `tx_delay_q8[]` es deliberadamente **independiente** de
+  `beam_config.delays[]`: un config del ESP32 no pisa el foco.
+
+| Modo | Foco (fx, fy, fz) mm | Qué valida |
+|------|---------------------|------------|
+| 7 | (0, 0, 1000) | Foco centrado a 1 m |
+| 8 | (−500, 0, 1000) | Foco 0.5 m a la izquierda |
+| 9 | (+500, 0, 1000) | Foco 0.5 m a la derecha |
+| 10 | (0, 0, 300) | Campo cercano, 30 cm |
+
+Al entrar, UART7 imprime la tabla de delays por fila (`samples.frac`) para
+sanity-check geométrico.
+
+## Modo 11 — AUTOFOCUS scan (mic → ADC c0)
+
+Calibración focal **medida** (no modelada): absorbe error de geometría, de
+mapeo de canales y polaridad invertida de parlantes.
+
+**Preparación**: colocar un micrófono EN el punto focal deseado, conectado a
+la entrada 1 del ADC (canal c0). Entrar al modo (K2 o `POST /mode`).
+
+**Secuencia por parlante** (los `CAL_NUM_CH` = 8 poblados en DS10):
+
+1. `SETTLE` — 100 ms de silencio (decaimiento de la sala).
+2. `ARM` → emite un **chirp de 10 ms** (500 Hz → 6 kHz lineal, −6 dBFS, fades
+   de 32 muestras) por ese parlante solo, y arranca la captura del mic.
+3. `CAPT` — captura 100 ms del mic.
+4. `CORR` — correlación cruzada contra el chirp de referencia, **en chunks de
+   128 lags por pasada del main loop** (~0.5 ms) para no perder deadlines de
+   audio. Pico → tiempo de vuelo (interpolación parabólica → sub-muestra Q8);
+   signo del pico → polaridad del parlante; calidad = pico/promedio ×10
+   (≥ ~50 = medición sólida; menos imprime `LOW — mic signal?`).
+5. Siguiente parlante… al terminar: `delay_k = max(tof) − tof_k` →
+   `tx_delay_q8[]` + `speaker_sign[]`.
+
+**`DONE`**: reproduce un tono de 1 kHz steered con los delays y polaridades
+**medidos** — audiblemente enfocado en la posición del mic. `ADCpk c0` del
+heartbeat = nivel en el foco. Para re-escanear, salir y volver a entrar.
+
+- Las latencias fijas del pipeline (buffers, group delay de DAC/ADC) son
+  idénticas para todos los parlantes → se cancelan en los delays relativos.
+- Salir del modo aborta cualquier scan en curso.
+- **No se restaura al boot** (ver Persistencia arriba).
+- `cal_state` (0=idle … 5=done) se reporta en la telemetría `CMD_STATUS`.
+
+## Modos 12–13 — TX tone (validación de direccionalidad sin mic)
+
+Generador de tono **interno** (−6 dBFS) que se escribe en `beam_line` en las
+mismas posiciones/cadencia que el RX beam, así el path de TX steering corre
+**sin cambios** (delays fraccionales Q8, gains, signos). Plan de diseño:
+`docs/ds10_tone_beam_plan.md`.
+
+- Acumulador de fase Q16 sobre la tabla de seno de 48 muestras con
+  interpolación lineal → el delay sigue siendo un delay de TIEMPO real a
+  cualquier frecuencia (a diferencia del tono de `CAL_DONE`, cuyo truco de
+  fase solo vale a 1 kHz).
+- **Dither de frecuencia (Fase B)**: el tono se modula ±5 % en triángulo a
+  ~3 Hz alrededor de la base (2 kHz → 1900↔2100). El haz es de retardos puros
+  (banda ancha) → no cambia; los modos de la sala se promedian y la medición
+  se estabiliza aunque la sala sea mala. Sin clicks (fase continua).
+- `beam_out_shift = 0` en estos modos (el ×32 de los modos ADC clipearía
+  brutalmente contra los PAM: el tono ya es −6 dBFS).
+- Foco (0, **−240**, 1000) mm: fy = −240 pone el foco en el plano de la fila 1
+  — la única poblada en DS10 (un array lineal no discrimina en Y de todos
+  modos).
+- **Test auto-validante**: caminar con un mic o el oído a 1 m. El spot a 2 kHz
+  (~±14 cm) debe ser aproximadamente la mitad de ancho que a 1 kHz (~±27 cm).
+  Relación ~2 = el steering funciona.
+- Límite físico: mantener tono ≤ 2140 Hz (d = λ/2 con pitch de 80 mm) para
+  evitar grating lobes.
+- Nota de implementación: el tono se genera en `Process_ADC_Half()`, es decir
+  su cadencia la marca el DMA RX del ADC — si SAI3_B RX se frena, estos modos
+  quedan en silencio.
+
+---
+
+## Controles globales (afectan a todos los modos)
+
+| Control | Vía | Efecto |
+|---------|-----|--------|
+| **Volumen maestro** | `POST /volume {"db":-20}` → `CMD_SET_VOLUME` | **Único maestro**: atenuación del PCM1690 (0…−63 dB, ≤−64 = mute), 0.5 dB/paso. Se persiste en EEPROM (debounce 3 s). Default −24 dB. |
+| **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (52 bytes) | mute_global, gains/delays/mutes de los primeros 16 canales. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
+| **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32. No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
+| **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2). |
+
+## Diagnóstico por UART7 (115200 8N1, J7 → ST-Link VCP)
+
+- Heartbeat 1/s: `[Ns] Half: 50/s, Full: 50/s, Err, Undr, RX bytes | ESP: <ip>`
+- `ADCpk: c0..c7 | OVF RXdma=100/s` — picos de entrada + liveness del DMA RX.
+- `BEAM az=<az> pk=` — solo en modos beam.
+- Cada 10 s (verbose): estadísticas de fill (µs), jitter y temperatura del CPU.
+- Reporte de test completo cada 60 s con PASS/FAIL del pipeline.

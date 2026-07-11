@@ -1,0 +1,3 @@
+# Forzar UTF-8 en todas las paginas para que los acentos se vean bien
+AddDefaultCharset UTF-8
+AddCharset UTF-8 .html .htm

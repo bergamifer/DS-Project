@@ -42,7 +42,7 @@ Cada unidad DS10 es un nodo de audio autónomo que distribuye 32 canales amplifi
 
 - **32 canales de salida** — DAC diferencial 32-bit + amp Class-D 2.5W por canal
 - **8 canales de entrada** — ADC diferencial 32-bit (micrófonos o señal de referencia)
-- **Sincronización de red** — MCLK 12.288MHz compartido garantiza coherencia de fase entre unidades
+- **Sincronización de red** — MCLK 24.576MHz (512xfS) compartido garantiza coherencia de fase entre unidades
 - **WiFi/BLE** — configuración y control inalámbrico
 - **Alimentación 24V** — bus daisy-chain entre cajas, un solo cable de potencia
 

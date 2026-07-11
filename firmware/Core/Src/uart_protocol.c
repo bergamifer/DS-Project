@@ -41,6 +41,22 @@ static volatile uint32_t rx_frame_count = 0;
 static volatile uint32_t rx_error_count = 0;
 static volatile uint32_t rx_byte_count = 0;  // total bytes received on UART4 RX
 
+/* Remote-control requests (Fase 4): set by the RX ISR, polled by main loop */
+static volatile uint8_t  mode_req_flag = 0;
+static volatile uint8_t  mode_req_idx = 0;
+static ds_beam_req_t     beam_req;
+static volatile uint8_t  beam_req_flag = 0;
+static volatile uint8_t  status_req_flag = 0;
+
+/* IP del ESP32 (CMD_ESP_INFO). Escrita en contexto ISR, leída en el main loop:
+ * el NUL se pone último, así un lector nunca ve una cadena sin terminar. */
+static char esp_ip[ESP_IP_MAXLEN + 1] = {0};
+
+/* CMD_SET_VOLUME: el ISR setea el flag+valor, el main loop hace la escritura I2C
+ * (no se toca I2C desde el ISR). */
+static volatile int8_t  vol_req_db = 0;
+static volatile uint8_t vol_req_flag = 0;
+
 /* Pre-formatted print buffer for non-blocking IT transmission */
 #define PRINT_BUF_SIZE 1200
 static char print_buf[PRINT_BUF_SIZE];
@@ -145,7 +161,9 @@ static void process_byte(uint8_t byte)
     case WAIT_LENGTH_H:
         rx_payload_len |= ((uint16_t)byte << 8);
         rx_payload_idx = 0;
-        if (rx_payload_len > 0 && rx_payload_len <= PROTO_MAX_PAYLOAD) {
+        if (rx_payload_len == 0) {
+            parse_state = WAIT_CHECKSUM;   // e.g. CMD_GET_STATUS (checksum = 0)
+        } else if (rx_payload_len <= PROTO_MAX_PAYLOAD) {
             parse_state = WAIT_PAYLOAD;
         } else {
             rx_error_count++;
@@ -201,6 +219,31 @@ static void process_byte(uint8_t byte)
             /* Note: PB0/PB1 are TIM3 PWM (AF2) on DS10 — GPIO toggle has no effect.
              * Frame activity is visible via rx_frame_count in the heartbeat. */
             send_ack();
+        } else if (rx_command == CMD_SET_MODE && rx_payload_len == 1) {
+            mode_req_idx = rx_payload[0];
+            mode_req_flag = 1;
+            rx_frame_count++;
+            send_ack();
+        } else if (rx_command == CMD_SET_BEAM && rx_payload_len == sizeof(ds_beam_req_t)) {
+            memcpy(&beam_req, rx_payload, sizeof(ds_beam_req_t));
+            beam_req_flag = 1;
+            rx_frame_count++;
+            send_ack();
+        } else if (rx_command == CMD_GET_STATUS && rx_payload_len == 0) {
+            status_req_flag = 1;   /* main loop builds + sends CMD_STATUS */
+            rx_frame_count++;
+            /* No ACK: the CMD_STATUS frame itself is the response */
+        } else if (rx_command == CMD_ESP_INFO &&
+                   rx_payload_len >= 7 && rx_payload_len <= ESP_IP_MAXLEN) {
+            /* IP en ASCII, push del ESP32. Sin ACK (ver uart_protocol.h). */
+            memcpy(esp_ip, rx_payload, rx_payload_len);
+            esp_ip[rx_payload_len] = '\0';   /* NUL último: nunca se lee a medias */
+            rx_frame_count++;
+        } else if (rx_command == CMD_SET_VOLUME && rx_payload_len == 1) {
+            vol_req_db = (int8_t)rx_payload[0];   /* dB, negativo = atenúa */
+            vol_req_flag = 1;
+            rx_frame_count++;
+            send_ack();
         } else {
             rx_error_count++;
             send_nack();
@@ -228,6 +271,19 @@ static void send_nack(void)
 static void dbg_print(const char *str)
 {
     HAL_UART_Transmit(huart_dbg, (uint8_t*)str, strlen(str), 100);
+}
+
+const char* UART_Protocol_GetEspIp(void)
+{
+    return esp_ip;
+}
+
+uint8_t UART_Protocol_GetVolumeRequest(int8_t *db)
+{
+    if (!vol_req_flag) return 0;
+    vol_req_flag = 0;
+    *db = vol_req_db;
+    return 1;
 }
 
 /* ============================================================
@@ -267,4 +323,58 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 uint32_t UART_Protocol_GetRxByteCount(void)
 {
     return rx_byte_count;
+}
+
+/* ============================================================
+ * Remote-control polling API (Fase 4) — main-loop side
+ * ============================================================ */
+
+int32_t UART_Protocol_GetModeRequest(void)
+{
+    if (mode_req_flag) {
+        mode_req_flag = 0;
+        return (int32_t)mode_req_idx;
+    }
+    return -1;
+}
+
+uint8_t UART_Protocol_GetBeamRequest(ds_beam_req_t *req)
+{
+    if (beam_req_flag) {
+        beam_req_flag = 0;
+        *req = beam_req;    /* struct copy; ISR only re-writes on next frame */
+        return 1;
+    }
+    return 0;
+}
+
+uint8_t UART_Protocol_StatusRequested(void)
+{
+    if (status_req_flag) {
+        status_req_flag = 0;
+        return 1;
+    }
+    return 0;
+}
+
+void UART_Protocol_SendStatus(const ds_status_t *st)
+{
+    /* Full framing (header + cmd + len + payload + checksum + footer) so the
+     * ESP32 parses it with the same state machine as any frame. */
+    uint8_t frame[8 + sizeof(ds_status_t)];   /* hdr2+cmd1+len2+payload+ck1+ftr2 */
+    uint16_t len = sizeof(ds_status_t);
+    uint32_t fi = 0;
+    frame[fi++] = PROTO_HEADER_1;
+    frame[fi++] = PROTO_HEADER_2;
+    frame[fi++] = CMD_STATUS;
+    frame[fi++] = len & 0xFF;
+    frame[fi++] = (len >> 8) & 0xFF;
+    memcpy(&frame[fi], st, len);
+    uint8_t x = 0;
+    for (uint16_t i = 0; i < len; i++) x ^= frame[fi + i];
+    fi += len;
+    frame[fi++] = x;
+    frame[fi++] = PROTO_FOOTER_1;
+    frame[fi++] = PROTO_FOOTER_2;
+    HAL_UART_Transmit(huart_esp, frame, fi, 50);
 }

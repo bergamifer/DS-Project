@@ -11,7 +11,7 @@ make flash-stlink        # Flash via ST-Link SWD
 make clean && make -j4   # Clean build
 ```
 
-Output: `build/ds9_beamforming.bin`
+Output: `build/ds10_beamforming.bin`
 
 ## Estructura
 
@@ -31,7 +31,7 @@ Core/
     pcm1690.c               # PCM1690 DAC I2C driver
     epaper.c                # SSD1681 driver
 STM32H743XX_FLASH.ld       # Linker script (.dma_buffer -> RAM_D2)
-Makefile                    # TARGET=ds9_beamforming
+Makefile                    # TARGET=ds10_beamforming
 ```
 
 ## Clocks
