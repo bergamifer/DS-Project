@@ -276,6 +276,15 @@ static volatile uint8_t beam_out_shift = 5;
 static volatile uint8_t  tone_enabled = 0;
 static volatile uint16_t tone_freq_hz = 2000;
 static uint32_t tone_phase_q16 = 0;
+/* Dither de frecuencia (Fase B, docs/ds10_tone_beam_plan.md): triángulo ±5%
+ * a ~3Hz alrededor de tone_base_hz. El haz es de retardos puros (banda ancha)
+ * → no cambia; los modos de la sala se promedian y la medición se estabiliza.
+ * El acumulador de fase de Tone_NextSample es continuo → sin clicks. La
+ * frecuencia se actualiza una vez por half-buffer (pasos ≤0.3% cada 10ms).
+ * Techo: 2000×1.05 = 2100 Hz < 2140 (límite d=λ/2, sin grating lobes). */
+#define TONE_DITHER_PERIOD 16000   /* samples @48kHz → LFO de 3 Hz */
+static volatile uint16_t tone_base_hz = 2000;
+static uint32_t tone_dither_pos = 0;
 // Input/mic X positions in mm (linear placeholder — see MIC_SPACING_MM note)
 static float mic_pos_x_mm[MIC_COUNT] = {
   0.0f * MIC_SPACING_MM, 1.0f * MIC_SPACING_MM, 2.0f * MIC_SPACING_MM,
@@ -346,10 +355,17 @@ static const uint8_t dac_addrs[4] = {
 
 // EEPROM deferred save flag (set when config changes, save in low-priority window)
 static volatile uint8_t eeprom_save_pending = 0;
-// Mode-change save debounce: HAL_GetTick() deadline (0 = nothing pending). Cycling
-// modes with K2 keeps pushing it out, so only a settled mode gets written to EEPROM.
-#define MODE_SAVE_DEBOUNCE_MS 3000
-static volatile uint32_t mode_save_due_tick = 0;
+// Config-save debounce: HAL_GetTick() deadline (0 = nothing pending). Any config
+// change (modo K2, /volume, CMD_UPDATE_CFG) re-arma el deadline; la EEPROM se
+// escribe UNA vez, 3s después del último cambio. Un slider arrastrado ya no
+// genera una ráfaga de saves de ~12ms (≈6 underruns cada uno).
+#define CFG_SAVE_DEBOUNCE_MS 3000
+static volatile uint32_t cfg_save_due_tick = 0;
+
+static inline void Arm_Config_Save(void) {
+  cfg_save_due_tick = HAL_GetTick() + CFG_SAVE_DEBOUNCE_MS;
+  if (cfg_save_due_tick == 0) cfg_save_due_tick = 1;  // 0 = "nothing pending"
+}
 
 // LED dimmer state machine (DS10 TIM3 4-channel: CH1=D4/PA6 Yellow, CH2=D5/PA7 Red,
 //                                                  CH3=D6/PB0 Green,  CH4=D7/PB1 White)
@@ -951,10 +967,10 @@ int main(void)
         UI_ApplyCustomBeam(&breq);
       }
 
-      // Debounced mode persistence: write only once the mode has settled.
-      if (mode_save_due_tick != 0 &&
-          (int32_t)(HAL_GetTick() - mode_save_due_tick) >= 0) {
-        mode_save_due_tick = 0;
+      // Debounced config persistence: write only once the changes settle.
+      if (cfg_save_due_tick != 0 &&
+          (int32_t)(HAL_GetTick() - cfg_save_due_tick) >= 0) {
+        cfg_save_due_tick = 0;
         if (EEPROM_IsAvailable()) eeprom_save_pending = 1;
       }
 
@@ -964,9 +980,9 @@ int main(void)
       if (UART_Protocol_GetVolumeRequest(&vol_db)) {
         uint8_t atten = Apply_Master_Volume(vol_db);
         beam_config.master_vol_db = vol_db;        // persist with the rest of the config
-        if (EEPROM_IsAvailable()) eeprom_save_pending = 1;
+        Arm_Config_Save();                         // debounced: no save-burst per slider drag
         snprintf(uart_buf, sizeof(uart_buf),
-                 "VOLUME: %d dB → ATDA=0x%02X (guardado en EEPROM)\r\n",
+                 "VOLUME: %d dB → ATDA=0x%02X (save diferido)\r\n",
                  (int)vol_db, atten);
         UART_Print(uart_buf);
       }
@@ -1020,10 +1036,8 @@ int main(void)
       UART_Protocol_PrintConfig();
       UART_Print("Config applied to beamformer\r\n");
 
-      // Defer EEPROM save — will execute when no audio fills are pending
-      if (EEPROM_IsAvailable()) {
-        eeprom_save_pending = 1;
-      }
+      // Debounced EEPROM save — coalesces bursts of config frames
+      Arm_Config_Save();
     }
 
     // ===== LED dimmer — TIM3 PWM step (10ms/step, 300 steps = 3s/LED, 12s full cycle) =====
@@ -2236,12 +2250,19 @@ static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
   if (!beam_enabled) memset(beam_line, 0, sizeof(beam_line));
   beam_enabled = 1;
   if (req->type == 1) {
+    /* El tono interno se PRESERVA a propósito: steerear el foco del tono
+     * (modos 12/13 + POST /beam type=tx) es el protocolo de medición
+     * mic-fijo/foco-móvil (docs/ds10_next_steps.md §A). */
     tx_steer_enabled = 1;
     Beam_UpdateDelays(0);                 // RX source: broadside
     Beam_UpdateTxFocus(req->fx_mm, req->fy_mm, req->fz_mm);
     UART_Print("MODE: TX focus custom (via ESP32)\r\n");
   } else {
+    /* RX custom escucha los mics: el tono interno pisaría beam_line, y el
+     * shift de tono (0) dejaría la salida 30dB abajo. */
     tx_steer_enabled = 0;
+    tone_enabled = 0;
+    beam_out_shift = 5;
     Beam_UpdateDelays(req->az_deg);
     UART_Print("MODE: RX beam custom (via ESP32)\r\n");
   }
@@ -2401,7 +2422,12 @@ static void UI_ApplyState(uint8_t idx) {
   beam_enabled = st->beam;
   adc_monitor_enabled = st->monitor;
   autofocus_enabled = st->af;
-  if (st->tone) { tone_freq_hz = st->tone_hz; tone_phase_q16 = 0; }
+  if (st->tone) {
+    tone_base_hz = st->tone_hz;
+    tone_freq_hz = st->tone_hz;
+    tone_phase_q16 = 0;
+    tone_dither_pos = 0;
+  }
   tone_enabled = st->tone;
   /* Tone source is -6dBFS: the +30dB boost that lifts the weak ADC beam
    * would clip ×32 into the PAMs (plan §3.1). */
@@ -2417,8 +2443,7 @@ static void UI_ApplyState(uint8_t idx) {
    * restore re-applies the same idx so it doesn't (idx == last_mode). */
   if (idx != beam_config.last_mode) {
     beam_config.last_mode = idx;
-    mode_save_due_tick = HAL_GetTick() + MODE_SAVE_DEBOUNCE_MS;
-    if (mode_save_due_tick == 0) mode_save_due_tick = 1;  // 0 = "nothing pending"
+    Arm_Config_Save();
   }
   sprintf(uart_buf, "MODE [%u/%u]: %s\r\n", (unsigned)(idx + 1),
           (unsigned)UI_NUM_STATES, st->name);
@@ -2475,6 +2500,13 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
   if (tone_enabled) {
     /* Internal source: fill beam_line exactly where the RX beam would write
      * it — the TX fills read it back with their focal delays untouched. */
+    /* Fase B: dither de frecuencia — triángulo 0→peak→0 sobre la base. */
+    uint32_t tri = (tone_dither_pos < TONE_DITHER_PERIOD / 2)
+                   ? tone_dither_pos : (TONE_DITHER_PERIOD - tone_dither_pos);
+    uint32_t base = tone_base_hz;
+    tone_freq_hz = (uint16_t)(base - base / 20
+                              + (base / 10) * tri / (TONE_DITHER_PERIOD / 2));
+    tone_dither_pos = (tone_dither_pos + samples) % TONE_DITHER_PERIOD;
     for (uint32_t i = 0; i < samples; i++) {
       beam_line[(wp + i) & DELAY_LINE_MASK] = Tone_NextSample();
     }
@@ -2593,12 +2625,16 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
      * gain/sign and the global master/mutes — wavefronts converge at the
      * focal point set by Beam_UpdateTxFocus. */
     if (tx_steer_enabled) {
-      uint8_t master = beam_config.mute_global ? 0 : beam_config.master_gain;
+      /* Volumen maestro unificado: SOLO el atenuador del PCM1690 (/volume).
+       * El master_gain digital se eliminó del path (redundante, perdía SNR);
+       * beam_config.master_gain queda en el struct solo por compatibilidad
+       * de layout EEPROM. gains[ch] se conserva (ventaneo Hann futuro). */
+      uint8_t unmuted = !beam_config.mute_global;
       for (uint32_t i = 0; i < samples; i++) {
         for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
           uint32_t gch = ch_offset + ch;
           int32_t s = 0;
-          if (master && !((beam_config.mutes >> gch) & 1)) {
+          if (unmuted && !((beam_config.mutes >> gch) & 1)) {
             // Fractional delay (Q8): linear interpolation between the two
             // adjacent samples; index−1 is one sample OLDER = more delay.
             uint32_t dq = tx_delay_q8[gch];
@@ -2609,7 +2645,6 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
             // (s1−s0) spans 25 bits × frac(8 bits) → use 64-bit intermediate
             s = s0 + (int32_t)(((int64_t)(s1 - s0) * frac) >> 8);
             s = (s * (int32_t)beam_config.gains[gch]) >> 8;  // 24-bit×255 < 2³¹
-            s = (s * (int32_t)master) >> 8;
             if (speaker_sign[gch] < 0) s = -s;
             s <<= beam_out_shift;
             if (s > 8388607) s = 8388607;

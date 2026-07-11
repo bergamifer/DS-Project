@@ -5,7 +5,8 @@
  * CAT24C256 (U8 on DS10): 32KB, I2C4, address 0xA0, page size 64 bytes.
  * Write cycle time: 5ms max per page write.
  *
- * I2C4 pins: PB6(SCL) / PB7(SDA) with AF11 (per STM32H743 datasheet Tables 13-14).
+ * I2C4 pins: PB6(SCL) / PB7(SDA) with AF6 (confirmado en bring-up: la EEPROM
+ * responde en 0x50 con AF6; el AF11 del design review era un error).
  * GPIO config uses EEPROM_I2C_AF macro from pin_definitions.h.
  *
  * EEPROM layout at base address:
@@ -114,7 +115,7 @@ static HAL_StatusTypeDef eeprom_write_page(uint16_t mem_addr, const uint8_t *dat
     wp_enable();
 
     /* Wait for write cycle to complete (5ms max for CAT24C256) */
-    HAL_Delay(6);
+    if (status == HAL_OK) HAL_Delay(6);
 
     return status;
 }
