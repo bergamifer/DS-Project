@@ -193,7 +193,7 @@ mismas posiciones/cadencia que el RX beam, así el path de TX steering corre
 | **Volumen maestro** | `POST /volume {"db":-20}` → `CMD_SET_VOLUME` | **Único maestro**: atenuación del PCM1690 (0…−63 dB, ≤−64 = mute), 0.5 dB/paso. Se persiste en EEPROM (debounce 3 s). Default −24 dB. |
 | **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (52 bytes) | mute_global, gains/delays/mutes de los primeros 16 canales. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
 | **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32. No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
-| **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal. |
+| **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2). |
 
 ## Diagnóstico por UART7 (115200 8N1, J7 → ST-Link VCP)
 

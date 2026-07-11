@@ -38,7 +38,7 @@
 #define PROTO_MAX_PAYLOAD   64
 #define CFG_PAYLOAD_SIZE    52
 #define CFG_NUM_CHANNELS    16
-#define PROTO_VERSION       1
+#define PROTO_VERSION       2   /* v2: + master_vol_db en ds_status_t */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -87,9 +87,10 @@ typedef struct __attribute__((packed)) {
     uint8_t  ovf;            /* AK5538 overflow pin (1 = clipping) */
     uint8_t  cal_state;      /* AUTOFOCUS: 0 idle … 5 done (cal_state_t) */
     int32_t  adc_pk[8];      /* per-channel input peak, 24-bit scale */
-} ds_status_t;               /* 21 + 32 = 53 bytes */
+    int8_t   master_vol_db;  /* v2: volumen maestro actual (0..-63, ≤-64 mute) */
+} ds_status_t;               /* 21 + 32 + 1 = 54 bytes */
 
-_Static_assert(sizeof(ds_status_t) == 53, "ds_status_t must be 53 bytes");
+_Static_assert(sizeof(ds_status_t) == 54, "ds_status_t must be 54 bytes");
 
 /**
  * @brief Initialize UART protocol module

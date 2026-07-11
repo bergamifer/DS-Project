@@ -1000,6 +1000,7 @@ int main(void)
         st.sai_errors = error_count;
         st.ovf = (uint8_t)HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN);
         st.cal_state = (uint8_t)cal_state;
+        st.master_vol_db = beam_config.master_vol_db;
         for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
           int32_t pk = 0;
           for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {

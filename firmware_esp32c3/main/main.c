@@ -80,7 +80,7 @@ typedef struct {
     uint16_t mutes;
 } ds_config_t;
 
-// Espejo de ds_status_t del STM32 (uart_protocol.h) — 53 bytes packed LE.
+// Espejo de ds_status_t del STM32 (uart_protocol.h) — 54 bytes packed LE (v2).
 // Extender SOLO appendeando campos (proto_ver versiona el layout).
 typedef struct __attribute__((packed)) {
     uint8_t  proto_ver;
@@ -93,6 +93,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  ovf;
     uint8_t  cal_state;
     int32_t  adc_pk[8];
+    int8_t   master_vol_db;   // v2: volumen maestro actual (0..-63, <=-64 mute)
 } ds_status_t;
 
 // Espejo de ui_states[] del STM32 — actualizar junto con el firmware STM32.
@@ -110,8 +111,8 @@ static const char *MODE_NAMES[] = {
     "TX focus der 0.5m @1m",
     "TX focus centro CERCA 0.3m",
     "AUTOFOCUS scan (mic->c0)",
-    "TX tono 2k foco @1m",
-    "TX tono 1k foco @1m",
+    "TX tono 2k dither foco @1m",
+    "TX tono 1k dither foco @1m",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 
@@ -458,7 +459,7 @@ static bool parse_and_send_command(const char *json_str)
     if (command)    printf("[ESP32]   command:        %s\n", command->valuestring);
     if (device_id)  printf("[ESP32]   device_id:      %s\n", device_id->valuestring);
     if (mute)       printf("[ESP32]   mute:           %s\n", cJSON_IsTrue(mute) ? "true" : "false");
-    if (master_gain)printf("[ESP32]   master_gain:    %.2f\n", master_gain->valuedouble);
+    if (master_gain)printf("[ESP32]   master_gain:    %.2f (DEPRECADO: el STM32 ya no lo aplica — usar POST /volume)\n", master_gain->valuedouble);
     if (focal_dist) printf("[ESP32]   focal_distance: %.2f m\n", focal_dist->valuedouble);
 
     ds_config_t cfg = {0};
@@ -557,12 +558,13 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"proto_ver\":%u,\"mode\":%u,\"mode_name\":\"%s\",\"num_modes\":%u,"
             "\"rx_az\":%d,\"focus\":{\"fx\":%d,\"fy\":%d,\"fz\":%d},"
             "\"underruns\":%lu,\"sai_errors\":%lu,\"ovf\":%u,\"cal_state\":%u,"
+            "\"vol_db\":%d,"
             "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
             "\"uptime_ms\":%lu}",
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
             (unsigned long)s->underruns, (unsigned long)s->sai_errors,
-            s->ovf, s->cal_state,
+            s->ovf, s->cal_state, (int)s->master_vol_db,
             (long)s->adc_pk[0], (long)s->adc_pk[1], (long)s->adc_pk[2],
             (long)s->adc_pk[3], (long)s->adc_pk[4], (long)s->adc_pk[5],
             (long)s->adc_pk[6], (long)s->adc_pk[7],
@@ -738,7 +740,7 @@ static const char INDEX_HTML[] =
 "<div class=card><h2>Entradas ADC (peak)</h2><div class=meter id=meter></div>"
 "<div id=st>esperando estado...</div></div>"
 "<script>"
-"const N=14,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k @1m','Tono 1k @1m'];"
+"const N=14,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither'];"
 "const md=document.getElementById('modes');"
 "for(let i=0;i<N;i++){const b=document.createElement('button');b.textContent=names[i];b.id='m'+i;"
 "b.onclick=()=>fetch('/mode',{method:'POST',body:JSON.stringify({mode:i})}).then(poll);md.appendChild(b);}"
@@ -746,18 +748,22 @@ static const char INDEX_HTML[] =
 "for(let i=0;i<8;i++){const d=document.createElement('div');d.className='bar';d.id='b'+i;mt.appendChild(d);}"
 "['az','fx','fy','fz'].forEach(id=>{const e=document.getElementById(id);"
 "e.oninput=()=>document.getElementById(id+'v').textContent=e.value+(id=='az'?'\\u00b0':'');});"
-"vol.oninput=()=>volv.textContent=vol.value+' dB';"
 "function setVol(d){fetch('/volume',{method:'POST',body:JSON.stringify({db:d})});}"
+"let volT=0,volTouch=0;"
+"vol.oninput=()=>{volv.textContent=vol.value+' dB';volTouch=Date.now();"
+"if(Date.now()-volT>200){volT=Date.now();setVol(+vol.value);}};"
+"vol.onchange=()=>{volTouch=Date.now();setVol(+vol.value);};"
 "function setRx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'rx',az:+az.value})});}"
 "function setTx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'tx',fx:+fx.value,fy:+fy.value,fz:+fz.value})});}"
 "function poll(){fetch('/status').then(r=>r.json()).then(s=>{"
 "document.getElementById('link').textContent=s.stm32=='ok'?'\\u25cf online':'\\u25cb '+s.stm32;"
 "if(s.stm32!='ok')return;"
 "for(let i=0;i<N;i++)document.getElementById('m'+i).className=(i==s.mode)?'on':'';"
+"if(s.vol_db!=null&&s.vol_db>-64&&Date.now()-volTouch>3000){vol.value=s.vol_db;volv.textContent=s.vol_db+' dB';}"
 "const pk=s.adc_pk||[];for(let i=0;i<8;i++){const v=Math.max(2,Math.min(36,Math.log10((pk[i]||1)+1)/7*36));"
 "document.getElementById('b'+i).style.height=v+'px';}"
 "document.getElementById('st').textContent="
-"'modo: '+s.mode_name+'  |  rx_az: '+s.rx_az+'\\u00b0  |  foco: ('+s.focus.fx+','+s.focus.fy+','+s.focus.fz+')mm'"
+"'modo: '+s.mode_name+'  |  vol: '+(s.vol_db<=-64?'MUTE':s.vol_db+'dB')+'  |  foco: ('+s.focus.fx+','+s.focus.fy+','+s.focus.fz+')mm'"
 "+'\\nunderruns: '+s.underruns+'  errores SAI: '+s.sai_errors+'  OVF: '+s.ovf+'  cal: '+s.cal_state;"
 "}).catch(()=>{document.getElementById('link').textContent='\\u25cb sin conexion';});}"
 "setInterval(poll,1000);poll();"
