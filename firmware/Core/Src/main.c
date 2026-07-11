@@ -116,6 +116,7 @@ typedef struct {
     uint8_t  gains[BEAM_NUM_CHANNELS];      // gain per channel 0-255
     uint32_t mutes;                         // bitfield: bit N = channel N muted
     int8_t   master_vol_db;                 // PCM1690 attenuation, dB (0..-63, ≤-64 mute)
+    uint8_t  last_mode;                     // ui_states index restored at boot
 } beam_config_t;
 
 /* Private variables ---------------------------------------------------------*/
@@ -345,6 +346,10 @@ static const uint8_t dac_addrs[4] = {
 
 // EEPROM deferred save flag (set when config changes, save in low-priority window)
 static volatile uint8_t eeprom_save_pending = 0;
+// Mode-change save debounce: HAL_GetTick() deadline (0 = nothing pending). Cycling
+// modes with K2 keeps pushing it out, so only a settled mode gets written to EEPROM.
+#define MODE_SAVE_DEBOUNCE_MS 3000
+static volatile uint32_t mode_save_due_tick = 0;
 
 // LED dimmer state machine (DS10 TIM3 4-channel: CH1=D4/PA6 Yellow, CH2=D5/PA7 Red,
 //                                                  CH3=D6/PB0 Green,  CH4=D7/PB1 White)
@@ -525,6 +530,7 @@ int main(void)
   memset(beam_config.gains, 255, sizeof(beam_config.gains));  // 0xFF = unity gain
   beam_config.mutes = 0;
   beam_config.master_vol_db = -24;   // matches PCM1690 init default → first boot unchanged
+  beam_config.last_mode = 0;         // monitor
   Beam_InitTxGeometry();
   Cal_Init();                       // AUTOFOCUS chirp reference
   UART_Print("Beamforming initialized (delay lines zeroed, gains=max)\r\n");
@@ -798,6 +804,17 @@ int main(void)
   // DWT-based 1s heartbeat — works even if SysTick is frozen
   uint32_t last_hb_dwt = DWT->CYCCNT;
 
+  // Restore the last-used mode from EEPROM. AUTOFOCUS is NOT auto-restored:
+  // it would fire a chirp scan at boot without the mic placed → fall to
+  // monitor (and, since 0 != last_mode there, that write-back deliberately
+  // forgets AUTOFOCUS). The normal case restores idx == last_mode, so
+  // UI_ApplyState leaves the save disarmed.
+  {
+    uint8_t bm = beam_config.last_mode;
+    if (bm >= UI_NUM_STATES || ui_states[bm].af) bm = 0;
+    UI_ApplyState(bm);
+  }
+
   UART_Print("[STM32] main loop started — SAI+DMA running\r\n");
 
   /* USER CODE END 2 */
@@ -932,6 +949,13 @@ int main(void)
       ds_beam_req_t breq;
       if (UART_Protocol_GetBeamRequest(&breq)) {
         UI_ApplyCustomBeam(&breq);
+      }
+
+      // Debounced mode persistence: write only once the mode has settled.
+      if (mode_save_due_tick != 0 &&
+          (int32_t)(HAL_GetTick() - mode_save_due_tick) >= 0) {
+        mode_save_due_tick = 0;
+        if (EEPROM_IsAvailable()) eeprom_save_pending = 1;
       }
 
       // ===== Master volume: PCM1690 attenuation (all modes, walker incl.) =====
@@ -2389,6 +2413,13 @@ static void UI_ApplyState(uint8_t idx) {
   if (st->beam) Beam_UpdateDelays(st->az_deg);
   if (st->tx) Beam_UpdateTxFocus(st->fx_mm, st->fy_mm, st->fz_mm);
   if (st->walker) walker_frame = 0;
+  /* Persist the mode, debounced: a real change arms the deadline; the boot
+   * restore re-applies the same idx so it doesn't (idx == last_mode). */
+  if (idx != beam_config.last_mode) {
+    beam_config.last_mode = idx;
+    mode_save_due_tick = HAL_GetTick() + MODE_SAVE_DEBOUNCE_MS;
+    if (mode_save_due_tick == 0) mode_save_due_tick = 1;  // 0 = "nothing pending"
+  }
   sprintf(uart_buf, "MODE [%u/%u]: %s\r\n", (unsigned)(idx + 1),
           (unsigned)UI_NUM_STATES, st->name);
   UART_Print(uart_buf);
