@@ -53,14 +53,13 @@ si el instrumento enfoca, se oye pasar el nivel. (Automatizable — ver backlog 
 
 Ordenado por valor:
 
-1. **Dither de frecuencia (Fase B del plan de tono)** — el matador de modos de sala. Modular
-   `tone_freq_hz` ±5% lento (ej. 1900↔2100 a ~3Hz). El haz es de retardos (banda ancha) → no
-   cambia; los modos de la sala se promedian → la medición se estabiliza aunque la sala sea
-   mala. **El de mayor impacto para poder medir en condiciones no ideales.**
+1. ✅ **HECHO 2026-07-11** — **Dither de frecuencia (Fase B del plan de tono)** — el matador
+   de modos de sala. Triángulo ±5% a 3Hz sobre `tone_base_hz`, actualizado por half-buffer
+   (pasos ≤0.3%/10ms, fase continua → sin clicks). Activo siempre en modos 12/13.
 
-2. **Unificar el volumen** — eliminar el `master_gain` digital global (redundante y pierde
-   SNR); dejar `/volume` (atenuador DAC) como único maestro. **Conservar** `gains[ch]` por
-   canal (hace falta para el ventaneo Hann). Sacar la línea `s = (s*master)>>8` del fill TX.
+2. ✅ **HECHO 2026-07-11** — **Unificar el volumen** — el `(s*master)>>8` salió del fill TX;
+   `/volume` (atenuador DAC) es el único maestro. `gains[ch]` y `mute_global` conservados.
+   El campo `master_gain` queda en el struct solo por compatibilidad de layout EEPROM.
 
 3. **Modo de medición con 2 mics + contraste automático** — un modo que steerea el foco
    ON/OFF del mic automáticamente y reporta por UART el Δ dB (contraste focal) usando c0 (y
@@ -86,7 +85,8 @@ Ordenado por valor:
 
 Priorizados. El #1 tiene un matiz importante para el protocolo de medición (§A).
 
-1. **`UI_ApplyCustomBeam` no maneja el estado del tono** (main.c ~2230). Apaga
+1. ✅ **FIXEADO 2026-07-11 (por rama, como se especifica abajo).**
+   **`UI_ApplyCustomBeam` no maneja el estado del tono** (main.c ~2230). Apaga
    walker/monitor/autofocus pero NO toca `tone_enabled` ni `beam_out_shift`.
    - Efecto: en modo tono (12/13), un `POST /beam type=rx` deja el tono sonando → oís
      el tono de 2kHz creyendo que escuchás los mics.
@@ -97,7 +97,9 @@ Priorizados. El #1 tiene un matiz importante para el protocolo de medición (§A
    - **Para las mediciones de §A `type=tx` YA funciona bien** con el código actual; el bug
      solo afecta `type=rx`, que no se usa mañana.
 
-2. **El volumen guarda en EEPROM sin debounce** (main.c ~964). Cada `CMD_SET_VOLUME`
+2. ✅ **FIXEADO 2026-07-11** (debounce unificado `CFG_SAVE_DEBOUNCE_MS` para modo, volumen
+   y `CMD_UPDATE_CFG`; el slider ya se puede arrastrar).
+   **El volumen guarda en EEPROM sin debounce** (main.c ~964). Cada `CMD_SET_VOLUME`
    dispara un save inmediato (~12ms bloqueo ≈ 6 underruns). Arrastrar el slider de volumen
    de la web = ráfaga de glitches. Reusar el `mode_save_due_tick` (debounce 3s) para el
    volumen y para `CMD_UPDATE_CFG`. **Para mañana: cambiá el volumen con `curl` a valores
@@ -126,9 +128,9 @@ Priorizados. El #1 tiene un matiz importante para el protocolo de medición (§A
    inalcanzable con el set actual de modos. Borrarlos o marcarlos — hoy sugieren un
    comportamiento de `CMD_UPDATE_CFG` que no existe.
 
-**Menores**: `eeprom_write_page` hace `HAL_Delay(6)` aun cuando la escritura falló
-(eeprom_config.c ~117); el header de eeprom_config.c dice "AF11" cuando el pin real es
-**AF6** (confirmado en el bring-up) — corregir el comentario.
+**Menores** — ✅ ambos fixeados 2026-07-11: `eeprom_write_page` ya solo espera los 6ms
+cuando la escritura fue OK; el header de eeprom_config.c ahora dice **AF6** (el AF11 del
+design review era un error, confirmado en el bring-up).
 
 > Nota de honestidad: mi primera revisión (más arriba en la sesión) dijo "sin bugs" — se me
 > pasó el #1 por no cubrir `UI_ApplyCustomBeam`. La review cruzada fue más exhaustiva.
