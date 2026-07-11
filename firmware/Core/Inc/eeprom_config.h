@@ -13,7 +13,7 @@
 #include <stdint.h>
 
 #define EEPROM_CFG_MAGIC       0xD509BEEF
-#define EEPROM_CFG_VERSION     1
+#define EEPROM_CFG_VERSION     2   /* v2: beam_config_t += master_vol_db */
 #define EEPROM_CFG_BASE_ADDR   0x0000   /* Start of EEPROM */
 
 /* Result codes */

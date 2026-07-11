@@ -115,6 +115,7 @@ typedef struct {
     uint16_t delays[BEAM_NUM_CHANNELS];     // delay in samples per channel
     uint8_t  gains[BEAM_NUM_CHANNELS];      // gain per channel 0-255
     uint32_t mutes;                         // bitfield: bit N = channel N muted
+    int8_t   master_vol_db;                 // PCM1690 attenuation, dB (0..-63, ≤-64 mute)
 } beam_config_t;
 
 /* Private variables ---------------------------------------------------------*/
@@ -444,6 +445,7 @@ static void Print_DMA_Config(void);
 static void Beam_UpdateDelays(int16_t az_deg);
 static void Beam_InitTxGeometry(void);
 static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
+static uint8_t Apply_Master_Volume(int8_t db);
 static void UI_ApplyState(uint8_t idx);
 static void UI_ApplyCustomBeam(const ds_beam_req_t *req);
 static void Cal_Init(void);
@@ -522,6 +524,7 @@ int main(void)
   memset(beam_config.delays, 0, sizeof(beam_config.delays));
   memset(beam_config.gains, 255, sizeof(beam_config.gains));  // 0xFF = unity gain
   beam_config.mutes = 0;
+  beam_config.master_vol_db = -24;   // matches PCM1690 init default → first boot unchanged
   Beam_InitTxGeometry();
   Cal_Init();                       // AUTOFOCUS chirp reference
   UART_Print("Beamforming initialized (delay lines zeroed, gains=max)\r\n");
@@ -714,6 +717,16 @@ int main(void)
   // Unmute all DACs (AMUTEI HIGH = unmuted)
   HAL_GPIO_WritePin(DAC_MUTE_IN_PORT, DAC_MUTE_IN_PIN, GPIO_PIN_SET);
   UART_Print("PCM1690: AMUTEI HIGH — DACs unmuted\r\n");
+
+  // Restore saved master volume (EEPROM load already populated master_vol_db;
+  // the DAC init just forced −24dB, so re-apply the persisted value on top).
+  {
+    uint8_t atd = Apply_Master_Volume(beam_config.master_vol_db);
+    snprintf(uart_buf, sizeof(uart_buf),
+             "VOLUME: %d dB al boot (ATDA=0x%02X)\r\n",
+             (int)beam_config.master_vol_db, atd);
+    UART_Print(uart_buf);
+  }
 
   // === STEP 4: Verify all 4 TX SAI blocks ===
   // SAIEN=1 means enabled. WCKCFG=1 (master only) = wrong clock config → the
@@ -925,19 +938,11 @@ int main(void)
       // Applied here (main loop) not the ISR: I2C writes must not run in IRQ.
       int8_t vol_db;
       if (UART_Protocol_GetVolumeRequest(&vol_db)) {
-        // ATDAx = 255 − dB×2 (0.5 dB/step). db≤−64 → mute (0x80).
-        uint8_t atten;
-        if (vol_db <= -64) {
-          atten = PCM1690_ATTEN_MUTE;
-        } else {
-          int16_t a = (vol_db > 0) ? 0 : vol_db;      // clamp positives to 0 dB
-          atten = (uint8_t)(255 + a * 2);             // a negative → below 0xFF
-        }
-        for (uint32_t d = 0; d < 4; d++)
-          for (uint8_t ch = 1; ch <= 8; ch++)
-            PCM1690_SetAttenuation(&hi2c1, dac_addrs[d], ch, atten);
+        uint8_t atten = Apply_Master_Volume(vol_db);
+        beam_config.master_vol_db = vol_db;        // persist with the rest of the config
+        if (EEPROM_IsAvailable()) eeprom_save_pending = 1;
         snprintf(uart_buf, sizeof(uart_buf),
-                 "VOLUME: %d dB → ATDA=0x%02X (todos los canales)\r\n",
+                 "VOLUME: %d dB → ATDA=0x%02X (guardado en EEPROM)\r\n",
                  (int)vol_db, atten);
         UART_Print(uart_buf);
       }
@@ -2171,6 +2176,24 @@ static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
             t[6] >> 8, (t[6] & 0xFF) * 100 / 256, t[7] >> 8, (t[7] & 0xFF) * 100 / 256);
     UART_Print(uart_buf);
   }
+}
+
+/* Master volume via PCM1690 attenuation. ATDAx = 255 + dB×2 (0.5 dB/step);
+ * db≤−64 → mute. Writes the 8 channels of all 4 DACs (unpopulated ones just
+ * NAK the I2C, harmless). Runs from the main loop only — never the ISR.
+ * Returns the ATDA byte written, for logging. */
+static uint8_t Apply_Master_Volume(int8_t db) {
+  uint8_t atten;
+  if (db <= -64) {
+    atten = PCM1690_ATTEN_MUTE;
+  } else {
+    int16_t a = (db > 0) ? 0 : db;          // clamp positives to 0 dB
+    atten = (uint8_t)(255 + a * 2);
+  }
+  for (uint32_t d = 0; d < 4; d++)
+    for (uint8_t ch = 1; ch <= 8; ch++)
+      PCM1690_SetAttenuation(&hi2c1, dac_addrs[d], ch, atten);
+  return atten;
 }
 
 /**
