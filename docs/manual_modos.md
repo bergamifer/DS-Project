@@ -1,17 +1,17 @@
 # Manual de modos de operación — DS10 (firmware STM32)
 
-> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (14 modos, índices 0–13).
-> Última actualización: 2026-07-10.
+> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (16 modos, índices 0–15).
+> Última actualización: 2026-07-12.
 
 ## Cómo se cambia de modo
 
 | Vía | Mecanismo |
 |-----|-----------|
-| **Botón K2** (PA4, presionar = LOW) | Avanza un modo por pulsación, con wrap 13→0. Debounce de 30 ms. |
+| **Botón K2** (PA4, presionar = LOW) | Avanza un modo por pulsación, con wrap 15→0. Debounce de 30 ms. |
 | **HTTP** (web/app vía ESP32) | `POST /mode` con `{"mode":N}` → trama `CMD_SET_MODE` por UART4. |
 | **UART4 directo** | Trama binaria `CMD_SET_MODE` (0x02), payload = 1 byte con el índice. |
 
-Cada cambio imprime en UART7: `MODE [n/14]: <nombre>`.
+Cada cambio imprime en UART7: `MODE [n/16]: <nombre>`.
 
 **Persistencia**: el último modo se guarda en EEPROM con debounce de 3 s
 (`CFG_SAVE_DEBOUNCE_MS`, compartido con volumen y config) — ciclar rápido con
@@ -42,6 +42,8 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 | 11 | `AUTOFOCUS scan (mic->ADC c0)` | Chirp por parlante + mic | Scan → tono enfocado medido | Requiere mic en ADC c0 |
 | 12 | `TX tone 2k focus @1m` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
 | 13 | `TX tone 1k focus @1m` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
+| 14 | `MULTIFOCUS 4 tonos @1m` | 4 tonos internos (1.3/1.6/1.9/2.1 kHz) | Cada tono enfocado en su propio punto | Precuela de la intervención 8-in |
+| 15 | `MULTIFOCUS 8 entradas @1m` | Las 8 entradas analógicas | Cada entrada enfocada en su propio punto | **La intervención**: 8 señales, 8 lugares |
 
 **IMPORTANTE (append-only)**: los índices están espejados en el ESP32, la web y
 la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
@@ -184,6 +186,61 @@ mismas posiciones/cadencia que el RX beam, así el path de TX steering corre
   su cadencia la marca el DMA RX del ADC — si SAI3_B RX se frena, estos modos
   quedan en silencio.
 
+## Modo 14 — MULTIFOCUS 4 tonos (mapa de focos multiplexado en frecuencia)
+
+> ✅ **VALIDADO EN HARDWARE (2026-07-12)**: caminando de izquierda a derecha los
+> tonos aparecen de grave a agudo, coincidiendo con la geometría configurada.
+
+**Precuela de la intervención de 8 entradas analógicas**: N fuentes, cada una
+con su **propia tabla de delays focales** (`mf_delay_q8[src][ch]`) — la misma
+infraestructura que después va a situar 8 señales reales (poesías, canales de
+una banda, etc.) en 8 puntos distintos de la sala. Hoy las fuentes son tonos;
+mañana serán `delay_line[src]` (los ADC), con las mismas tablas.
+
+- **4 fuentes default**: 1300 / 1600 / 1900 / 2100 Hz en fx = −450 / −150 /
+  +150 / +450 mm (fy = −240, fz = 1000). Frecuencias múltiplo de 100 Hz
+  (fase exacta entre los 4 bancos de DACs), sin relaciones armónicas entre
+  sí, todas bajo el límite de grating (2140 Hz).
+- **Cómo se usa**: caminar la sala con un analizador espectral (Spectroid o
+  similar): en cada posición domina el pico de la frecuencia cuyo foco está
+  ahí. El mapa espacial se "lee" por frecuencia, sin mover nada.
+- **Mover un foco individual** (sin re-entrar al modo):
+  `POST /beam {"type":"mf","src":2,"fx":300,"fy":-240,"fz":1000}` —
+  re-apunta SOLO la fuente 2, conservando su frecuencia. `src` fuera de rango
+  se rechaza sin tocar el modo en curso. Si no estabas en modo 14, un `mf`
+  te mete en él.
+- **Niveles**: cada tono sale a −6dBFS/4, así la suma coherente nunca pasa de
+  −6dBFS (sin clipping aunque los 4 focos coincidan).
+- Re-entrar al modo (K2 o POST) **resetea a los defaults**.
+- Para senos, el delay se implementa como offset de fase exacto precalculado
+  (matemáticamente idéntico al delay temporal, sin aproximación) — el foco es
+  tan real como el de los modos 12/13.
+- `gains[ch]`, mutes y polaridades medidas (`speaker_sign`) se aplican igual
+  que en los modos TX.
+
+## Modo 15 — MULTIFOCUS 8 entradas (la intervención)
+
+**El modo para el que existe el instrumento**: cada una de las 8 entradas
+analógicas del AK5538 se proyecta enfocada en su propio punto de la sala —
+8 señales reales (poesías, canales de una banda, lo que sea) situadas en 8
+lugares distintos, simultáneamente.
+
+- **Fuente**: `delay_line[src]` (las entradas, capturadas siempre). Delay
+  temporal verdadero con interpolación Q8 — vale para señal arbitraria, no
+  solo senos. Mismas tablas de foco (`mf_delay_q8`) que el modo 14: el 14 es
+  la versión "de laboratorio" de este modo, con tonos en vez de entradas.
+- **Focos default**: entrada N → fx = −700 + 200·N mm (−700…+700, paso 200),
+  fy = −240, fz = 1000. Re-entrar al modo resetea a estos defaults.
+- **Mover una entrada de lugar** (en vivo):
+  `POST /beam {"type":"mf","src":5,"fx":200,"fy":-240,"fz":800}` — en este
+  modo `src` va de 0 a 7 y re-apunta esa entrada sin tocar las demás.
+- **Niveles**: boost de entrada +12 dB (`mf_in_shift = 2`, nivel de línea).
+  Si distorsiona, **bajar el volumen de la fuente** (hay clamp, pero suena
+  mal). Entradas sin nada conectado solo aportan piso de ruido, inaudible.
+- Con 1–2 fuentes conectadas ya funciona (las entradas libres no molestan) —
+  no hace falta esperar a tener las 8 señales.
+- `gains[ch]`, mutes y `speaker_sign` se aplican igual que en los modos TX.
+
 ---
 
 ## Controles globales (afectan a todos los modos)
@@ -192,7 +249,7 @@ mismas posiciones/cadencia que el RX beam, así el path de TX steering corre
 |---------|-----|--------|
 | **Volumen maestro** | `POST /volume {"db":-20}` → `CMD_SET_VOLUME` | **Único maestro**: atenuación del PCM1690 (0…−63 dB, ≤−64 = mute), 0.5 dB/paso. Se persiste en EEPROM (debounce 3 s). Default −24 dB. |
 | **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (52 bytes) | mute_global, gains/delays/mutes de los primeros 16 canales. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
-| **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32. No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
+| **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32; `type:"mf"` con `src` 0-7 — re-apunta el foco de UNA fuente MULTIFOCUS (tonos del 14 o entradas del 15, según el modo activo). No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
 | **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2). |
 
 ## Diagnóstico por UART7 (115200 8N1, J7 → ST-Link VCP)

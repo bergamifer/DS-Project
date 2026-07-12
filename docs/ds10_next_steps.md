@@ -6,6 +6,33 @@
 
 ---
 
+## ✅ RESULTADOS 2026-07-12 — beamforming TX validado en el aire
+
+Primera sesión de campo con el firmware nuevo (dither + volumen unificado + modo 14):
+
+1. **Foco TX audible de oído**: boost sutil y detectable en `{"type":"tx","fx":1000,
+   "fy":-240,"fz":4000}` (4 m, 1 m a la derecha). "Sutil" es lo ESPERADO a esa
+   distancia: N Fresnel ≈ 0.13 → régimen de haz dirigido (~14° de azimut), no de foco
+   puntual; lóbulo ~1.1 m de ancho. El steering funciona.
+2. **MULTIFOCUS validado (modo 14)**: 4 tonos simultáneos (1300/1600/1900/2100 Hz),
+   cada uno enfocado en su punto (fx −450/−150/+150/+450 @ 1m). **Caminando de
+   izquierda a derecha, los tonos aparecen de grave a agudo — el mapa espacial
+   coincide con la geometría configurada.** En una sola prueba quedó validado:
+   - la superposición de N tablas de delay focales independientes,
+   - el mapeo canal→parlante (consistente con el walker),
+   - la convención de signos X del marco del oyente,
+   - la lectura espacial por frecuencia (analizador espectral como "GPS" del campo).
+
+   El modo 14 es la **precuela funcional de la intervención de 8 entradas**: las
+   mismas tablas `mf_delay_q8[8][32]` van a situar 8 señales reales (poesías,
+   canales de una banda, …) en 8 puntos de la sala — solo cambia la fuente
+   (`delay_line[src]` en vez de tonos).
+
+Pendiente de esta serie: cuantificar el contraste (teléfono con FFT o ECM8000+2i2,
+guía en `docs/autofocus_setup.md`) y el test 2k-vs-1k de ancho de spot (~2×).
+
+---
+
 ## A. Protocolo de medición para mañana (sin firmware nuevo)
 
 ### Principio clave: mic FIJO, mover el FOCO

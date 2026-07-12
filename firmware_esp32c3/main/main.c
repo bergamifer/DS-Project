@@ -113,6 +113,8 @@ static const char *MODE_NAMES[] = {
     "AUTOFOCUS scan (mic->c0)",
     "TX tono 2k dither foco @1m",
     "TX tono 1k dither foco @1m",
+    "MULTIFOCUS 4 tonos @1m",
+    "MULTIFOCUS 8 entradas @1m",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 
@@ -139,8 +141,20 @@ static void uart_push_esp_ip(void);   // definida junto a uart_send_frame()
 static EventGroupHandle_t wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
+// Redes conocidas (secrets.h) — el instrumento viaja entre casas, asi que se
+// prueban en orden y se cicla entre ellas indefinidamente en background: al
+// agotar los reintentos de una red se pasa a la siguiente, sin descartar
+// ninguna (agregar una red nueva nunca pierde la anterior).
+typedef struct { const char *ssid; const char *pass; } wifi_net_t;
+static const wifi_net_t WIFI_NETWORKS[] = {
+    { WIFI_SSID,   WIFI_PASS },
+    { WIFI_SSID_2, WIFI_PASS_2 },
+};
+#define NUM_WIFI_NETWORKS (sizeof(WIFI_NETWORKS) / sizeof(WIFI_NETWORKS[0]))
+static uint8_t wifi_net_idx = 0;
+
 static int retry_num = 0;
-#define MAX_RETRY 10
+#define MAX_RETRY 5   // por red, antes de pasar a la siguiente (ciclo infinito)
 
 static httpd_handle_t server = NULL;
 
@@ -617,6 +631,9 @@ static esp_err_t mode_handler(httpd_req_t *req)
 // POST /beam — steering custom fuera de los presets
 //   {"type":"rx","az":30}                      → beam RX a 30°
 //   {"type":"tx","fx":0,"fy":0,"fz":1000}      → foco TX en (0,0,1000)mm
+//   {"type":"mf","src":2,"fx":300,"fy":-240,"fz":1000}
+//       → MULTIFOCUS: mueve SOLO el foco de la fuente 2 (0-3). En la trama
+//         binaria el indice viaja en el campo az (type=2, sin cambio de layout)
 static esp_err_t beam_handler(httpd_req_t *req)
 {
     char buf[256];
@@ -633,11 +650,14 @@ static esp_err_t beam_handler(httpd_req_t *req)
     }
     cJSON *type = cJSON_GetObjectItem(root, "type");
     bool is_tx = type && type->valuestring && strcmp(type->valuestring, "tx") == 0;
+    bool is_mf = type && type->valuestring && strcmp(type->valuestring, "mf") == 0;
     cJSON *jaz = cJSON_GetObjectItem(root, "az");
+    cJSON *jsrc = cJSON_GetObjectItem(root, "src");
     cJSON *jfx = cJSON_GetObjectItem(root, "fx");
     cJSON *jfy = cJSON_GetObjectItem(root, "fy");
     cJSON *jfz = cJSON_GetObjectItem(root, "fz");
     int16_t az = jaz ? (int16_t)jaz->valueint : 0;
+    if (is_mf) az = jsrc ? (int16_t)jsrc->valueint : 0;   // az = indice de fuente
     int16_t fx = jfx ? (int16_t)jfx->valueint : 0;
     int16_t fy = jfy ? (int16_t)jfy->valueint : 0;
     int16_t fz = jfz ? (int16_t)jfz->valueint : 1000;
@@ -645,7 +665,7 @@ static esp_err_t beam_handler(httpd_req_t *req)
 
     // Payload ds_beam_req_t: type(1) + az(2) + fx(2) + fy(2) + fz(2), LE
     uint8_t p[9];
-    p[0] = is_tx ? 1 : 0;
+    p[0] = is_mf ? 2 : (is_tx ? 1 : 0);
     p[1] = az & 0xFF;  p[2] = (az >> 8) & 0xFF;
     p[3] = fx & 0xFF;  p[4] = (fx >> 8) & 0xFF;
     p[5] = fy & 0xFF;  p[6] = (fy >> 8) & 0xFF;
@@ -657,8 +677,9 @@ static esp_err_t beam_handler(httpd_req_t *req)
              "{\"status\":\"%s\",\"type\":\"%s\",\"az\":%d,"
              "\"fx\":%d,\"fy\":%d,\"fz\":%d}",
              ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"),
-             is_tx ? "tx" : "rx", az, fx, fy, fz);
-    printf("[ESP32] POST /beam %s -> %s\n", is_tx ? "tx" : "rx",
+             is_mf ? "mf" : (is_tx ? "tx" : "rx"), az, fx, fy, fz);
+    printf("[ESP32] POST /beam %s -> %s\n",
+           is_mf ? "mf" : (is_tx ? "tx" : "rx"),
            ack == 1 ? "ACK" : "sin ACK");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp, strlen(resp));
@@ -740,7 +761,7 @@ static const char INDEX_HTML[] =
 "<div class=card><h2>Entradas ADC (peak)</h2><div class=meter id=meter></div>"
 "<div id=st>esperando estado...</div></div>"
 "<script>"
-"const N=14,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither'];"
+"const N=16,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither','MULTIFOCUS 4t','MULTIFOCUS 8in'];"
 "const md=document.getElementById('modes');"
 "for(let i=0;i<N;i++){const b=document.createElement('button');b.textContent=names[i];b.id='m'+i;"
 "b.onclick=()=>fetch('/mode',{method:'POST',body:JSON.stringify({mode:i})}).then(poll);md.appendChild(b);}"
@@ -820,20 +841,46 @@ static httpd_handle_t start_webserver(void)
 
 // ============== WiFi ==============
 
+// Aplica WIFI_NETWORKS[idx] como config activa y dispara la conexion.
+// esp_wifi_set_config puede llamarse con el driver ya arrancado (STA_START
+// ya disparado); ESP-IDF lo soporta y el connect subsiguiente usa la config
+// nueva.
+static void wifi_apply_network(uint8_t idx)
+{
+    wifi_config_t wifi_cfg = {0};
+    strncpy((char *)wifi_cfg.sta.ssid, WIFI_NETWORKS[idx].ssid, sizeof(wifi_cfg.sta.ssid) - 1);
+    strncpy((char *)wifi_cfg.sta.password, WIFI_NETWORKS[idx].pass, sizeof(wifi_cfg.sta.password) - 1);
+    wifi_cfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
+    printf("[ESP32] Conectando a WiFi '%s' (%u/%u)...\n",
+           WIFI_NETWORKS[idx].ssid, (unsigned)(idx + 1), (unsigned)NUM_WIFI_NETWORKS);
+    esp_wifi_connect();
+}
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
+        wifi_apply_network(wifi_net_idx);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         if (retry_num < MAX_RETRY) {
-            esp_wifi_connect();
             retry_num++;
-            printf("[ESP32] Reintentando WiFi (%d/%d)...\n", retry_num, MAX_RETRY);
+            printf("[ESP32] Reintentando '%s' (%d/%d)...\n",
+                   WIFI_NETWORKS[wifi_net_idx].ssid, retry_num, MAX_RETRY);
+            esp_wifi_connect();
         } else {
-            led_wifi_state = 2;  // blink lento: fallo
-            xEventGroupSetBits(wifi_event_group, WIFI_FAIL_BIT);
-            printf("[ESP32] ERROR: WiFi fallido tras %d intentos\n", MAX_RETRY);
+            // Agotados los reintentos de esta red: pasar a la siguiente y
+            // seguir ciclando indefinidamente — nunca se abandona del todo
+            // (el instrumento puede estar en cualquiera de las casas).
+            retry_num = 0;
+            wifi_net_idx = (wifi_net_idx + 1) % NUM_WIFI_NETWORKS;
+            if (wifi_net_idx == 0) {
+                // Dimos una vuelta completa sin conectar: avisar (LED lento)
+                // pero seguir intentando en background.
+                led_wifi_state = 2;
+                xEventGroupSetBits(wifi_event_group, WIFI_FAIL_BIT);
+            }
+            wifi_apply_network(wifi_net_idx);
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
@@ -864,24 +911,26 @@ static void wifi_init(void)
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL, &inst_ip));
 
-    wifi_config_t wifi_cfg = {
-        .sta = {
-            .ssid     = WIFI_SSID,
-            .password = WIFI_PASS,
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-        },
-    };
+    // La config inicial la aplica wifi_apply_network() en el evento STA_START
+    // (dispara con la red WIFI_NETWORKS[0]); esp_wifi_start() solo arranca el
+    // driver.
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    printf("[ESP32] Conectando a WiFi '%s'...\n", WIFI_SSID);
+    printf("[ESP32] %u red(es) WiFi conocida(s), ciclando hasta conectar...\n",
+           (unsigned)NUM_WIFI_NETWORKS);
 
+    // Espera acotada: NUM_WIFI_NETWORKS x MAX_RETRY intentos, ~2-3s cada uno.
+    // Si ninguna red respondio en ese tiempo, seguimos booteando (HTTP server
+    // igual arranca) — el ciclo de reconexion sigue solo, en background,
+    // via wifi_event_handler, sin bloquear mas el arranque.
+    TickType_t boot_wait = pdMS_TO_TICKS(4000UL * NUM_WIFI_NETWORKS * MAX_RETRY);
     EventBits_t bits = xEventGroupWaitBits(wifi_event_group,
-        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, boot_wait);
 
     if (!(bits & WIFI_CONNECTED_BIT))
-        printf("[ESP32] ADVERTENCIA: sin WiFi — HTTP server no accesible\n");
+        printf("[ESP32] ADVERTENCIA: sin WiFi todavia — HTTP server no accesible "
+               "(reintentando en background)\n");
 }
 
 // ============== Main ==============
