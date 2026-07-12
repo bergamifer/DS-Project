@@ -139,8 +139,20 @@ static void uart_push_esp_ip(void);   // definida junto a uart_send_frame()
 static EventGroupHandle_t wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
+// Redes conocidas (secrets.h) — el instrumento viaja entre casas, asi que se
+// prueban en orden y se cicla entre ellas indefinidamente en background: al
+// agotar los reintentos de una red se pasa a la siguiente, sin descartar
+// ninguna (agregar una red nueva nunca pierde la anterior).
+typedef struct { const char *ssid; const char *pass; } wifi_net_t;
+static const wifi_net_t WIFI_NETWORKS[] = {
+    { WIFI_SSID,   WIFI_PASS },
+    { WIFI_SSID_2, WIFI_PASS_2 },
+};
+#define NUM_WIFI_NETWORKS (sizeof(WIFI_NETWORKS) / sizeof(WIFI_NETWORKS[0]))
+static uint8_t wifi_net_idx = 0;
+
 static int retry_num = 0;
-#define MAX_RETRY 10
+#define MAX_RETRY 5   // por red, antes de pasar a la siguiente (ciclo infinito)
 
 static httpd_handle_t server = NULL;
 
@@ -820,20 +832,46 @@ static httpd_handle_t start_webserver(void)
 
 // ============== WiFi ==============
 
+// Aplica WIFI_NETWORKS[idx] como config activa y dispara la conexion.
+// esp_wifi_set_config puede llamarse con el driver ya arrancado (STA_START
+// ya disparado); ESP-IDF lo soporta y el connect subsiguiente usa la config
+// nueva.
+static void wifi_apply_network(uint8_t idx)
+{
+    wifi_config_t wifi_cfg = {0};
+    strncpy((char *)wifi_cfg.sta.ssid, WIFI_NETWORKS[idx].ssid, sizeof(wifi_cfg.sta.ssid) - 1);
+    strncpy((char *)wifi_cfg.sta.password, WIFI_NETWORKS[idx].pass, sizeof(wifi_cfg.sta.password) - 1);
+    wifi_cfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
+    printf("[ESP32] Conectando a WiFi '%s' (%u/%u)...\n",
+           WIFI_NETWORKS[idx].ssid, (unsigned)(idx + 1), (unsigned)NUM_WIFI_NETWORKS);
+    esp_wifi_connect();
+}
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
+        wifi_apply_network(wifi_net_idx);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         if (retry_num < MAX_RETRY) {
-            esp_wifi_connect();
             retry_num++;
-            printf("[ESP32] Reintentando WiFi (%d/%d)...\n", retry_num, MAX_RETRY);
+            printf("[ESP32] Reintentando '%s' (%d/%d)...\n",
+                   WIFI_NETWORKS[wifi_net_idx].ssid, retry_num, MAX_RETRY);
+            esp_wifi_connect();
         } else {
-            led_wifi_state = 2;  // blink lento: fallo
-            xEventGroupSetBits(wifi_event_group, WIFI_FAIL_BIT);
-            printf("[ESP32] ERROR: WiFi fallido tras %d intentos\n", MAX_RETRY);
+            // Agotados los reintentos de esta red: pasar a la siguiente y
+            // seguir ciclando indefinidamente — nunca se abandona del todo
+            // (el instrumento puede estar en cualquiera de las casas).
+            retry_num = 0;
+            wifi_net_idx = (wifi_net_idx + 1) % NUM_WIFI_NETWORKS;
+            if (wifi_net_idx == 0) {
+                // Dimos una vuelta completa sin conectar: avisar (LED lento)
+                // pero seguir intentando en background.
+                led_wifi_state = 2;
+                xEventGroupSetBits(wifi_event_group, WIFI_FAIL_BIT);
+            }
+            wifi_apply_network(wifi_net_idx);
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
@@ -864,24 +902,26 @@ static void wifi_init(void)
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL, &inst_ip));
 
-    wifi_config_t wifi_cfg = {
-        .sta = {
-            .ssid     = WIFI_SSID,
-            .password = WIFI_PASS,
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-        },
-    };
+    // La config inicial la aplica wifi_apply_network() en el evento STA_START
+    // (dispara con la red WIFI_NETWORKS[0]); esp_wifi_start() solo arranca el
+    // driver.
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    printf("[ESP32] Conectando a WiFi '%s'...\n", WIFI_SSID);
+    printf("[ESP32] %u red(es) WiFi conocida(s), ciclando hasta conectar...\n",
+           (unsigned)NUM_WIFI_NETWORKS);
 
+    // Espera acotada: NUM_WIFI_NETWORKS x MAX_RETRY intentos, ~2-3s cada uno.
+    // Si ninguna red respondio en ese tiempo, seguimos booteando (HTTP server
+    // igual arranca) — el ciclo de reconexion sigue solo, en background,
+    // via wifi_event_handler, sin bloquear mas el arranque.
+    TickType_t boot_wait = pdMS_TO_TICKS(4000UL * NUM_WIFI_NETWORKS * MAX_RETRY);
     EventBits_t bits = xEventGroupWaitBits(wifi_event_group,
-        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, boot_wait);
 
     if (!(bits & WIFI_CONNECTED_BIT))
-        printf("[ESP32] ADVERTENCIA: sin WiFi — HTTP server no accesible\n");
+        printf("[ESP32] ADVERTENCIA: sin WiFi todavia — HTTP server no accesible "
+               "(reintentando en background)\n");
 }
 
 // ============== Main ==============
