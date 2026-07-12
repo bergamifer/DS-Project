@@ -205,7 +205,8 @@ typedef struct {
   uint8_t af;                     // 1 = AUTOFOCUS mic-scan mode
   uint8_t tone;                   // 1 = internal tone source feeds beam_line
   uint16_t tone_hz;               // tone frequency (keep ≤2140: d=λ/2 limit)
-  uint8_t mf;                     // 1 = MULTIFOCUS (N fuentes, foco propio c/u)
+  uint8_t mf;                     // 1 = MULTIFOCUS tonos (N fuentes internas)
+  uint8_t mfin;                   // 1 = MULTIFOCUS de ENTRADAS (8 ADC → 8 focos)
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor (+30dB)",          .monitor = 1 },
@@ -247,6 +248,11 @@ static const ui_state_t ui_states[] = {
   // frecuencia domina. Precuela de la intervención de 8 entradas analógicas
   // (mismas tablas mf_delay_q8; solo cambiará la fuente de señal).
   { .name = "MULTIFOCUS 4 tonos @1m",       .mf = 1 },
+  // MULTIFOCUS de entradas — LA INTERVENCIÓN: cada entrada analógica del
+  // AK5538 se proyecta enfocada en su propio punto de la sala (8 señales
+  // reales — voces, instrumentos — en 8 lugares). Mismas tablas de foco que
+  // el modo 14; la fuente es delay_line[src] en vez de tonos.
+  { .name = "MULTIFOCUS 8 entradas @1m",    .mfin = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 static volatile uint8_t ui_state_idx = 0;
@@ -346,6 +352,19 @@ static uint32_t mf_inc_q16[MF_MAX_SRC];                      // paso de fase/mue
 static uint16_t mf_delay_q8[MF_MAX_SRC][BEAM_NUM_CHANNELS];  // foco por fuente
 static uint32_t mf_phoff_q16[MF_MAX_SRC][BEAM_NUM_CHANNELS]; // delay→fase precalc
 static uint32_t mf_frame = 0;       // avanzado SOLO por el fill de SAI1_A
+
+/* Modo 15: MULTIFOCUS de ENTRADAS — la intervención. Cada entrada analógica
+ * (delay_line[src], capturadas siempre por Process_ADC_Half) se proyecta
+ * enfocada en su punto usando LAS MISMAS tablas mf_delay_q8 del modo 14,
+ * con delay temporal verdadero (interpolación Q8 sobre la línea, igual que
+ * el TX steering sobre beam_line) — vale para señal arbitraria. */
+#define MF_IN_NUM_SRC MF_MAX_SRC    // las 8 entradas del AK5538
+static volatile uint8_t mfocus_in_enabled = 0;
+/* Boost de entrada: las entradas son nivel de línea (bias 1.25V). +12dB
+ * default; si distorsiona, bajar el volumen de la FUENTE (el clamp protege
+ * pero suena mal). Mantener ≤4: 8 fuentes × FS × 2^5 desbordaría el int32
+ * del acumulador. El monitor usa ×32 porque escucha ruido; acá hay señal. */
+static volatile uint8_t mf_in_shift = 2;
 
 /* ===== AUTOFOCUS scan state =====
  * Sequence per speaker: SETTLE (silence, room decay) → ARM (next fill of the
@@ -504,6 +523,7 @@ static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
 static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
                               int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
 static void MFocus_ApplyDefaults(void);
+static void MFocusIn_ApplyDefaults(void);
 static uint8_t Apply_Master_Volume(int8_t db);
 static void UI_ApplyState(uint8_t idx);
 static void UI_ApplyCustomBeam(const ds_beam_req_t *req);
@@ -587,7 +607,8 @@ int main(void)
   beam_config.last_mode = 0;         // monitor
   Beam_InitTxGeometry();
   Cal_Init();                       // AUTOFOCUS chirp reference
-  MFocus_ApplyDefaults();           // MULTIFOCUS: tablas válidas desde el boot
+  MFocusIn_ApplyDefaults();         // MULTIFOCUS: filas 0-7 válidas (modo 15)
+  MFocus_ApplyDefaults();           // filas 0-3 = presets de tonos (modo 14)
   UART_Print("Beamforming initialized (delay lines zeroed, gains=max)\r\n");
 
   // === EEPROM init + load saved config ===
@@ -2304,6 +2325,15 @@ static void MFocus_ApplyDefaults(void) {
     Beam_UpdateMFocus(s, mf_def_freq[s], mf_def_fx[s], -240, 1000);
 }
 
+/** @brief Defaults del modo 15: las 8 entradas repartidas en X, −700..+700mm
+ *         paso 200, plano de la fila 1, a 1m. (La frecuencia por fila queda
+ *         seteada pero el modo de entradas no la usa.) */
+static void MFocusIn_ApplyDefaults(void) {
+  for (uint8_t s = 0; s < MF_IN_NUM_SRC; s++)
+    Beam_UpdateMFocus(s, mf_def_freq[s % MF_NUM_SRC],
+                      (int16_t)(-700 + 200 * (int16_t)s), -240, 1000);
+}
+
 /* Master volume via PCM1690 attenuation. ATDAx = 255 + dB×2 (0.5 dB/step);
  * db≤−64 → mute. Writes the 8 channels of all 4 DACs (unpopulated ones just
  * NAK the I2C, harmless). Runs from the main loop only — never the ISR.
@@ -2335,9 +2365,9 @@ static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
      * cambio de tamaño de trama). Validar ANTES de tocar flags — un src
      * inválido no debe matar el modo en curso. */
     uint8_t src = (uint8_t)req->az_deg;
-    if (src >= MF_NUM_SRC) {
+    if (src >= MF_MAX_SRC) {
       sprintf(uart_buf, "MFOCUS: src %u fuera de rango (0-%u)\r\n",
-              (unsigned)src, (unsigned)(MF_NUM_SRC - 1));
+              (unsigned)src, (unsigned)(MF_MAX_SRC - 1));
       UART_Print(uart_buf);
       return;
     }
@@ -2349,7 +2379,9 @@ static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
     beam_enabled = 0;
     tx_steer_enabled = 0;
     tone_enabled = 0;
-    if (!mfocus_enabled) { mfocus_enabled = 1; mf_frame = 0; }
+    /* Si ya hay un modo MULTIFOCUS activo (tonos O entradas) se respeta;
+     * si no, entra al de tonos. */
+    if (!mfocus_enabled && !mfocus_in_enabled) { mfocus_enabled = 1; mf_frame = 0; }
     /* Mantiene la frecuencia actual de la fuente; solo re-apunta su foco. */
     Beam_UpdateMFocus(src, mf_freq_hz[src], req->fx_mm, req->fy_mm, req->fz_mm);
     return;
@@ -2360,6 +2392,7 @@ static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
   cal_state = CAL_IDLE;
   cal_capturing = 0;
   mfocus_enabled = 0;
+  mfocus_in_enabled = 0;
   if (!beam_enabled) memset(beam_line, 0, sizeof(beam_line));
   beam_enabled = 1;
   if (req->type == 1) {
@@ -2547,6 +2580,8 @@ static void UI_ApplyState(uint8_t idx) {
     MFocus_ApplyDefaults();
     mf_frame = 0;
   }
+  mfocus_in_enabled = st->mfin;
+  if (st->mfin) MFocusIn_ApplyDefaults();
   /* Tone source is -6dBFS: the +30dB boost that lifts the weak ADC beam
    * would clip ×32 into the PAMs (plan §3.1). */
   beam_out_shift = st->tone ? 0 : 5;
@@ -2772,6 +2807,41 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
       }
     }
     if (ch_offset == 0) mf_frame += samples;
+    return;
+  }
+
+  /* MULTIFOCUS de ENTRADAS (la intervención): cada entrada analógica se
+   * proyecta con SU tabla de delays focales — 8 señales, 8 puntos de la
+   * sala. Delay temporal verdadero con interpolación Q8 sobre delay_line
+   * (mismo esquema que el TX steering sobre beam_line), así vale para
+   * señal arbitraria (voz, música), no solo senos. */
+  if (mfocus_in_enabled) {
+    uint32_t wp = delay_write_pos;
+    uint8_t unmuted = !beam_config.mute_global;
+    for (uint32_t i = 0; i < samples; i++) {
+      for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+        uint32_t gch = ch_offset + ch;
+        int32_t acc = 0;
+        if (unmuted && !((beam_config.mutes >> gch) & 1)) {
+          for (uint32_t src = 0; src < MF_IN_NUM_SRC; src++) {
+            uint32_t dq = mf_delay_q8[src][gch];
+            uint32_t base = wp - (dq >> 8) - samples + i;
+            int32_t fr = (int32_t)(dq & 0xFF);
+            int32_t s0 = delay_line[src][base & DELAY_LINE_MASK] >> 8;
+            int32_t s1 = delay_line[src][(base - 1) & DELAY_LINE_MASK] >> 8;
+            // (s1−s0) 25 bits × fr 8 bits → intermedio de 64 bits
+            acc += (s0 + (int32_t)(((int64_t)(s1 - s0) * fr) >> 8)) << mf_in_shift;
+          }
+          // Clamp ANTES del gain: 8 fuentes × boost pueden exceder ±FS,
+          // y FS×255 es el máximo que el multiply soporta en int32.
+          if (acc > 8388607) acc = 8388607;
+          else if (acc < -8388608) acc = -8388608;
+          acc = (acc * (int32_t)beam_config.gains[gch]) >> 8;
+          if (speaker_sign[gch] < 0) acc = -acc;
+        }
+        buffer[i * AUDIO_CHANNELS + ch] = acc;
+      }
+    }
     return;
   }
 
