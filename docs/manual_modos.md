@@ -187,6 +187,9 @@ mismas posiciones/cadencia que el RX beam, así el path de TX steering corre
 
 ## Modo 14 — MULTIFOCUS 4 tonos (mapa de focos multiplexado en frecuencia)
 
+> ✅ **VALIDADO EN HARDWARE (2026-07-12)**: caminando de izquierda a derecha los
+> tonos aparecen de grave a agudo, coincidiendo con la geometría configurada.
+
 **Precuela de la intervención de 8 entradas analógicas**: N fuentes, cada una
 con su **propia tabla de delays focales** (`mf_delay_q8[src][ch]`) — la misma
 infraestructura que después va a situar 8 señales reales (poesías, canales de
