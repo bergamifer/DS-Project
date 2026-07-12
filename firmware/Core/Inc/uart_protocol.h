@@ -61,7 +61,9 @@ _Static_assert(sizeof(ds_config_t) == CFG_PAYLOAD_SIZE,
 /**
  * @brief Custom beam request (CMD_SET_BEAM) — steer outside the K2 presets.
  * type 0 = RX beam steering (az_deg); type 1 = TX focal point (fx/fy/fz mm
- * relative to the speaker-array center, listener frame).
+ * relative to the speaker-array center, listener frame);
+ * type 2 = MULTIFOCUS: az_deg lleva el ÍNDICE DE FUENTE (0..MF_NUM_SRC-1) y
+ * fx/fy/fz el foco de esa fuente (reuso del struct, sin cambio de tamaño).
  */
 typedef struct __attribute__((packed)) {
     uint8_t type;

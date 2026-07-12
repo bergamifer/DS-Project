@@ -205,6 +205,7 @@ typedef struct {
   uint8_t af;                     // 1 = AUTOFOCUS mic-scan mode
   uint8_t tone;                   // 1 = internal tone source feeds beam_line
   uint16_t tone_hz;               // tone frequency (keep ≤2140: d=λ/2 limit)
+  uint8_t mf;                     // 1 = MULTIFOCUS (N fuentes, foco propio c/u)
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor (+30dB)",          .monitor = 1 },
@@ -241,6 +242,11 @@ static const ui_state_t ui_states[] = {
     .tone_hz = 2000, .fx_mm = 0, .fy_mm = -240, .fz_mm = 1000 },
   { .name = "TX tone 1k focus @1m",         .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 1000, .fx_mm = 0, .fy_mm = -240, .fz_mm = 1000 },
+  // MULTIFOCUS: 4 tonos internos, cada uno enfocado en su propio punto —
+  // caminando la sala, un analizador espectral "lee" la posición por cuál
+  // frecuencia domina. Precuela de la intervención de 8 entradas analógicas
+  // (mismas tablas mf_delay_q8; solo cambiará la fuente de señal).
+  { .name = "MULTIFOCUS 4 tonos @1m",       .mf = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 static volatile uint8_t ui_state_idx = 0;
@@ -311,6 +317,35 @@ static float spk_y_mm[BEAM_NUM_CHANNELS];
 static float spk_center_x_mm = 0, spk_center_y_mm = 0;
 // Last TX focal point — reported in CMD_STATUS telemetry
 static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
+
+/* ===== MULTIFOCUS (modo 14) — N fuentes internas, cada una con su foco =====
+ * Precuela de la intervención de 8 entradas analógicas: la infraestructura
+ * (tabla de delays POR FUENTE + Beam_UpdateMFocus) es la que después va a
+ * alimentar el modo 8-in — ahí la fuente será delay_line[src] (los ADC) en
+ * vez de tonos, con las MISMAS tablas de foco.
+ * Para senos, un retardo de tiempo d equivale EXACTO a un offset de fase
+ * d×inc — se precalcula en mf_phoff_q16 al setear foco/frecuencia, así el
+ * fill no multiplica en 64 bits por muestra. La fase de cada ventana se
+ * deriva de mf_frame (avanzado solo por el fill de SAI1_A, como el walker);
+ * los otros bancos lo ven +480, pero con frecuencias múltiplo de 100 Hz eso
+ * es un número entero de períodos (error residual <0.05° por truncado de
+ * inc) → los 4 bancos quedan en fase también en DS11. */
+#define MF_MAX_SRC   8              // techo: las 8 entradas de la intervención
+#define MF_NUM_SRC   4              // fuentes activas hoy (4 tonos)
+#define MF_SRC_SHIFT 2              // c/fuente a -6dBFS/4 → suma ≤ -6dBFS
+#define TONE_PERIOD_Q16 (48u << 16)
+static volatile uint8_t mfocus_enabled = 0;
+// Defaults: frecuencias múltiplo de 100 (fase exacta entre bancos), sin
+// relaciones armónicas entre sí, todas < 2140 Hz (límite d=λ/2). Focos
+// separados 300mm ≥ ancho del spot (~±14cm @2kHz, ~±23cm @1.3kHz).
+static const uint16_t mf_def_freq[MF_NUM_SRC] = { 1300, 1600, 1900, 2100 };
+static const int16_t  mf_def_fx[MF_NUM_SRC]   = { -450, -150,  150,  450 };
+static uint16_t mf_freq_hz[MF_MAX_SRC];
+static int16_t  mf_fx_mm[MF_MAX_SRC], mf_fy_mm[MF_MAX_SRC], mf_fz_mm[MF_MAX_SRC];
+static uint32_t mf_inc_q16[MF_MAX_SRC];                      // paso de fase/muestra
+static uint16_t mf_delay_q8[MF_MAX_SRC][BEAM_NUM_CHANNELS];  // foco por fuente
+static uint32_t mf_phoff_q16[MF_MAX_SRC][BEAM_NUM_CHANNELS]; // delay→fase precalc
+static uint32_t mf_frame = 0;       // avanzado SOLO por el fill de SAI1_A
 
 /* ===== AUTOFOCUS scan state =====
  * Sequence per speaker: SETTLE (silence, room decay) → ARM (next fill of the
@@ -466,6 +501,9 @@ static void Print_DMA_Config(void);
 static void Beam_UpdateDelays(int16_t az_deg);
 static void Beam_InitTxGeometry(void);
 static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
+static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
+                              int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
+static void MFocus_ApplyDefaults(void);
 static uint8_t Apply_Master_Volume(int8_t db);
 static void UI_ApplyState(uint8_t idx);
 static void UI_ApplyCustomBeam(const ds_beam_req_t *req);
@@ -549,6 +587,7 @@ int main(void)
   beam_config.last_mode = 0;         // monitor
   Beam_InitTxGeometry();
   Cal_Init();                       // AUTOFOCUS chirp reference
+  MFocus_ApplyDefaults();           // MULTIFOCUS: tablas válidas desde el boot
   UART_Print("Beamforming initialized (delay lines zeroed, gains=max)\r\n");
 
   // === EEPROM init + load saved config ===
@@ -2217,6 +2256,54 @@ static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
   }
 }
 
+/**
+ * @brief Recompute one MULTIFOCUS source: focal delays + phase offsets.
+ * @param src   Source index (0..MF_NUM_SRC-1).
+ * @param f_hz  Tone frequency (múltiplo de 100 Hz para fase exacta entre bancos).
+ * @param fx_mm,fy_mm,fz_mm  Focus relative to array center (listener frame).
+ *
+ * Misma geometría que Beam_UpdateTxFocus pero escribiendo la fila src de
+ * mf_delay_q8 — esta tabla es la que la intervención de 8 entradas va a
+ * reusar tal cual. Además precalcula el offset de fase equivalente
+ * (delay_q8 × inc >> 8, mod período) para que el fill no haga math de 64
+ * bits por muestra. Solo en cambios de estado (float OK).
+ */
+static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
+                              int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
+  mf_freq_hz[src] = f_hz;
+  mf_fx_mm[src] = fx_mm;
+  mf_fy_mm[src] = fy_mm;
+  mf_fz_mm[src] = fz_mm;
+  mf_inc_q16[src] = ((uint32_t)f_hz << 16) / 1000u;
+  float px = spk_center_x_mm + (float)fx_mm;
+  float py = spk_center_y_mm + (float)fy_mm;
+  float pz = (float)fz_mm;
+  float d[BEAM_NUM_CHANNELS];
+  float dmax = 0;
+  for (uint32_t ch = 0; ch < BEAM_NUM_CHANNELS; ch++) {
+    float dx = px - spk_x_mm[ch], dy = py - spk_y_mm[ch];
+    d[ch] = sqrtf(dx * dx + dy * dy + pz * pz);
+    if (d[ch] > dmax) dmax = d[ch];
+  }
+  for (uint32_t ch = 0; ch < BEAM_NUM_CHANNELS; ch++) {
+    int32_t dq = (int32_t)((dmax - d[ch]) * (float)AUDIO_SAMPLE_RATE * 256.0f
+                           / SPEED_OF_SOUND_MM_S + 0.5f);
+    if (dq > (TX_MAX_DELAY_SAMPLES << 8)) dq = TX_MAX_DELAY_SAMPLES << 8;
+    mf_delay_q8[src][ch] = (uint16_t)dq;
+    mf_phoff_q16[src][ch] = (uint32_t)((((uint64_t)dq * mf_inc_q16[src]) >> 8)
+                                       % TONE_PERIOD_Q16);
+  }
+  sprintf(uart_buf, "MFOCUS src%u: %uHz @ (%d,%d,%d)mm\r\n", (unsigned)src,
+          (unsigned)f_hz, (int)fx_mm, (int)fy_mm, (int)fz_mm);
+  UART_Print(uart_buf);
+}
+
+/** @brief Reset the MULTIFOCUS sources to the 4 default tones/foci. */
+static void MFocus_ApplyDefaults(void) {
+  for (uint8_t s = 0; s < MF_NUM_SRC; s++)
+    Beam_UpdateMFocus(s, mf_def_freq[s], mf_def_fx[s], -240, 1000);
+}
+
 /* Master volume via PCM1690 attenuation. ATDAx = 255 + dB×2 (0.5 dB/step);
  * db≤−64 → mute. Writes the 8 channels of all 4 DACs (unpopulated ones just
  * NAK the I2C, harmless). Runs from the main loop only — never the ISR.
@@ -2243,11 +2330,36 @@ static uint8_t Apply_Master_Volume(int8_t db) {
  * K2 press resumes cycling from the last preset (documented behavior).
  */
 static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
+  if (req->type == 2) {
+    /* MULTIFOCUS: az_deg lleva el índice de fuente (reuso del struct, sin
+     * cambio de tamaño de trama). Validar ANTES de tocar flags — un src
+     * inválido no debe matar el modo en curso. */
+    uint8_t src = (uint8_t)req->az_deg;
+    if (src >= MF_NUM_SRC) {
+      sprintf(uart_buf, "MFOCUS: src %u fuera de rango (0-%u)\r\n",
+              (unsigned)src, (unsigned)(MF_NUM_SRC - 1));
+      UART_Print(uart_buf);
+      return;
+    }
+    walker_enabled = 0;
+    adc_monitor_enabled = 0;
+    autofocus_enabled = 0;
+    cal_state = CAL_IDLE;
+    cal_capturing = 0;
+    beam_enabled = 0;
+    tx_steer_enabled = 0;
+    tone_enabled = 0;
+    if (!mfocus_enabled) { mfocus_enabled = 1; mf_frame = 0; }
+    /* Mantiene la frecuencia actual de la fuente; solo re-apunta su foco. */
+    Beam_UpdateMFocus(src, mf_freq_hz[src], req->fx_mm, req->fy_mm, req->fz_mm);
+    return;
+  }
   walker_enabled = 0;
   adc_monitor_enabled = 0;
   autofocus_enabled = 0;
   cal_state = CAL_IDLE;
   cal_capturing = 0;
+  mfocus_enabled = 0;
   if (!beam_enabled) memset(beam_line, 0, sizeof(beam_line));
   beam_enabled = 1;
   if (req->type == 1) {
@@ -2430,6 +2542,11 @@ static void UI_ApplyState(uint8_t idx) {
     tone_dither_pos = 0;
   }
   tone_enabled = st->tone;
+  mfocus_enabled = st->mf;
+  if (st->mf) {                    // preset: siempre re-arranca en los defaults
+    MFocus_ApplyDefaults();
+    mf_frame = 0;
+  }
   /* Tone source is -6dBFS: the +30dB boost that lifts the weak ADC beam
    * would clip ×32 into the PAMs (plan §3.1). */
   beam_out_shift = st->tone ? 0 : 5;
@@ -2613,6 +2730,48 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
 
     // SETTLE / CAPT / CORR: silence everywhere
     for (uint32_t i = 0; i < samples * AUDIO_CHANNELS; i++) buffer[i] = 0;
+    return;
+  }
+
+  /* MULTIFOCUS: suma de N tonos, cada uno con su propia tabla de delays
+   * focales. Para un seno el retardo de tiempo es EXACTAMENTE un offset de
+   * fase (precalculado en mf_phoff_q16), así que el foco es tan verdadero
+   * como el del modo 12/13 pero sin pasar por beam_line. La fase de la
+   * ventana sale de mf_frame — ver nota en la declaración (bancos ≠0 la ven
+   * +480, exacto para f múltiplo de 100 Hz). */
+  if (mfocus_enabled) {
+    uint32_t ph[MF_NUM_SRC];
+    for (uint32_t s = 0; s < MF_NUM_SRC; s++)
+      ph[s] = (uint32_t)(((uint64_t)mf_frame * mf_inc_q16[s]) % TONE_PERIOD_Q16);
+    uint8_t unmuted = !beam_config.mute_global;
+    for (uint32_t i = 0; i < samples; i++) {
+      for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+        uint32_t gch = ch_offset + ch;
+        int32_t acc = 0;
+        if (unmuted && !((beam_config.mutes >> gch) & 1)) {
+          for (uint32_t s = 0; s < MF_NUM_SRC; s++) {
+            int32_t p = (int32_t)ph[s] - (int32_t)mf_phoff_q16[s][gch];
+            if (p < 0) p += (int32_t)TONE_PERIOD_Q16;
+            uint32_t i0 = (uint32_t)p >> 16;               // 0..47
+            int32_t  fr = p & 0xFFFF;
+            int32_t  s0 = sine_table_1khz[i0];
+            int32_t  s1 = sine_table_1khz[(i0 + 1u) % 48u];
+            // lerp: (s1−s0) hasta 2^20 × fr 2^16 → intermedio de 64 bits
+            acc += (s0 + (int32_t)(((int64_t)(s1 - s0) * fr) >> 16)) >> MF_SRC_SHIFT;
+          }
+          acc = (acc * (int32_t)beam_config.gains[gch]) >> 8; // -6dBFS×255 < 2³¹
+          if (speaker_sign[gch] < 0) acc = -acc;
+          if (acc > 8388607) acc = 8388607;
+          else if (acc < -8388608) acc = -8388608;
+        }
+        buffer[i * AUDIO_CHANNELS + ch] = acc;
+      }
+      for (uint32_t s = 0; s < MF_NUM_SRC; s++) {
+        ph[s] += mf_inc_q16[s];
+        if (ph[s] >= TONE_PERIOD_Q16) ph[s] -= TONE_PERIOD_Q16;
+      }
+    }
+    if (ch_offset == 0) mf_frame += samples;
     return;
   }
 

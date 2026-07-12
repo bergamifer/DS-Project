@@ -113,6 +113,7 @@ static const char *MODE_NAMES[] = {
     "AUTOFOCUS scan (mic->c0)",
     "TX tono 2k dither foco @1m",
     "TX tono 1k dither foco @1m",
+    "MULTIFOCUS 4 tonos @1m",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 
@@ -629,6 +630,9 @@ static esp_err_t mode_handler(httpd_req_t *req)
 // POST /beam — steering custom fuera de los presets
 //   {"type":"rx","az":30}                      → beam RX a 30°
 //   {"type":"tx","fx":0,"fy":0,"fz":1000}      → foco TX en (0,0,1000)mm
+//   {"type":"mf","src":2,"fx":300,"fy":-240,"fz":1000}
+//       → MULTIFOCUS: mueve SOLO el foco de la fuente 2 (0-3). En la trama
+//         binaria el indice viaja en el campo az (type=2, sin cambio de layout)
 static esp_err_t beam_handler(httpd_req_t *req)
 {
     char buf[256];
@@ -645,11 +649,14 @@ static esp_err_t beam_handler(httpd_req_t *req)
     }
     cJSON *type = cJSON_GetObjectItem(root, "type");
     bool is_tx = type && type->valuestring && strcmp(type->valuestring, "tx") == 0;
+    bool is_mf = type && type->valuestring && strcmp(type->valuestring, "mf") == 0;
     cJSON *jaz = cJSON_GetObjectItem(root, "az");
+    cJSON *jsrc = cJSON_GetObjectItem(root, "src");
     cJSON *jfx = cJSON_GetObjectItem(root, "fx");
     cJSON *jfy = cJSON_GetObjectItem(root, "fy");
     cJSON *jfz = cJSON_GetObjectItem(root, "fz");
     int16_t az = jaz ? (int16_t)jaz->valueint : 0;
+    if (is_mf) az = jsrc ? (int16_t)jsrc->valueint : 0;   // az = indice de fuente
     int16_t fx = jfx ? (int16_t)jfx->valueint : 0;
     int16_t fy = jfy ? (int16_t)jfy->valueint : 0;
     int16_t fz = jfz ? (int16_t)jfz->valueint : 1000;
@@ -657,7 +664,7 @@ static esp_err_t beam_handler(httpd_req_t *req)
 
     // Payload ds_beam_req_t: type(1) + az(2) + fx(2) + fy(2) + fz(2), LE
     uint8_t p[9];
-    p[0] = is_tx ? 1 : 0;
+    p[0] = is_mf ? 2 : (is_tx ? 1 : 0);
     p[1] = az & 0xFF;  p[2] = (az >> 8) & 0xFF;
     p[3] = fx & 0xFF;  p[4] = (fx >> 8) & 0xFF;
     p[5] = fy & 0xFF;  p[6] = (fy >> 8) & 0xFF;
@@ -669,8 +676,9 @@ static esp_err_t beam_handler(httpd_req_t *req)
              "{\"status\":\"%s\",\"type\":\"%s\",\"az\":%d,"
              "\"fx\":%d,\"fy\":%d,\"fz\":%d}",
              ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"),
-             is_tx ? "tx" : "rx", az, fx, fy, fz);
-    printf("[ESP32] POST /beam %s -> %s\n", is_tx ? "tx" : "rx",
+             is_mf ? "mf" : (is_tx ? "tx" : "rx"), az, fx, fy, fz);
+    printf("[ESP32] POST /beam %s -> %s\n",
+           is_mf ? "mf" : (is_tx ? "tx" : "rx"),
            ack == 1 ? "ACK" : "sin ACK");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp, strlen(resp));
@@ -752,7 +760,7 @@ static const char INDEX_HTML[] =
 "<div class=card><h2>Entradas ADC (peak)</h2><div class=meter id=meter></div>"
 "<div id=st>esperando estado...</div></div>"
 "<script>"
-"const N=14,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither'];"
+"const N=15,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither','MULTIFOCUS 4t'];"
 "const md=document.getElementById('modes');"
 "for(let i=0;i<N;i++){const b=document.createElement('button');b.textContent=names[i];b.id='m'+i;"
 "b.onclick=()=>fetch('/mode',{method:'POST',body:JSON.stringify({mode:i})}).then(poll);md.appendChild(b);}"
