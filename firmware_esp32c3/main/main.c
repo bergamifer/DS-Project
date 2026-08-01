@@ -1,14 +1,14 @@
-/* ESP32-C3-MINI-1 — DS9 Beamforming Bridge
+/* ESP32-C3-MINI-1 — DS11 Beamforming Bridge
  *
  * Canal de monitoreo unificado via USB Serial/JTAG:
  *   [ESP32] mensajes propios del ESP32
  *   [STM32] debug output del STM32H743 (forwardeado desde UART1 RX)
  *
- * Hardware DS9:
+ * Hardware DS11:
  *   UART1 TX → GPIO 0 → PA1 → STM32 UART4 RX   tramas binarias
  *   UART1 RX ← GPIO 1 ← PA0 ← STM32 UART4 TX   texto debug ASCII
  *
- *   NOTA DS9 PCB: las trazas GPIO0/GPIO1 van a PA1/PA0 respectivamente
+ *   NOTA PCB (DS9/DS10/DS11, sin cambios): las trazas GPIO0/GPIO1 van a PA1/PA0 respectivamente
  *   (cruzadas respecto al numero de pin). GPIO0→PA1 y GPIO1→PA0.
  *
  * USB Serial/JTAG (GPIO 18/19) → PC: terminal de monitoreo
@@ -32,7 +32,7 @@
 
 // ============== Configuracion hardware ==============
 
-#define BLINK_GPIO       GPIO_NUM_10   // LED en GPIO10 (DS9 board)
+#define BLINK_GPIO       GPIO_NUM_10   // LED en GPIO10
 #define BLINK_PERIOD_MS  500           // 500ms ON / 500ms OFF = 1Hz
 
 // WiFi credentials live in secrets.h (gitignored). Copy secrets.h.example to
@@ -40,7 +40,7 @@
 #include "secrets.h"
 #define DEVICE_ID        "DS_01"
 
-// UART0: link con STM32. DS9 PCB: GPIO0→PA1(STM32 RX), GPIO1→PA0(STM32 TX)
+// UART0: link con STM32. PCB: GPIO0→PA1(STM32 RX), GPIO1→PA0(STM32 TX)
 #define STM32_UART_NUM   UART_NUM_0
 #define STM32_UART_TX    GPIO_NUM_0   // ESP32 TX → GPIO0 → PA1 → STM32 UART4 RX
 #define STM32_UART_RX    GPIO_NUM_1   // ESP32 RX ← GPIO1 ← PA0 ← STM32 UART4 TX
@@ -948,7 +948,7 @@ void app_main(void)
 
     printf("\n");
     printf("[ESP32] ============================================\n");
-    printf("[ESP32]  ESP32-C3-MINI-1 — DS9 Beamforming Bridge  \n");
+    printf("[ESP32]  ESP32-C3-MINI-1 — DS11 Beamforming Bridge  \n");
     printf("[ESP32] ============================================\n");
     printf("[ESP32] UART1 RX=GPIO%d ← STM32 PA1 | TX=GPIO%d → STM32 PA0\n",
            STM32_UART_RX, STM32_UART_TX);

@@ -81,9 +81,11 @@
 
 // ===== Channel walker (sequential per-channel test tone) =====
 #define WALKER_SECONDS_PER_CH 1
-// Only U2/DAC0 (ch0-7) is populated on this DS10 — walk 8 channels.
-// Set to 32 on DS11 to validate the full speaker map + JSPK wiring.
-#define WALKER_NUM_CH        8
+// DS11: los 4 PCM1690 poblados → 32 canales. El walker recorre el array
+// completo (32 s por vuelta) y valida el mapa canal→parlante + el cableado
+// JSPK, incluida la doble inversión deliberada de los canales impares
+// (ver docs/ds11_upgrades.md: al JST llega la polaridad correcta).
+#define WALKER_NUM_CH        32
 
 // ===== AUTOFOCUS: measured focal calibration with a microphone =====
 // Place a mic AT the desired focal point, feed it into ADC input 1 (ch0).
@@ -100,6 +102,8 @@
 #define CAL_MAX_LAG       (CAL_CAPTURE_LEN - CAL_CHIRP_LEN)
 #define CAL_SETTLE_HALVES 10                      // 100ms of silence between speakers
 #define CAL_CORR_CHUNK    128                     // lags per main-loop pass (~0.5ms)
+// DS11: 32 parlantes ≈ 8 s de scan (~250 ms por parlante: settle + captura +
+// correlación chunked). El mic no se mueve durante todo el barrido.
 #define CAL_NUM_CH        WALKER_NUM_CH           // scan the populated channels
 /* USER CODE END PD */
 
@@ -185,8 +189,8 @@ static uint32_t test_tone_phase = 0;
 
 /* ADC monitor mode: route the live digitized ADC straight to the DACs so you
  * can HEAR what the AK5538 is capturing. Each DAC channel plays its matching
- * ADC channel (ch0→ch0 …). Only DAC0/U2 (ch0-7) is populated on this board, so
- * you hear ADC ch0-7 on U2. The ADC signal is low-level (hum ~-55dBFS, noise
+ * ADC channel (ch0→ch0 …), repitiendo las 8 entradas en cada fila de 8
+ * parlantes (DS11: 4 filas). The ADC signal is low-level (hum ~-55dBFS, noise
  * floor ~-95dBFS), so it is boosted by (1<<adc_monitor_shift) before the DAC,
  * then clamped to 24-bit FS. Takes priority over test tone and beamform. */
 static volatile uint8_t adc_monitor_enabled = 1;   /* 1 = live ADC→DAC monitor */
@@ -234,15 +238,15 @@ static const ui_state_t ui_states[] = {
   { .name = "AUTOFOCUS scan (mic->ADC c0)",  .af = 1 },
   // Internal tone → beam_line → the TX steering path runs UNCHANGED (Q8
   // fractional delays, gains, signs): directionality validation with no mic
-  // on the board (docs/ds10_tone_beam_plan.md). fy=-240 puts the focus in
-  // the plane of row 1 — the only populated row; a linear array cannot
-  // discriminate Y anyway. 2kHz spot @1m: ±14cm; 1kHz: ±27cm (ratio ~2 is
-  // the self-validating test). APPEND ONLY: the ESP32/web/app mirror these
-  // indices.
+  // on the board (docs/ds10_tone_beam_plan.md). DS11: las 4 filas pobladas →
+  // fy=0 (centro del array); en DS10 iba a -240 para apuntar al plano de la
+  // única fila poblada. Ahora la apertura vertical (480mm) también enfoca.
+  // 2kHz spot @1m: ±14cm; 1kHz: ±27cm (ratio ~2 is the self-validating
+  // test). APPEND ONLY: the ESP32/web/app mirror these indices.
   { .name = "TX tone 2k focus @1m",         .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 2000, .fx_mm = 0, .fy_mm = -240, .fz_mm = 1000 },
+    .tone_hz = 2000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000 },
   { .name = "TX tone 1k focus @1m",         .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 1000, .fx_mm = 0, .fy_mm = -240, .fz_mm = 1000 },
+    .tone_hz = 1000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000 },
   // MULTIFOCUS: 4 tonos internos, cada uno enfocado en su propio punto —
   // caminando la sala, un analizador espectral "lee" la posición por cuál
   // frecuencia domina. Precuela de la intervención de 8 entradas analógicas
@@ -580,7 +584,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // Startup message
-  UART_Print("\r\n=== DS10 Beamforming Audio ===\r\n");
+  UART_Print("\r\n=== DS11 Beamforming Audio (32ch) ===\r\n");
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("PLL3: 24.576MHz MCLK (512xfS) — MckOverSampling=ENABLE\r\n");
   UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");
@@ -2322,16 +2326,16 @@ static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
 /** @brief Reset the MULTIFOCUS sources to the 4 default tones/foci. */
 static void MFocus_ApplyDefaults(void) {
   for (uint8_t s = 0; s < MF_NUM_SRC; s++)
-    Beam_UpdateMFocus(s, mf_def_freq[s], mf_def_fx[s], -240, 1000);
+    Beam_UpdateMFocus(s, mf_def_freq[s], mf_def_fx[s], 0, 1000);
 }
 
 /** @brief Defaults del modo 15: las 8 entradas repartidas en X, −700..+700mm
- *         paso 200, plano de la fila 1, a 1m. (La frecuencia por fila queda
- *         seteada pero el modo de entradas no la usa.) */
+ *         paso 200, a la altura del centro del array (DS11: 4 filas), a 1m.
+ *         (La frecuencia queda seteada pero el modo de entradas no la usa.) */
 static void MFocusIn_ApplyDefaults(void) {
   for (uint8_t s = 0; s < MF_IN_NUM_SRC; s++)
     Beam_UpdateMFocus(s, mf_def_freq[s % MF_NUM_SRC],
-                      (int16_t)(-700 + 200 * (int16_t)s), -240, 1000);
+                      (int16_t)(-700 + 200 * (int16_t)s), 0, 1000);
 }
 
 /* Master volume via PCM1690 attenuation. ATDAx = 255 + dB×2 (0.5 dB/step);
@@ -2818,15 +2822,27 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
   if (mfocus_in_enabled) {
     uint32_t wp = delay_write_pos;
     uint8_t unmuted = !beam_config.mute_global;
+    /* DS11: 8 fuentes × 32 salidas es el fill más caro del firmware. El
+     * delay entero y su fracción son constantes en toda la ventana, así que
+     * se calculan una vez por fill (64 entradas) en vez de 8 veces por
+     * muestra — saca las lecturas de tabla del lazo interno. */
+    uint32_t d_int[AUDIO_CHANNELS][MF_IN_NUM_SRC];
+    int32_t  d_fr[AUDIO_CHANNELS][MF_IN_NUM_SRC];
+    for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+      for (uint32_t src = 0; src < MF_IN_NUM_SRC; src++) {
+        uint32_t dq = mf_delay_q8[src][ch_offset + ch];
+        d_int[ch][src] = dq >> 8;
+        d_fr[ch][src]  = (int32_t)(dq & 0xFF);
+      }
+    }
     for (uint32_t i = 0; i < samples; i++) {
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
         uint32_t gch = ch_offset + ch;
         int32_t acc = 0;
         if (unmuted && !((beam_config.mutes >> gch) & 1)) {
           for (uint32_t src = 0; src < MF_IN_NUM_SRC; src++) {
-            uint32_t dq = mf_delay_q8[src][gch];
-            uint32_t base = wp - (dq >> 8) - samples + i;
-            int32_t fr = (int32_t)(dq & 0xFF);
+            uint32_t base = wp - d_int[ch][src] - samples + i;
+            int32_t fr = d_fr[ch][src];
             int32_t s0 = delay_line[src][base & DELAY_LINE_MASK] >> 8;
             int32_t s1 = delay_line[src][(base - 1) & DELAY_LINE_MASK] >> 8;
             // (s1−s0) 25 bits × fr 8 bits → intermedio de 64 bits
@@ -2908,8 +2924,10 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
     for (uint32_t i = 0; i < samples; i++) {
       uint32_t read_pos = (wp - samples + i) & DELAY_LINE_MASK;
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
-        uint32_t src = ch_offset + ch;
-        if (src > 7) src = 0;                       // only ADC ch0-7 exist
+        // DS11: 8 entradas ADC → 32 salidas. Cada banco de 8 parlantes
+        // (= una fila) espeja las 8 entradas, así se escucha la entrada N
+        // en la columna N de las 4 filas (antes ch8-31 repetían la 0).
+        uint32_t src = (ch_offset + ch) & 7u;
         int32_t s = delay_line[src][read_pos] >> 8; // 32-bit ADC → 24-bit
         s <<= adc_monitor_shift;                    // gain boost
         if (s > 8388607) s = 8388607;               // clamp to +FS

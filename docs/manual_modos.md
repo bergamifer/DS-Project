@@ -1,4 +1,4 @@
-# Manual de modos de operación — DS10 (firmware STM32)
+# Manual de modos de operación — DS11 (firmware STM32)
 
 > Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (16 modos, índices 0–15).
 > Última actualización: 2026-07-12.
@@ -28,8 +28,8 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 
 | # | Nombre (UART) | Fuente | Salida | Notas |
 |---|---------------|--------|--------|-------|
-| 0 | `ADC monitor (+30dB)` | ADC ch0–7 en vivo | Cada canal DAC reproduce su canal ADC | Boost ×32, modo por defecto |
-| 1 | `Channel walker (1s/ch)` | Tono 1 kHz interno | Un canal por vez, 1 s cada uno | Valida mapeo canal→parlante |
+| 0 | `ADC monitor (+30dB)` | ADC ch0–7 en vivo | Las 8 entradas repetidas en cada fila | Boost ×32, modo por defecto |
+| 1 | `Channel walker (1s/ch)` | Tono 1 kHz interno | Un canal por vez, 1 s cada uno | **32 canales** = 32 s por vuelta |
 | 2 | `RX beam az=0 (broadside)` | Beam delay-and-sum de los 8 ADC | Beam mono en todos los canales | Boost ×32 |
 | 3 | `RX beam az=+30` | ídem, steering +30° | ídem | |
 | 4 | `RX beam az=-30` | ídem, −30° | ídem | |
@@ -53,8 +53,9 @@ la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
 ## Modo 0 — ADC monitor (+30 dB)
 
 Ruta directa ADC→DAC para *escuchar* lo que captura el AK5538. Cada canal de
-salida reproduce su canal ADC homólogo (DAC ch0 ← ADC ch0, etc.; los canales
-de salida 8–31 repiten ADC ch0). La señal del ADC es débil (hum ~−55 dBFS),
+salida reproduce su canal ADC homólogo (DAC ch0 ← ADC ch0, etc.). En DS11 las
+8 entradas se **repiten en cada fila** de 8 parlantes: la entrada N suena en la
+columna N de las 4 filas. La señal del ADC es débil (hum ~−55 dBFS),
 así que se aplica `adc_monitor_shift = 5` (×32 ≈ +30 dB) y clamp a ±FS 24-bit.
 
 - **Uso**: verificar cadena de entrada, mapear entrada física → slot TDM
@@ -64,9 +65,11 @@ así que se aplica `adc_monitor_shift = 5` (×32 ≈ +30 dB) y clamp a ±FS 24-b
 ## Modo 1 — Channel walker (1 s/canal)
 
 Tono de 1 kHz a −6 dBFS en **un solo canal de salida por vez**, avanzando cada
-`WALKER_SECONDS_PER_CH` (1 s). Recorre `WALKER_NUM_CH` canales — **8 en DS10**
-(solo U2/DAC0 poblado); subir a 32 en DS11 para validar el mapa completo de
-parlantes y el cableado JSPK.
+`WALKER_SECONDS_PER_CH` (1 s). Recorre `WALKER_NUM_CH` canales — **32 en DS11**
+(los 4 PCM1690 poblados): una vuelta completa dura 32 s y valida el mapa
+canal→parlante y el cableado JSPK, incluida la doble inversión deliberada de
+los canales impares (al JST llega la polaridad correcta — ver
+`docs/ds11_upgrades.md`).
 
 - UART7 imprime en cada avance: `WALKER: chN (DACd slotS)`.
 - **Uso**: validar mapeo canal→parlante y, con osciloscopio o mic, la polaridad.
@@ -105,7 +108,7 @@ onda converjan en el punto focal.
   adyacentes de `beam_line`. Tope `TX_MAX_DELAY_SAMPLES = 128`.
 - Geometría de parlantes: 4×8 patrón ladrillo (`Beam_InitTxGeometry`), pitch
   X 80 mm / Y 160 mm, filas 2 y 4 corridas +40 mm. Mapeo ch = fila·8 + col
-  (**placeholder** — validar con el walker en DS11).
+  (validar con el walker sobre la DS11 ya poblada).
 - Marco de referencia: el del OYENTE mirando los conos. +X = derecha del
   oyente, +Y = hacia la fila 4, +Z = hacia el oyente. Coordenadas del foco
   relativas al centro del array.
@@ -133,7 +136,7 @@ mapeo de canales y polaridad invertida de parlantes.
 **Preparación**: colocar un micrófono EN el punto focal deseado, conectado a
 la entrada 1 del ADC (canal c0). Entrar al modo (K2 o `POST /mode`).
 
-**Secuencia por parlante** (los `CAL_NUM_CH` = 8 poblados en DS10):
+**Secuencia por parlante** (los `CAL_NUM_CH` = 32 de la DS11, ~8 s de scan):
 
 1. `SETTLE` — 100 ms de silencio (decaimiento de la sala).
 2. `ARM` → emite un **chirp de 10 ms** (500 Hz → 6 kHz lineal, −6 dBFS, fades
@@ -174,9 +177,9 @@ mismas posiciones/cadencia que el RX beam, así el path de TX steering corre
   se estabiliza aunque la sala sea mala. Sin clicks (fase continua).
 - `beam_out_shift = 0` en estos modos (el ×32 de los modos ADC clipearía
   brutalmente contra los PAM: el tono ya es −6 dBFS).
-- Foco (0, **−240**, 1000) mm: fy = −240 pone el foco en el plano de la fila 1
-  — la única poblada en DS10 (un array lineal no discrimina en Y de todos
-  modos).
+- Foco (0, **0**, 1000) mm: con las 4 filas pobladas en DS11 el foco va al
+  centro del array y la apertura vertical (480 mm) también enfoca. En DS10
+  iba a fy = −240 para apuntar al plano de la única fila poblada.
 - **Test auto-validante**: caminar con un mic o el oído a 1 m. El spot a 2 kHz
   (~±14 cm) debe ser aproximadamente la mitad de ancho que a 1 kHz (~±27 cm).
   Relación ~2 = el steering funciona.
@@ -205,7 +208,7 @@ mañana serán `delay_line[src]` (los ADC), con las mismas tablas.
   similar): en cada posición domina el pico de la frecuencia cuyo foco está
   ahí. El mapa espacial se "lee" por frecuencia, sin mover nada.
 - **Mover un foco individual** (sin re-entrar al modo):
-  `POST /beam {"type":"mf","src":2,"fx":300,"fy":-240,"fz":1000}` —
+  `POST /beam {"type":"mf","src":2,"fx":300,"fy":0,"fz":1000}` —
   re-apunta SOLO la fuente 2, conservando su frecuencia. `src` fuera de rango
   se rechaza sin tocar el modo en curso. Si no estabas en modo 14, un `mf`
   te mete en él.
@@ -232,7 +235,7 @@ lugares distintos, simultáneamente.
 - **Focos default**: entrada N → fx = −700 + 200·N mm (−700…+700, paso 200),
   fy = −240, fz = 1000. Re-entrar al modo resetea a estos defaults.
 - **Mover una entrada de lugar** (en vivo):
-  `POST /beam {"type":"mf","src":5,"fx":200,"fy":-240,"fz":800}` — en este
+  `POST /beam {"type":"mf","src":5,"fx":200,"fy":0,"fz":800}` — en este
   modo `src` va de 0 a 7 y re-apunta esa entrada sin tocar las demás.
 - **Niveles**: boost de entrada +12 dB (`mf_in_shift = 2`, nivel de línea).
   Si distorsiona, **bajar el volumen de la fuente** (hay clamp, pero suena

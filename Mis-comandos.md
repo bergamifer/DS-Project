@@ -139,7 +139,7 @@ ESP32 GPIO1 (RX) ──── PA0 (STM32 UART4 TX)   ← firmware: STM32_UART_RX
 | `firmware/Core/Src/pcm1690.c` | Driver PCM1690 DAC |
 | `firmware/Core/Src/epaper.c` | Driver SSD1681 e-paper |
 | `firmware/STM32H743XX_FLASH.ld` | Linker script (.dma_buffer → RAM_D2) |
-| `firmware/Makefile` | Build config (TARGET=ds10_beamforming) |
+| `firmware/Makefile` | Build config (TARGET=ds11_beamforming) |
 | `docs/historico/ds9_pin_audit.md` | Errores SAI en PCB DS9 y workarounds |
 | `docs/DS_Hardware_Map_v2.md` | Mapa completo de pines DS9 |
 
