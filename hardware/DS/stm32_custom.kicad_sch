@@ -7960,10 +7960,6 @@
 		(uuid "49542338-d69f-4de5-9a2c-93921b681637")
 	)
 	(no_connect
-		(at 101.6 173.99)
-		(uuid "67467603-6730-466d-800d-de040946a977")
-	)
-	(no_connect
 		(at 101.6 107.95)
 		(uuid "700cc1a8-f6a0-420b-bb9f-613186eb0eff")
 	)
@@ -10611,6 +10607,17 @@
 		)
 		(uuid "cb881cae-7723-48af-8955-08edabb07c4d")
 	)
+	(hierarchical_label "PC13"
+		(shape bidirectional)
+		(at 101.6 173.99 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "e8ad0f81-2749-44b1-a0bc-a50277db102a")
+	)
 	(hierarchical_label "DAC2_SAI_SD"
 		(shape input)
 		(at 55.88 148.59 180)
@@ -10765,6 +10772,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 219.71 97.79 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "5779c483-bf7a-4250-aa67-1b174d9d3185")
 		)
@@ -10901,6 +10919,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 52.07 170.18 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "1cc801f9-5b80-4bcc-b655-6054bd3c69ee")
 		)
@@ -11027,6 +11056,17 @@
 			)
 		)
 		(property "LCSC" "C1525"
+			(at 43.18 54.61 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 43.18 54.61 90)
 			(hide yes)
 			(show_name no)
@@ -11248,6 +11288,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 214.63 80.01 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "fac57764-6ce2-420d-8df1-fda5474d9f65")
 		)
@@ -11384,6 +11435,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 68.58 44.45 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "8cc83ed8-f15a-49b2-91d5-1cae5ec2b435")
 		)
@@ -11508,6 +11570,17 @@
 			)
 		)
 		(property "LCSC" "C25744"
+			(at 187.96 34.29 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 187.96 34.29 90)
 			(hide yes)
 			(show_name no)
@@ -12110,6 +12183,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 229.87 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "b5a16ba2-80a1-4a23-a412-0e5d10e90497")
 		)
@@ -12233,6 +12317,17 @@
 			)
 		)
 		(property "LCSC" "C23140"
+			(at 214.63 92.71 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 214.63 92.71 90)
 			(hide yes)
 			(show_name no)
@@ -12379,6 +12474,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 93.98 36.83 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "b9f8c4f5-36f2-425e-b5ab-7ee51f83d784")
 		)
@@ -12515,6 +12621,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 276.86 71.12 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "22f34770-858f-406a-80e9-f9737ed09aa7")
 		)
@@ -12638,6 +12755,17 @@
 			)
 		)
 		(property "LCSC" "C22935"
+			(at 187.96 113.03 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 187.96 113.03 90)
 			(hide yes)
 			(show_name no)
@@ -12784,6 +12912,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 93.98 43.18 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "914f1f15-aa9f-4104-a7bb-fb44ac7581c5")
 		)
@@ -12908,6 +13047,17 @@
 			)
 		)
 		(property "LCSC" "C8218"
+			(at 245.11 146.05 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 245.11 146.05 90)
 			(hide yes)
 			(show_name no)
@@ -13054,6 +13204,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 39.37 25.4 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "f7aa45c3-b6e5-43fe-9592-86efb26cc0c2")
 		)
@@ -13178,6 +13339,17 @@
 			)
 		)
 		(property "LCSC" "C25744"
+			(at 29.21 62.23 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 29.21 62.23 90)
 			(hide yes)
 			(show_name no)
@@ -13490,6 +13662,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 265.43 140.97 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "a8cbdc23-8832-4000-8055-8ea90b7a1c63")
 		)
@@ -13616,6 +13799,17 @@
 			)
 		)
 		(property "LCSC" "C1525"
+			(at 46.99 25.4 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 46.99 25.4 90)
 			(hide yes)
 			(show_name no)
@@ -13809,6 +14003,17 @@
 			)
 		)
 		(property "Price" "0.0068"
+			(at 254 100.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 254 100.33 0)
 			(hide yes)
 			(show_name no)
@@ -14051,6 +14256,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 114.3 177.8 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "58756bf3-b3b7-4ebc-96c1-64d596f56ce8")
 		)
@@ -14175,6 +14391,17 @@
 			)
 		)
 		(property "LCSC" "C177347"
+			(at 265.43 146.05 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 265.43 146.05 90)
 			(hide yes)
 			(show_name no)
@@ -14332,6 +14559,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 245.11 140.97 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "0d05c636-950c-4cb6-acdb-66b5ce4857ed")
 		)
@@ -14456,6 +14694,17 @@
 			)
 		)
 		(property "LCSC" "C25744"
+			(at 163.83 171.45 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 163.83 171.45 90)
 			(hide yes)
 			(show_name no)
@@ -14602,6 +14851,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 54.61 25.4 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "bd8486d2-8ef8-4b35-8e5d-b8d8b35c53e7")
 		)
@@ -14736,6 +14996,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 153.67 173.99 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "9f93f554-c90e-4986-a80b-29a884a92d9e")
 		)
@@ -14859,6 +15130,17 @@
 			)
 		)
 		(property "LCSC" "C23186"
+			(at 209.55 82.55 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 209.55 82.55 90)
 			(hide yes)
 			(show_name no)
@@ -15062,6 +15344,17 @@
 		)
 		(property "LCSC" "C51927445"
 			(at 208.28 35.56 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
+			(at 208.28 35.56 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15275,6 +15568,17 @@
 			)
 		)
 		(property "LCSC" "C15849"
+			(at 40.64 67.31 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 40.64 67.31 90)
 			(hide yes)
 			(show_name no)
@@ -15613,6 +15917,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 162.56 73.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "3"
 			(uuid "162b6791-953b-4489-8227-79d28211df1e")
 		)
@@ -15894,6 +16209,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 259.08 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "cb6ac3ad-12fb-46fa-bbe7-03d2efbd07dc")
 		)
@@ -16036,6 +16362,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 31.75 25.4 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "880461b6-952c-42c1-bc23-9099d53ed956")
 		)
@@ -16160,6 +16497,17 @@
 			)
 		)
 		(property "LCSC" "C4275"
+			(at 275.59 146.05 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 275.59 146.05 90)
 			(hide yes)
 			(show_name no)
@@ -16617,6 +16965,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 210.82 95.25 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "734ce6c4-91db-495f-b6b1-7da1c4058a13")
 		)
@@ -16755,6 +17114,17 @@
 		)
 		(property "Sim.Pins" "1=K 2=A"
 			(at 275.59 140.97 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
+			(at 275.59 140.97 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -17052,6 +17422,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 190.5 143.51 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "d3022d61-a632-45f2-8a3d-c8315f759f5a")
 		)
@@ -17322,6 +17703,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 271.78 100.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "6"
 			(uuid "46a65118-4461-4002-a2a9-980b97a7d2fc")
 		)
@@ -17543,6 +17935,17 @@
 			)
 		)
 		(property "LCSC" "C11702"
+			(at 187.96 147.32 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 187.96 147.32 90)
 			(hide yes)
 			(show_name no)
@@ -18002,6 +18405,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 184.15 43.18 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "0c070ba9-a6b9-481a-baa3-203d95ec8fdb")
 		)
@@ -18138,6 +18552,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 120.65 184.15 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "acbe06af-4c90-46d1-a51e-314832f06535")
 		)
@@ -18261,6 +18686,17 @@
 			)
 		)
 		(property "LCSC" "C23140"
+			(at 222.25 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 222.25 87.63 90)
 			(hide yes)
 			(show_name no)
@@ -18640,6 +19076,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 226.06 35.56 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "d90cdfd9-7498-4a10-93ca-370e1a00982c")
 		)
@@ -18843,6 +19290,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 215.9 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "5"
 			(uuid "22d42d8d-8bcb-44e6-8a7e-17919a3b4509")
 		)
@@ -18997,6 +19455,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 267.97 38.1 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "73da1f18-91b0-4b4c-8516-b4667b4903a3")
 		)
@@ -19123,6 +19592,17 @@
 			)
 		)
 		(property "LCSC" "C1549"
+			(at 252.73 38.1 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 252.73 38.1 0)
 			(hide yes)
 			(show_name no)
@@ -19580,6 +20060,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 44.45 167.64 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "3f02bd86-9892-40e9-9c36-39b7d1f6d6eb")
 		)
@@ -19715,6 +20206,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 162.56 33.02 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "b72994dd-95c0-420b-a701-6ae86a327f51")
 		)
@@ -19808,6 +20310,17 @@
 			)
 		)
 		(property "Manufacturer_Part_Number" "HX 1.0-10P LT"
+			(at 157.48 147.32 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 157.48 147.32 0)
 			(hide yes)
 			(show_name no)
@@ -20215,6 +20728,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 204.47 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "d42d9d16-9285-4dae-a29d-829d78c6a80c")
 		)
@@ -20339,6 +20863,17 @@
 			)
 		)
 		(property "LCSC" "C22808"
+			(at 255.27 146.05 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 255.27 146.05 90)
 			(hide yes)
 			(show_name no)
@@ -20561,6 +21096,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 208.28 45.72 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "c09530e3-4bb9-4e75-bcab-1af6f0ab78de")
 		)
@@ -20696,6 +21242,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 215.9 74.93 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "17a30aec-b207-4315-b031-47b8adc8c2f7")
 		)
@@ -20810,6 +21367,17 @@
 			)
 		)
 		(property "LCSC" "C165948"
+			(at 191.77 90.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 191.77 90.17 0)
 			(hide yes)
 			(show_name no)
@@ -21012,6 +21580,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 255.27 140.97 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "7cc3a73c-e969-45e5-82cf-421bcabea9f9")
 		)
@@ -21127,6 +21706,17 @@
 			)
 		)
 		(property "LCSC" "C51927445"
+			(at 187.96 43.18 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 187.96 43.18 90)
 			(hide yes)
 			(show_name no)
@@ -21564,6 +22154,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 259.08 69.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "6"
 			(uuid "f8f0a30e-6b17-46fa-b9b9-b96dac3dda9d")
 		)
@@ -21788,6 +22389,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 139.7 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "e86bf7c4-211b-41fc-8175-4b20133c0615")
 		)
@@ -21992,6 +22604,17 @@
 			)
 		)
 		(property "LCSC" "C1691"
+			(at 101.6 43.18 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 101.6 43.18 90)
 			(hide yes)
 			(show_name no)
@@ -22207,6 +22830,17 @@
 		)
 		(property "LCSC" "C115571"
 			(at 120.65 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
+			(at 120.65 171.45 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -22489,6 +23123,17 @@
 			)
 		)
 		(property "LCSC" "C114409"
+			(at 78.74 118.11 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 78.74 118.11 0)
 			(hide yes)
 			(show_name no)
@@ -22945,6 +23590,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 171.45 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "965c20ed-68e4-4d46-9b25-0c3443aa57bd")
 		)
@@ -23309,6 +23965,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 147.32 147.32 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "12922bc2-48a0-49bb-b620-620001532095")
 		)
@@ -23626,6 +24293,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 62.23 25.4 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "80b46b63-6a1a-4ec3-aa80-1c5c09e382a2")
 		)
@@ -23762,6 +24440,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 162.56 106.68 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "84b9b59a-a71a-4337-95fb-3a85e753dcd8")
 		)
@@ -23888,6 +24577,17 @@
 			)
 		)
 		(property "LCSC" "C19666"
+			(at 24.13 25.4 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 24.13 25.4 90)
 			(hide yes)
 			(show_name no)

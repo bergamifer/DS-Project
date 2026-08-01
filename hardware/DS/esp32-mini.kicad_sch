@@ -9576,6 +9576,17 @@
 			)
 		)
 	)
+	(hierarchical_label "GPIO8"
+		(shape bidirectional)
+		(at 147.32 97.79 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "4deae887-e04a-4df5-9691-0e772e982864")
+	)
 	(hierarchical_label "UART1 - TX"
 		(shape input)
 		(at 91.44 62.23 180)
@@ -9739,6 +9750,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 252.73 38.1 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "c8d51d62-0b3c-442a-9d00-b389c839d191")
 		)
@@ -9864,6 +9886,17 @@
 			)
 		)
 		(property "LCSC" "C8598"
+			(at 260.35 27.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 260.35 27.94 0)
 			(hide yes)
 			(show_name no)
@@ -10164,6 +10197,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 269.24 45.72 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "622b20a2-a002-4fc3-b73c-231a2b47ddc3")
 		)
@@ -10288,6 +10332,17 @@
 			)
 		)
 		(property "LCSC" "C25744"
+			(at 167.64 100.33 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 167.64 100.33 90)
 			(hide yes)
 			(show_name no)
@@ -10578,6 +10633,17 @@
 			)
 		)
 		(property "LCSC" "C22935"
+			(at 231.14 68.58 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 231.14 68.58 90)
 			(hide yes)
 			(show_name no)
@@ -10956,6 +11022,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 213.36 39.37 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "23a21be4-3440-4519-bb82-e8edc52323fd")
 		)
@@ -11160,6 +11237,17 @@
 			)
 		)
 		(property "LCSC" "C2838502"
+			(at 119.38 80.01 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 119.38 80.01 0)
 			(hide yes)
 			(show_name no)
@@ -11448,6 +11536,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 158.75 90.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "b480f6b5-e391-484d-8eb8-7c408b6cb098")
 		)
@@ -11578,6 +11677,17 @@
 			)
 		)
 		(property "LCSC" "C22808"
+			(at 151.13 111.76 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 151.13 111.76 90)
 			(hide yes)
 			(show_name no)
@@ -11879,6 +11989,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 273.05 96.52 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "984a728a-d699-4dda-a26b-c1af25e431d8")
 		)
@@ -12080,6 +12201,17 @@
 			)
 		)
 		(property "LCSC" "C23140"
+			(at 262.89 50.8 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 262.89 50.8 90)
 			(hide yes)
 			(show_name no)
@@ -12434,7 +12566,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C42400248"
+		(property "LCSC" "C22464422"
 			(at 234.95 45.72 0)
 			(hide yes)
 			(show_name no)
@@ -12446,6 +12578,17 @@
 			)
 		)
 		(property "Alt_text" "USB_C_ESP32"
+			(at 234.95 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 234.95 45.72 0)
 			(hide yes)
 			(show_name no)
@@ -12638,6 +12781,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 172.72 62.23 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "872c84ed-577d-4641-906c-e453c657b97e")
 		)
@@ -12757,6 +12911,17 @@
 			)
 		)
 		(property "Manufacturer_Part_Number" "B4B-XH-A"
+			(at 245.11 128.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 245.11 128.27 0)
 			(hide yes)
 			(show_name no)
@@ -12890,6 +13055,17 @@
 			)
 		)
 		(property "LCSC" "C51927445"
+			(at 207.01 39.37 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 207.01 39.37 90)
 			(hide yes)
 			(show_name no)
@@ -13189,6 +13365,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 259.08 62.23 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "7368a3a3-9f55-4062-8508-c2f6edb5ea5f")
 		)
@@ -13315,6 +13502,17 @@
 			)
 		)
 		(property "LCSC" "C1691"
+			(at 77.47 90.17 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 77.47 90.17 90)
 			(hide yes)
 			(show_name no)
@@ -13472,6 +13670,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 151.13 106.68 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "439555c4-c639-4382-b76f-01734c45134a")
 		)
@@ -13596,6 +13805,17 @@
 			)
 		)
 		(property "LCSC" "C23186"
+			(at 257.81 35.56 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 257.81 35.56 90)
 			(hide yes)
 			(show_name no)
@@ -13742,6 +13962,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 82.55 90.17 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "007bcf0d-bf75-4ff0-a56c-9801373eb896")
 		)
@@ -13868,6 +14099,17 @@
 			)
 		)
 		(property "LCSC" "C1555"
+			(at 269.24 55.88 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 269.24 55.88 90)
 			(hide yes)
 			(show_name no)
@@ -14089,6 +14331,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 209.55 30.48 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "f9d9aae0-d5f1-4386-be76-2245e28a11d2")
 		)
@@ -14275,6 +14528,17 @@
 			)
 		)
 		(property "Price" "0.1848"
+			(at 246.38 92.71 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 246.38 92.71 0)
 			(hide yes)
 			(show_name no)
