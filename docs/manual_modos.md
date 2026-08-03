@@ -258,7 +258,40 @@ lugares distintos, simultáneamente.
 ## Diagnóstico por UART7 (115200 8N1, J7 → ST-Link VCP)
 
 - Heartbeat 1/s: `[Ns] Half: 50/s, Full: 50/s, Err, Undr, RX bytes | ESP: <ip>`
+- **`SYNC bancos: <n> us | CPU fills: <n>%`** — las dos métricas de DS11:
+  - **SYNC** = desfase entre los ciclos de DMA de los dos masters SAI
+    (SAI1_A = filas 0-1, SAI2_A = filas 2-3). **Debe dar pocos µs.** Si da
+    milisegundos, los dos medios arrays están reproduciendo ventanas de
+    tiempo distintas y el enfoque vertical no es coherente — ver la sección
+    "Sincronismo entre bancos" abajo.
+  - **CPU** = fracción del presupuesto (480M ciclos/s) gastada en los 4 fills.
+    El valor que importa es en modo 15, que es el fill más caro.
 - `ADCpk: c0..c7 | OVF RXdma=100/s` — picos de entrada + liveness del DMA RX.
 - `BEAM az=<az> pk=` — solo en modos beam.
-- Cada 10 s (verbose): estadísticas de fill (µs), jitter y temperatura del CPU.
+- Cada 10 s (verbose): estadísticas de fill (µs) **de SAI1_A solamente**,
+  jitter y temperatura del CPU. Para el costo total usar la línea CPU.
 - Reporte de test completo cada 60 s con PASS/FAIL del pipeline.
+
+## Sincronismo entre bancos (crítico desde DS11)
+
+`SAI1_A` (ch0-15, filas 0-1) y `SAI2_A` (ch16-31, filas 2-3) son **dos masters
+asíncronos entre sí**: comparten PLL3 —misma frecuencia, sin deriva— pero cada
+uno arranca su propio stream cuando se le pone `SAIEN`, y **ese offset inicial
+queda fijo para siempre**. No hay nada en el hardware que los realinee: cada
+grupo de DACs recibe su BCK/FS por pines distintos (PE4/PE5 → U2+U3,
+PD12/PD13 → U1+U4), así que tampoco se pueden encadenar por SYNCEXT sin
+cambiar la placa.
+
+**Por qué importa**: el pipeline llena los 4 buffers tomando el mismo
+`delay_write_pos` en una sola pasada del main loop. Eso sólo vale si los 4
+callbacks caen en la misma pasada. Con los masters desfasados, los fills de
+cada banco ocurren en pasadas distintas y pueden tomar valores de `wp` que
+difieren en 480 muestras → **hasta ~10 ms (3,4 m de camino acústico) de
+offset entre las filas 0-1 y las filas 2-3**.
+
+**Regla firme**: los cuatro `HAL_SAI_Transmit_DMA` del arranque van
+**consecutivos, sin nada en el medio** — en particular sin `UART_Print`, que
+es bloqueante (~3,6 ms para 41 caracteres a 115200). Los prints van después.
+Verificar siempre con la línea `SYNC` del heartbeat.
+
+En DS10 esto era invisible porque sólo estaba poblado un banco (U2).
