@@ -487,6 +487,17 @@ static volatile uint32_t jitter_max_cycles = 0;
 static volatile uint64_t jitter_sum_cycles = 0;
 static volatile uint32_t jitter_sample_count = 0;
 
+/* Costo TOTAL de los 4 bancos (DS11): el min/avg/max de abajo mide SOLO los
+ * fills de SAI1_A, así que con 32 canales subrepresenta ~4× el trabajo real.
+ * fill_all_cycles acumula TODOS los fills; el heartbeat lo derivada a %CPU.
+ * Presupuesto: 480M ciclos/s → cada 1% son 4.8M ciclos/s. */
+static volatile uint64_t fill_all_cycles = 0;
+/* Offset entre bancos: timestamp del último Half callback de cada master.
+ * SAI1_A y SAI2_A son masters asíncronos entre sí — si arrancan separados,
+ * ese desfase queda fijo para siempre. Se reporta en la línea SYNC. */
+static volatile uint32_t cb_a1_half_dwt = 0;
+static volatile uint32_t cb_2a_half_dwt = 0;
+
 // Processing latency: fill buffer + cache clean
 static volatile uint32_t fill_min_cycles = 0xFFFFFFFF;
 static volatile uint32_t fill_max_cycles = 0;
@@ -649,24 +660,36 @@ int main(void)
   memset(audio_buffer_2b, 0, sizeof(audio_buffer_2b));
   __DSB();
 
-  // Slaves must start before masters (SAI sync requirement)
-  HAL_StatusTypeDef status;
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
-  sprintf(uart_buf, "SAI1_B DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
-  UART_Print(uart_buf);
-
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockB2, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
-  sprintf(uart_buf, "SAI2_B DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
-  UART_Print(uart_buf);
-
+  /* Arranque de los 4 bloques SIN NADA EN EL MEDIO — crítico en DS11.
+   *
+   * SAI1_A y SAI2_A son dos masters ASÍNCRONOS entre sí: cada uno arranca su
+   * propio stream cuando se le pone SAIEN, y ese offset inicial no se corrige
+   * nunca (comparten PLL3 → misma frecuencia, pero no fase). Antes había un
+   * UART_Print de ~41 chars (≈3.6 ms a 115200, bloqueante) entre los dos
+   * arranques: los bancos ch0-15 y ch16-31 quedaban con sus ciclos de DMA
+   * desfasados milisegundos.
+   *
+   * Eso rompe el invariante del fix de 2026-07-02 (procesar RX antes de los 4
+   * fills para que todos compartan el mismo delay_write_pos): con los bancos
+   * desfasados, sus callbacks caen en pasadas distintas del main loop y toman
+   * valores de wp que difieren hasta en 480 muestras → offset acústico de
+   * hasta ~10 ms (3.4 m de camino) entre las filas 0-1 y las filas 2-3.
+   * En DS10 era invisible: sólo U2 estaba poblado.
+   *
+   * Los prints van DESPUÉS de los cuatro arranques. El delta real entre
+   * bancos se mide en el heartbeat (línea SYNC) — no lo supongas, miralo. */
+  HAL_StatusTypeDef st_b1, st_b2, st_a1, st_a2;
+  st_b1 = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
+  st_b2 = HAL_SAI_Transmit_DMA(&hsai_BlockB2, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
   // Masters — SAI1_A generates MCLK (PE2) which PCM1690 needs for POR
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_buffer, AUDIO_BUFFER_SIZE * 2);
-  sprintf(uart_buf, "SAI1_A DMA: %s (MCLK 24.576MHz running)\r\n", status == HAL_OK ? "OK" : "FAIL");
-  UART_Print(uart_buf);
+  st_a1 = HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_buffer, AUDIO_BUFFER_SIZE * 2);
+  st_a2 = HAL_SAI_Transmit_DMA(&hsai_BlockA2, (uint8_t*)audio_buffer_2a, AUDIO_BUFFER_SIZE * 2);
 
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockA2, (uint8_t*)audio_buffer_2a, AUDIO_BUFFER_SIZE * 2);
-  sprintf(uart_buf, "SAI2_A DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
+  sprintf(uart_buf, "SAI DMA: 1B=%s 2B=%s 1A=%s 2A=%s (MCLK 24.576MHz running)\r\n",
+          st_b1 == HAL_OK ? "OK" : "FAIL", st_b2 == HAL_OK ? "OK" : "FAIL",
+          st_a1 == HAL_OK ? "OK" : "FAIL", st_a2 == HAL_OK ? "OK" : "FAIL");
   UART_Print(uart_buf);
+  HAL_StatusTypeDef status = st_a1;   // el resto del boot mira este
 
   // === STEP 2: AK5538VN — configure SAI3_B and release power-down ===
   UART_Print("AK5538VN: starting SAI3_B RX DMA...\r\n");
@@ -939,6 +962,7 @@ int main(void)
       if (dt < fill_min_cycles) fill_min_cycles = dt;
       if (dt > fill_max_cycles) fill_max_cycles = dt;
       fill_sum_cycles += dt;
+      fill_all_cycles += dt;
       fill_sample_count++;
     }
     if (need_fill_second_half) {
@@ -951,6 +975,7 @@ int main(void)
       if (dt < fill_min_cycles) fill_min_cycles = dt;
       if (dt > fill_max_cycles) fill_max_cycles = dt;
       fill_sum_cycles += dt;
+      fill_all_cycles += dt;
       fill_sample_count++;
     }
 
@@ -958,42 +983,54 @@ int main(void)
     if (need_fill_1b_first_half) {
       need_fill_1b_first_half = 0;
       __DSB();
+      uint32_t t0 = DWT->CYCCNT;
       Fill_Audio_Beamform(&audio_buffer_1b[0], AUDIO_BUFFER_SAMPLES, 8);
       __DSB();
+      fill_all_cycles += DWT->CYCCNT - t0;
     }
     if (need_fill_1b_second_half) {
       need_fill_1b_second_half = 0;
       __DSB();
+      uint32_t t0 = DWT->CYCCNT;
       Fill_Audio_Beamform(&audio_buffer_1b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 8);
       __DSB();
+      fill_all_cycles += DWT->CYCCNT - t0;
     }
 
     // SAI2_A: channels 16-23 (DAC2 U1)
     if (need_fill_2a_first_half) {
       need_fill_2a_first_half = 0;
       __DSB();
+      uint32_t t0 = DWT->CYCCNT;
       Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
       __DSB();
+      fill_all_cycles += DWT->CYCCNT - t0;
     }
     if (need_fill_2a_second_half) {
       need_fill_2a_second_half = 0;
       __DSB();
+      uint32_t t0 = DWT->CYCCNT;
       Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
       __DSB();
+      fill_all_cycles += DWT->CYCCNT - t0;
     }
 
     // SAI2_B: channels 24-31 (DAC3 U4)
     if (need_fill_2b_first_half) {
       need_fill_2b_first_half = 0;
       __DSB();
+      uint32_t t0 = DWT->CYCCNT;
       Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
       __DSB();
+      fill_all_cycles += DWT->CYCCNT - t0;
     }
     if (need_fill_2b_second_half) {
       need_fill_2b_second_half = 0;
       __DSB();
+      uint32_t t0 = DWT->CYCCNT;
       Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
       __DSB();
+      fill_all_cycles += DWT->CYCCNT - t0;
     }
 
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
@@ -1161,6 +1198,42 @@ int main(void)
               error_count, underrun_count, UART_Protocol_GetRxByteCount(),
               esp_ip[0] ? esp_ip : "--");
       UART_Print(uart_buf);
+
+      /* SYNC + CPU — las dos métricas nuevas de DS11, una línea por segundo.
+       *
+       * SYNC = desfase entre los ciclos de DMA de los dos masters (SAI1_A =
+       * filas 0-1, SAI2_A = filas 2-3). Se toma la diferencia de timestamps
+       * de sus Half callbacks módulo el ciclo completo (20 ms), con signo en
+       * ±10 ms. DEBE dar unos pocos µs: si da milisegundos, los dos bancos
+       * están tocando ventanas de tiempo distintas y el beamforming vertical
+       * no es coherente (ver comentario del arranque de los SAI).
+       *
+       * CPU = fracción del presupuesto gastada en los 4 fills. 480M ciclos/s
+       * = 100%. Es el número real del modo 15 con 32 canales; el Fill de más
+       * abajo mide sólo SAI1_A. */
+      {
+        /* Diferencia CON SIGNO: la resta unsigned y el cast a int32 dan el
+         * delta correcto aunque DWT->CYCCNT haya dado la vuelta (vale para
+         * |delta| < 2^31 ciclos ≈ 4.5 s; acá los callbacks son cada 20 ms).
+         * NO usar % sobre el unsigned: 2^32 no es múltiplo del ciclo, así
+         * que el módulo se corrompe justo en el wrap. */
+        const int32_t CYC_PER_BUFCYCLE = 9600000;      // 20 ms @480MHz
+        int32_t skew = (int32_t)(cb_2a_half_dwt - cb_a1_half_dwt);
+        while (skew >  CYC_PER_BUFCYCLE / 2) skew -= CYC_PER_BUFCYCLE;
+        while (skew < -CYC_PER_BUFCYCLE / 2) skew += CYC_PER_BUFCYCLE;
+        int32_t skew_us = skew / (int32_t)CPU_FREQ_MHZ;
+
+        static uint64_t last_fill_all = 0;
+        uint64_t now_fill = fill_all_cycles;
+        uint32_t cpu_x10 = (uint32_t)(((now_fill - last_fill_all) * 1000ULL) / 480000000ULL);
+        last_fill_all = now_fill;
+
+        snprintf(uart_buf, sizeof(uart_buf),
+                 "     SYNC bancos: %ld us (%ld cyc) | CPU fills: %lu.%lu%%\r\n",
+                 (long)skew_us, (long)skew,
+                 (unsigned long)(cpu_x10 / 10), (unsigned long)(cpu_x10 % 10));
+        UART_Print(uart_buf);
+      }
 
       // 8-channel ADC peak meter — printed EVERY second (one line) so an
       // injected tone is visible live on whatever input pair it lands on.
@@ -3029,6 +3102,7 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
     }
 
     cb_a1_count++;
+    cb_a1_half_dwt = now;          // referencia de fase del banco ch0-15
     need_fill_first_half = 1;
     __DSB();
   }
@@ -3041,6 +3115,7 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
   else if (hsai->Instance == SAI2_Block_A) {
     if (need_fill_2a_first_half) underrun_count++;
     cb_2a_count++;
+    cb_2a_half_dwt = DWT->CYCCNT;  // referencia de fase del banco ch16-31
     need_fill_2a_first_half = 1;
     __DSB();
   }
