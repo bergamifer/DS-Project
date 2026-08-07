@@ -57,6 +57,10 @@ static char esp_ip[ESP_IP_MAXLEN + 1] = {0};
 static volatile int8_t  vol_req_db = 0;
 static volatile uint8_t vol_req_flag = 0;
 
+/* CMD_SET_AMPS: el ISR setea flag+valor, el main loop toca el GPIO. */
+static volatile uint8_t amps_req_on = 0;
+static volatile uint8_t amps_req_flag = 0;
+
 /* Pre-formatted print buffer for non-blocking IT transmission */
 #define PRINT_BUF_SIZE 1200
 static char print_buf[PRINT_BUF_SIZE];
@@ -239,6 +243,11 @@ static void process_byte(uint8_t byte)
             memcpy(esp_ip, rx_payload, rx_payload_len);
             esp_ip[rx_payload_len] = '\0';   /* NUL último: nunca se lee a medias */
             rx_frame_count++;
+        } else if (rx_command == CMD_SET_AMPS && rx_payload_len == 1) {
+            amps_req_on = rx_payload[0] ? 1 : 0;
+            amps_req_flag = 1;
+            rx_frame_count++;
+            send_ack();
         } else if (rx_command == CMD_SET_VOLUME && rx_payload_len == 1) {
             vol_req_db = (int8_t)rx_payload[0];   /* dB, negativo = atenúa */
             vol_req_flag = 1;
@@ -283,6 +292,14 @@ uint8_t UART_Protocol_GetVolumeRequest(int8_t *db)
     if (!vol_req_flag) return 0;
     vol_req_flag = 0;
     *db = vol_req_db;
+    return 1;
+}
+
+uint8_t UART_Protocol_GetAmpsRequest(uint8_t *on)
+{
+    if (!amps_req_flag) return 0;
+    amps_req_flag = 0;
+    *on = amps_req_on;
     return 1;
 }
 

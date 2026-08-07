@@ -93,6 +93,46 @@ es justo lo que absorbe ese transitorio.
 
 ---
 
+## Incidente derivado — reinicio al primer tono (2026-08-04)
+
+Al lanzar el **channel walker** con la placa ya reparada, se escuchó *"el primer
+tono con un fade in y después se apagó"*. La telemetría lo confirma: la secuencia
+de `underruns` leída por HTTP fue **0, 0, 6, 7, 0, 0, 5** — los underruns
+**se resetean a 0 en cada boot**, o sea que el STM32 estaba en **loop de
+reinicio**. El modo tampoco cambiaba (`mode` siempre 0) porque el guardado en
+EEPROM tiene debounce de 3 s y la placa moría antes de persistirlo.
+
+Interpretación: **brown-out por demanda de los amplificadores**, sobre un buck
+MP2315S ya al límite y ahora con **25% menos de bulk** (660 µF tras remover
+C290). El rail se hunde, arrastra el rail derivado del MCU, y reinicia.
+
+### Mitigación en firmware: los amps arrancan APAGADOS
+
+Desde este incidente el pin **SD (PD3)** ya **no** se pone en alto
+automáticamente al final del boot. Los 32 PAM8302A arrancan apagados y se
+habilitan por comando:
+
+```bash
+curl -X POST http://<IP>/amps -d '{"on":true}'    # encender
+curl -X POST http://<IP>/amps -d '{"on":false}'   # apagar
+```
+
+(también hay botones en la UI web). Nuevo comando de protocolo:
+**`CMD_SET_AMPS` (0x0A)**, payload `uint8` 1/0.
+
+**Por qué importa como herramienta**: con los amps apagados corre **todo** el
+pipeline —SAI, DMA, beamforming, los 4 bancos— en silencio absoluto. Eso separa
+de forma limpia dos hipótesis que de otro modo se confunden:
+
+- Walker estable con amps OFF y reinicia con amps ON → **es alimentación**.
+- Reinicia igual con amps OFF → **no es alimentación**, hay que buscar en otro
+  lado (firmware, rail digital, watchdog).
+
+Y evita el peor escenario de diagnóstico: una placa en loop de reinicio que no
+se deja interrogar.
+
+---
+
 ## Estado
 
 - ✅ Ambas fallas reparadas en la placa de trabajo; **compila, flashea y

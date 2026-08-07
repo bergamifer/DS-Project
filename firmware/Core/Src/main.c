@@ -411,6 +411,14 @@ static const uint8_t dac_addrs[4] = {
     PCM1690_ADDR_DAC0, PCM1690_ADDR_DAC1, PCM1690_ADDR_DAC2, PCM1690_ADDR_DAC3
 };
 
+/* Estado del banco de amplificadores (pin SD, PD3). ARRANCA EN 0: tras el
+ * incidente del 2026-08-04 (reinicio al primer tono del walker, con el buck
+ * al limite y 660uF de bulk en vez de 880) los amps ya NO se habilitan solos
+ * al bootear — se prenden por comando (POST /amps) una vez que la placa esta
+ * estable. Asi un problema de alimentacion no deja la placa en loop de
+ * reinicio imposible de diagnosticar. */
+static volatile uint8_t amps_enabled = 0;
+
 // EEPROM deferred save flag (set when config changes, save in low-priority window)
 static volatile uint8_t eeprom_save_pending = 0;
 // Config-save debounce: HAL_GetTick() deadline (0 = nothing pending). Any config
@@ -855,9 +863,10 @@ int main(void)
     }
   }
 
-  // === STEP 5: Enable amplifier bank ===
-  HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_SET);
-  UART_Print("PAM8302A: SD HIGH — 32 amplifiers enabled\r\n");
+  // === STEP 5: amplificadores APAGADOS al boot (ver amps_enabled) ===
+  HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
+  amps_enabled = 0;
+  UART_Print("PAM8302A: SD LOW — 32 amps APAGADOS. Habilitar con POST /amps {\"on\":true}\r\n");
 
   // === ESP32 UART protocol init ===
   UART_Protocol_Init(&huart4, &huart7);
@@ -1085,6 +1094,21 @@ int main(void)
         snprintf(uart_buf, sizeof(uart_buf),
                  "VOLUME: %d dB → ATDA=0x%02X (save diferido)\r\n",
                  (int)vol_db, atten);
+        UART_Print(uart_buf);
+      }
+
+      /* Enable del banco de amplificadores por comando. Herramienta de
+       * diagnostico: con los amps apagados corre TODO el pipeline (SAI, DMA,
+       * beamforming) en silencio, asi se aisla si un reinicio viene de la
+       * demanda de los 32 PAM8302A sobre el buck (que quedo con menos bulk
+       * tras remover C290 — ver docs/ds11_errata.md). */
+      uint8_t amps_on;
+      if (UART_Protocol_GetAmpsRequest(&amps_on)) {
+        HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN,
+                          amps_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        amps_enabled = amps_on;
+        snprintf(uart_buf, sizeof(uart_buf), "AMPS: %s\r\n",
+                 amps_on ? "ON (32 PAM8302A habilitados)" : "OFF (silencio)");
         UART_Print(uart_buf);
       }
 
