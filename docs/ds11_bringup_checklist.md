@@ -8,6 +8,14 @@
 
 ## 0. Antes de dar tensión
 
+- [ ] **⚠️ REPARAR LOS DOS CORTOS DE FÁBRICA** — afectan a **todas** las placas
+      de la tirada. Ver `ds11_errata.md`: via de GND cortocircuitando +3V3 (se
+      taladra) y pista de +5VA sobre GND bajo C290 (se abre con bisturí).
+      **Verificar antes de alimentar**: TP1↔TP3 (`+3V3`) y pad `+` de C290 ↔ GND
+      deben dar cientos de Ω o más, nunca sub-ohm.
+- [ ] **Cortar el pin 1 del cable del ST-Link** (3.3 V sin protección → colapsa
+      el dongle). Detalle en `ds11_errata.md`.
+
 - [ ] **Alimentar a 19-20 V, NO a 24 V.** El buck MP2315S tiene 26 V de máximo
       absoluto y a 24 V el margen ante transitorios es cero. Además los 32
       PAM8302A **en fase** (justo lo que hace un beam enfocado) pueden pedir
