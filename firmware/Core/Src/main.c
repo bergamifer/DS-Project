@@ -162,8 +162,13 @@ static int32_t audio_buffer_2b[AUDIO_BUFFER_SIZE * 2] __attribute__((section(".d
 static int32_t audio_buffer_3b_rx[ADC_BUFFER_SIZE * 2] __attribute__((section(".dma_buffer"), aligned(32)));
 
 // Circular delay lines for beamforming — 8 independent channels (AK5538VN 8ch)
-// delay_line[0] = ADC ch0 (main beam source); [1]-[7] stubs for future expansion
-static int32_t delay_line[8][DELAY_LINE_SIZE] __attribute__((section(".dma_buffer"), aligned(32)));
+// delay_line[0] = ADC ch0 (main beam source); [1]-[7] las 8 entradas del modo 15.
+// NO es memoria DMA: la escribe la CPU en Process_ADC_Half copiando desde
+// audio_buffer_3b_rx. Por eso vive en DTCMRAM (0 wait states, acoplada al core)
+// y no en RAM_D2 (vía AXI, que es donde la ponía .dma_buffer). Es la estructura
+// más leída del pipeline — el modo 15 hace 8 lecturas por muestra de salida y
+// por canal. 32 KB de los 128 KB de DTCM.
+static int32_t delay_line[8][DELAY_LINE_SIZE] __attribute__((aligned(32)));
 static uint32_t delay_write_pos = 0;
 
 // Active beamforming config (copied from ESP32 ds_config_t on update)
@@ -568,7 +573,16 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  /* I-cache ON. El M7 corre a 480 MHz pero la flash tiene 4 wait states, así
+   * que sin caché de instrucciones cada vuelta del lazo de fill paga el fetch.
+   * Medido 2026-08-13 (modo 7): 716856 ciclos para 480 muestras × 8 canales =
+   * 186 ciclos por muestra de salida, para ~30 instrucciones de trabajo real.
+   * No hay problema de coherencia: el código no se automodifica.
+   *
+   * El D-cache sigue APAGADO a propósito: los buffers DMA en RAM_D2 exigirían
+   * mantenimiento de caché en cada callback, y el intento anterior
+   * (SCB_CleanDCache_by_Addr sin D-cache habilitado) terminó en HardFault. */
+  SCB_EnableICache();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/

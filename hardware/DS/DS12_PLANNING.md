@@ -28,6 +28,21 @@ Estaba planificado (DS11_PLANNING §8.2) pero **no aparece en el BOM final** de 
   beamformean coherente). Ver [../../docs/multinode.md](../../docs/multinode.md) §2.
 - Costo: 2 pads + 1 R.
 
+### 2b. J7 pin 1 (3V3 del ST-Link) sin protección — poner Schottky
+Detectado en el bring-up de la DS11 (2026-08). El **pin 1 de J7 va directo al riel
+`+3V3`**, mientras que el pin 10 (5V) sí pasa por el Schottky **D11**. Sin esa
+protección el ST-Link intenta alimentar toda la placa (STM32H743 + 4 PCM1690 + AK5538
++ ESP32 ≈ 700 mA), no puede, y se apaga su LED — que es exactamente el síntoma que
+hizo perder horas creyendo que había un corto. Mitigación en DS11: **cortar el pin 1
+del cable**. Para DS12: **Schottky en serie en el pin 1**, igual que el D11 del pin 10.
+Detalle en [../../docs/ds11_errata.md](../../docs/ds11_errata.md).
+
+### 2c. Regenerar gerbers CON refill de zonas — regla de proceso
+La tirada entera de DS11 salió con **dos cortocircuitos de cobre** porque los gerbers se
+plotearon con los rellenos de zona desactualizados. No es un cambio de PCB: es una regla
+de proceso obligatoria antes de mandar a fabricar (refill + doble DRC comparado). El
+procedimiento exacto está en [../../docs/ds11_errata.md](../../docs/ds11_errata.md).
+
 ---
 
 ## 🟡 Prioridad media
@@ -52,6 +67,24 @@ Dejar el chico solo donde la corriente es de mA (FB1/VREF+).
 Son los caps de carga del cristal de 32.768 kHz (8.2 pF, valor correcto). Es el **único
 0201 de toda la placa** (el resto es 0402+). Migrar a 0402 mismo valor: más fácil de
 montar, retrabajable a mano, no fuerza proceso. Footprint heredado.
+
+### 6b. Barrel jack DC de entrada, **DNP** — para banco y experimentación
+Pedido de Fernando (2026-08-13). Hoy la entrada de alimentación son **borneras Phoenix**,
+que son lo correcto para instalación fija pero incómodas en la mesa: cada vez que se
+quiere probar con una fuente comercial (notebook-style, bench supply con plug) hay que
+pelar cable y atornillar. Agregar en paralelo un **jack barrel DNP** (sin poblar de
+fábrica) que se puede soldar sólo en las placas de laboratorio.
+
+- **Footprint**: DC-005 / barrel 5.5 × 2.1 mm, through-hole (el 2.1 mm es el estándar de
+  las fuentes tipo notebook y de los bench supplies con plug).
+- **En paralelo con la Phoenix de entrada**, mismo net, antes del TVS y del buck — así
+  toda la protección existente (D8, fusible si lo hay) cubre las dos entradas por igual.
+- **Tensión**: la placa corre a **19-20 V** (ver ítem 1), que es justo el rango de los
+  cargadores de notebook — encaja natural. Marcar la serigrafía con **"19-20V"** y la
+  polaridad (centro positivo) para no quemar el buck con una fuente de 24 V.
+- ⚠️ **No poblar los dos a la vez** con fuentes distintas conectadas: serigrafiar
+  "USE ONE" o similar. Dos fuentes en paralelo por el mismo net es un problema.
+- Costo: un footprint THT y un pad extra. DNP = cero costo en la tirada de producción.
 
 ### 6. RN5/RN6 y arrays en general → considerar discretas
 Ya hubo que reemplazar RN1-4 (62Ω sin stock) por 16 discretas de 75Ω. RN5/RN6 (C1980,

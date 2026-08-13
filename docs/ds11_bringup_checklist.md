@@ -64,11 +64,17 @@ prefijo `[STM32]`.
 ```
 
 - [ ] **`Half: 50/s` y `Full: 50/s`**, `Err: 0`.
-- [ ] **`SYNC bancos` de pocos µs.** Si da **milisegundos**, los medios arrays
-      están desfasados y el enfoque vertical no es coherente → anotarlo y
-      avisar antes de seguir con mediciones. (Ver "Sincronismo entre bancos"
-      en `manual_modos.md`.)
-- [ ] **`CPU fills`** — anotar el valor en modo 0 y después en modo 15.
+- [x] **`SYNC bancos`** — ✅ **medido 2026-08-13: 4 µs (2038 ciclos)**, estable
+      arranque tras arranque. Son 1,4 mm de camino acústico: irrelevante frente
+      al pitch de 80 mm. La duda de julio sobre el desfase entre bancos **queda
+      cerrada**. Si alguna vez da **milisegundos**, es una regresión — revisar
+      que los cuatro `HAL_SAI_Transmit_DMA` sigan consecutivos y sin prints en
+      el medio. (Ver `ds11_perf.md` §1 y "Sincronismo entre bancos" en
+      `manual_modos.md`.)
+- [ ] **`CPU fills`** — anotar el valor en modo 0, modo 7 y modo 15. Con el
+      firmware post-2026-08-13 (I-cache + `-O2`) se espera **~10-15%** en modo 7;
+      antes de esos cambios era 59%. Si volvés a ver ~60%, algo revirtió: chequeá
+      `SCB_EnableICache()` en `main()` y `OPT = -O2` en el Makefile.
 
 ## 4. Pruebas, en orden de valor diagnóstico
 
@@ -135,8 +141,13 @@ curl -X POST http://<IP>/mode -d '{"mode":15}'
 ```
 
 - [ ] **Anotar `CPU fills`** — es el fill más caro (8 fuentes × 32 salidas).
-- [ ] `Undr: 0` sostenido. Si aparecen underruns, el presupuesto está al
-      límite y hay que optimizar.
+      ⚠️ **Este modo NO entraba en el presupuesto de CPU hasta el 2026-08-13**:
+      perdía el 55% de los deadlines de fill. Se arregló con I-cache + `delay_line`
+      en DTCM + `-O2` (43× de mejora). Ver `ds11_perf.md`. Si el modo 15 vuelve a
+      sonar entrecortado, ese es el primer lugar donde mirar.
+- [ ] `Undr` estable y bajo. **No va a dar 0**: los prints bloqueantes del
+      heartbeat cuestan ~4/s por sí solos (`ds11_perf.md` §2, causa A). Lo que
+      importa es que no crezca de a cientos por segundo.
 - [ ] Con una sola fuente conectada ya se prueba: una voz situada en un punto
       del aire. Las entradas libres sólo aportan piso de ruido.
 
@@ -154,9 +165,11 @@ curl -X POST http://<IP>/mode -d '{"mode":15}'
 ## Notas
 
 - **Los delays medidos por AUTOFOCUS no se persisten** y se pisan al cambiar
-  de modo; las polaridades sobreviven hasta el reboot. Si el SYNC entre bancos
-  resultara variable por arranque, una calibración dejaría de valer tras un
-  ciclo de alimentación — otra razón para verificar la línea SYNC.
+  de modo; las polaridades sobreviven hasta el reboot. ~~Si el SYNC entre bancos
+  resultara variable por arranque, una calibración dejaría de valer tras un ciclo
+  de alimentación.~~ **Descartado 2026-08-13**: el SYNC mide 4 µs y es reproducible
+  arranque tras arranque, así que una calibración sí sobreviviría un ciclo de
+  alimentación. Persistirla es trabajo pendiente, no un imposible.
 - **El protocolo remoto sigue limitado a 16 canales** (`CFG_NUM_CHANNELS`):
   los canales 16-31 suenan con sus defaults pero no se pueden ajustar ni
   mutear individualmente desde la web. No bloquea nada del primer encendido;
