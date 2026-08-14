@@ -71,10 +71,10 @@ prefijo `[STM32]`.
       que los cuatro `HAL_SAI_Transmit_DMA` sigan consecutivos y sin prints en
       el medio. (Ver `ds11_perf.md` §1 y "Sincronismo entre bancos" en
       `manual_modos.md`.)
-- [ ] **`CPU fills`** — anotar el valor en modo 0, modo 7 y modo 15. Con el
-      firmware post-2026-08-13 (I-cache + `-O2`) se espera **~10-15%** en modo 7;
-      antes de esos cambios era 59%. Si volvés a ver ~60%, algo revirtió: chequeá
-      `SCB_EnableICache()` en `main()` y `OPT = -O2` en el Makefile.
+- [x] **`CPU fills`** — ✅ **medido en soak de 19,6 h (2026-08-14): 26,6% en modo 7**
+      (`Fill avg = 668 µs`), contra 59,2% antes de los cambios de I-cache/`-O2`.
+      Si volvés a ver ~60%, algo revirtió: chequeá `SCB_EnableICache()` en `main()`
+      y `OPT = -O2` en el Makefile. Falta anotar el valor en **modo 15**.
 
 ## 4. Pruebas, en orden de valor diagnóstico
 

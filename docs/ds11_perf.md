@@ -242,9 +242,51 @@ RAM_D2 como no-cacheable (o Write-Through) antes de habilitarlo, para que los
 buffers DMA no requieran mantenimiento manual. No es urgente ahora que el modo 15
 entra.
 
-### `CPU fills` exacto post-cambios
+---
 
-No se pudo leer: el puerto serie no estaba disponible durante la sesión. La
-estimación por underruns es sólida, pero conviene anotar el número real del
-heartbeat en modo 7 y en modo 15 la próxima vez que el monitor esté abierto.
-Esperado: modo 7 alrededor de **10-15%** (era 59%).
+## 6. Soak test de 19,6 horas (2026-08-14) — números reales
+
+Log de UART7 tras **70511 s (19,6 h)** de operación continua en modo 7, sin tocar
+nada. Acá están los valores exactos que no se pudieron leer el día de los cambios.
+
+| métrica | antes (`-Og`, sin caché) | después | factor |
+|---|---|---|---|
+| `Fill` min/avg/max | 1492 / 1493 / 1531 µs | **668 / 668 / 670 µs** | **2,23×** |
+| ciclos por muestra de salida | 186,7 | **83,6** | |
+| `CPU fills` | 59,2% | **26,6%** | |
+| `SYNC bancos` | 4 µs (2038 cyc) | **1 µs (839 cyc)** | |
+| latencia total del pipeline | 11493 µs | **10668 µs** | −0,8 ms |
+| `Jitter range` | 86 cyc (0 µs) | 580 cyc (**1 µs**) | |
+| `Temp` | 35,1-37,5 °C | 38,4-39,8 °C | |
+| underruns por 60 s | 277-320 | **156-180** | |
+
+> ⚠️ **Corrección a la estimación previa.** Este documento decía "esperado
+> 10-15%". El valor real es **26,6%**. La ganancia fue **2,23×**, no los 4-6× que
+> sugería esa estimación. No cambia ninguna conclusión —el modo 15 entra con
+> margen— pero el número a usar de acá en adelante es 26,6%.
+
+### Lo importante no es la velocidad: es la estabilidad
+
+- **`Err: 0` a lo largo de 1156 ciclos de 60 s (19,3 h).** Cero errores de SAI.
+- **Temperatura estable** en 38-40 °C durante todo el soak. Sube ~3 °C respecto de
+  antes de los cambios, y está a 85 °C del máximo del H743. Irrelevante.
+- **`SYNC bancos` constante** en 839 ± 6 ciclos las 19 horas (un solo outlier de
+  1179). El sincronismo entre bancos no deriva con el tiempo ni con la temperatura.
+- **`RXdma=100/s` y `OVF=0`** sostenidos: el AK5538 capturó sin interrupción.
+- **Link al ESP32 vivo** todo el soak (155 KB acumulados de tramas de status).
+
+Es un soak test aprobado. Es la evidencia que hacía falta antes de pensar en una
+instalación que tenga que quedar prendida sola.
+
+El `SYNC` mejoró de 4 µs a 1 µs como efecto secundario: con el código más rápido,
+los cuatro `HAL_SAI_Transmit_DMA` del arranque caen más juntos todavía.
+
+El jitter subió de 0 a 1 µs. Sobre un período de 20 ms eso es 0,005% — está en el
+ruido de la medición, no es una regresión que importe.
+
+### Underruns residuales — confirmada la causa A
+
+La firma es exactamente la predicha por los prints bloqueantes: **+2 por segundo**,
+y **+8 en el segundo donde cae el bloque `verbose`** (cada 10 s). Antes eran +4 y
++10; bajó porque con los fills más rápidos el main loop recupera más rápido tras el
+bloqueo. Sigue sin ser un problema del pipeline de audio.
