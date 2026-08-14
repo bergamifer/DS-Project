@@ -1,10 +1,59 @@
-# Comandos y Referencias - DS9 Beamforming
+# Comandos y Referencias - DS11 Beamforming (32 canales)
+
+> Lo de más abajo que dice "DS9" es histórico. Lo vigente está en esta sección.
 
 ## Checklist al iniciar sesion
 
-- [ ] Conectar ST-Link (SWD)
+- [ ] Conectar ST-Link (SWD). ⚠️ **Cortar el pin 1 del cable** (3V3 sin Schottky
+      → colapsa el dongle, ver `docs/ds11_errata.md`).
 - [ ] **Si vas a usar ESP32 UART: desconectar ST-Link serial** (contención en PA0/PA1)
-- [ ] Abrir minicom en terminal separada
+- [ ] Fuente a **19-20 V** (NO 24 V) y con **límite de corriente holgado** — un
+      límite bajo hace reiniciar la placa al arrancar los amps.
+- [ ] Abrir el monitor serie en terminal separada
+
+---
+
+## DS11 — Control por HTTP (lo que más se usa)
+
+```bash
+IP=192.168.100.64        # cambia; sale en la línea "ESP:" del heartbeat
+
+curl -s http://$IP/status                                   # telemetría completa
+curl -X POST http://$IP/amps   -d '{"on":true}'             # ⚠️ arrancan APAGADOS
+curl -X POST http://$IP/mode   -d '{"mode":1}'              # 0..15
+curl -X POST http://$IP/volume -d '{"db":-24}'              # 0..-63, ≤-64 mute
+
+# Foco TX (mm, relativo al centro del array; fy enfoca desde DS11)
+curl -X POST http://$IP/beam -d '{"type":"tx","fx":0,"fy":-300,"fz":1000}'
+
+# Foco de UNA fuente del MULTIFOCUS (src 0-7)
+curl -X POST http://$IP/beam -d '{"type":"mf","src":2,"fx":600,"fy":0,"fz":1000}'
+```
+
+**Los amps arrancan apagados** desde el incidente de brown-out: sin `POST /amps`
+la placa está muda aunque todo el pipeline corra. Sirve como herramienta de
+diagnóstico — si algo reinicia con amps ON y no con OFF, es alimentación.
+
+### Modos (16)
+
+| # | modo | | # | modo |
+|---|---|---|---|---|
+| 0 | Monitor ADC | | 8-11 | RX beam / AUTOFOCUS |
+| 1 | **Channel walker** (1 s/ch, 32 s la vuelta) | | 12-13 | Tono enfocado |
+| 2-7 | Tonos / TX focus | | 14 | MULTIFOCUS tonos |
+| | | | 15 | **MULTIFOCUS 8 entradas** (la intervención) |
+
+### Qué mirar en el heartbeat
+
+```
+[Ns] Half: 50/s, Full: 50/s, Err: 0, Undr: N, ... | ESP: <IP>
+     SYNC bancos: 1 us (839 cyc) | CPU fills: 26.6%
+```
+
+- `Err: 0` — lo único que de verdad tiene que ser cero.
+- `SYNC bancos` ~1 µs. Si da **ms**, los bancos se desincronizaron.
+- `CPU fills` ~26,6% en modo 7. Si volvés a ver ~60%, revirtió el I-cache o el `-O2`.
+- `Undr` sube ~2/s **siempre**: son los prints bloqueantes, no el audio.
 
 ---
 
@@ -45,7 +94,7 @@ ls /dev/cu.usb*
 # Para salir de minicom: Ctrl+A luego X
 ```
 
-## Debug Serial SCREEN (UART) <- el que estamos usando en DS10
+## Debug Serial SCREEN (UART) <- el que estamos usando en DS11
 
 screen /dev/cu.usbmodem11102 115200
 
