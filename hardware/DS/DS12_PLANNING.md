@@ -37,6 +37,37 @@ hizo perder horas creyendo que había un corto. Mitigación en DS11: **cortar el
 del cable**. Para DS12: **Schottky en serie en el pin 1**, igual que el D11 del pin 10.
 Detalle en [../../docs/ds11_errata.md](../../docs/ds11_errata.md).
 
+### 2d. JSPK09 y JSPK10 están cruzados en el esquemático — corregir
+Confirmado en el netlist (`DS.txt`) y **verificado en la placa física el 2026-08-14**:
+Fernando tuvo que intercambiar los dos cables a mano para que el channel walker
+recorriera la matriz en orden.
+
+Todos los conectores toman grupos consecutivos de 4 ferrites de salida, **salvo
+estos dos**:
+
+| conector | ferrites | amplificadores |
+|---|---|---|
+| JSPK07 | FB24-27 | |
+| JSPK08 | FB28-31 | |
+| **JSPK09** | **FB36-39** | **U28, U29** ← |
+| **JSPK10** | **FB32-35** | **U26, U27** ← |
+| JSPK11 | FB40-43 | |
+| JSPK12 | FB44-47 | |
+
+En términos de canal: VC (U1/DAC2, SAI2_A ch16-23) manda ch1-2→JSPK10 y
+ch3-4→JSPK09.
+
+**Ojo con el historial**: esto se detectó en el análisis de netlist del
+2026-07-02, **antes de fabricar**, y se cerró en
+[DS11_PLANNING.md](DS11_PLANNING.md) §143 como *"RESUELTO POR DISEÑO"* porque se
+decidió absorberlo en el orden del arnés. La decisión era legítima, pero la
+convención del arnés no quedó escrita en ningún lugar que se cruzara al momento
+de armar — así que en la práctica costó una sesión de debug igual.
+
+**Para DS12: corregirlo en el esquemático.** Es gratis, y elimina una trampa que
+se paga cada vez que alguien arma un arnés nuevo. Si por alguna razón se decide
+mantenerlo, tiene que estar **serigrafiado en la placa**, no sólo en un doc.
+
 ### 2c. Regenerar gerbers CON refill de zonas — regla de proceso
 La tirada entera de DS11 salió con **dos cortocircuitos de cobre** porque los gerbers se
 plotearon con los rellenos de zona desactualizados. No es un cambio de PCB: es una regla
@@ -86,10 +117,56 @@ fábrica) que se puede soldar sólo en las placas de laboratorio.
   "USE ONE" o similar. Dos fuentes en paralelo por el mismo net es un problema.
 - Costo: un footprint THT y un pad extra. DNP = cero costo en la tirada de producción.
 
+### 6c. Sensor de temperatura ambiente → corregir la velocidad del sonido
+Pedido de Fernando (2026-08-14). Hoy el firmware usa
+`SPEED_OF_SOUND_MM_S = 343000.0f` hardcodeado, que corresponde a **~20 °C**.
+
+La física: `c ≈ 331,3 + 0,606·T` m/s → **+0,18% por °C**.
+
+**Cuánto importa realmente** (vale la pena tenerlo antes de gastar un footprint):
+lo que gobierna el enfoque no es el delay absoluto sino el **diferencial** entre
+elementos. Para un foco a 1 m, el elemento de esquina (300, 240 mm) está a
+1071 mm contra 1000 mm del centro → **71 mm ≈ 208 µs** de diferencial máximo.
+
+| ΔT respecto de 20 °C | error en el diferencial | fase a 2 kHz | fase a 8 kHz |
+|---|---|---|---|
+| 10 °C | 3,7 µs | 2,7° | 10,7° |
+| 30 °C (exterior) | 11 µs | 8° | 32° |
+
+O sea: **para uso en interior el efecto es de segundo orden** (a 2 kHz, 2,7° de
+error no mueve el foco de forma audible). Empieza a importar en instalaciones a
+la intemperie con swing grande de temperatura, y sobre todo en la parte alta del
+espectro.
+
+**Recomendación**: el 80% del beneficio no necesita hardware nuevo — alcanza con
+**exponer la velocidad del sonido como parámetro de runtime** por HTTP y cargarla
+a mano según la temperatura del lugar. El sensor sólo compra la automatización.
+
+⚠️ **No se puede usar el sensor interno del STM32 como proxy**: mide temperatura
+de juntura y corre 15-20 °C por encima del ambiente (en el soak marcaba 39-44 °C
+con la sala a ~22 °C).
+
+Si igual se pone sensor, conviene uno I2C de bajo costo lejos de los rieles de
+potencia y del disipador del buck. Y sirve además para vigilancia térmica de una
+instalación desatendida, que es un argumento independiente y quizás más fuerte
+que el acústico.
+
 ### 6. RN5/RN6 y arrays en general → considerar discretas
 Ya hubo que reemplazar RN1-4 (62Ω sin stock) por 16 discretas de 75Ω. RN5/RN6 (C1980,
 4.7k array) siguen siendo arrays. Para DS12, evaluar discretas de entrada: menos riesgo
 de rotación en JLCPCB y de quiebres de stock. (Trade-off: área.)
+
+### 7. Serial number: la etiqueta salió con "JLCJLCJLCJLC" literal
+En la tirada de DS11 se puso el placeholder de JLCPCB pero **no lo reemplazaron por
+un número de serie** — quedó el texto literal impreso. Puede ser un error de
+configuración del pedido (el servicio de serialización suele ser un add-on que hay
+que tildar explícitamente, aparte de poner el marcador en la serigrafía).
+
+**Para DS12**: al armar el pedido, verificar en el preview de JLCPCB que el campo
+del marcador aparezca resuelto y no como literal. Si el servicio de serialización
+no está disponible o encarece, la alternativa es **dejar un recuadro serigrafiado
+vacío** y numerar a mano con marcador indeleble o etiqueta — que para tiradas de 5
+a 10 placas es más barato y no depende del proveedor.
 
 ---
 

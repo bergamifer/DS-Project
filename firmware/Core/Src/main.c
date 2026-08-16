@@ -543,6 +543,7 @@ static void MX_TIM3_Init(void);
 static int32_t Read_CPU_Temperature(void);
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset);
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
+static void Service_Fills(void);
 static void UART_Print(const char *str);
 static void Print_DMA_Config(void);
 static void Beam_UpdateDelays(int16_t az_deg);
@@ -564,6 +565,133 @@ static void Cal_Process(void);
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
+
+/**
+ * @brief Servicia todos los fills pendientes (RX del ADC + los 4 bancos TX).
+ *
+ * Extraido del main loop para poder llamarlo TAMBIEN desde UART_Print mientras
+ * espera al UART. Un heartbeat de ~238 chars a 115200 bloquea ~20 ms, mas que el
+ * deadline de 10 ms del fill, y cada deadline perdido es un medio buffer repetido
+ * en los 32 canales a la vez = un pop audible una vez por segundo. Con esto el
+ * print deja de robarle tiempo al audio.
+ *
+ * El guard de reentrada es defensivo: hoy ningun fill imprime, pero si alguno lo
+ * hiciera en el futuro esto evita la recursion en vez de desbordar el stack.
+ */
+/* Override del hook de eeprom_config.c: durante los ~12 ms que bloquea un
+ * guardado, seguir sirviendo los fills en vez de dejar morir los deadlines. */
+void EEPROM_Yield(void) { Service_Fills(); }
+
+static void Service_Fills(void) {
+  static volatile uint8_t in_service = 0;
+  if (in_service) return;
+  in_service = 1;
+
+  // ===== Deferred buffer fill: beamform from delay line =====
+  // ISR sets flag, we process here in main context.
+  //
+  // SAI3_B RX must run BEFORE the 4 TX fills below: all 4 TX groups read
+  // delay_write_pos independently, so if RX advanced it between two TX
+  // fills within the same pass, those groups would read different time
+  // windows — a phase skew across DAC banks that's silent in passthrough
+  // (delay=0) but would break beamforming once real per-channel delays
+  // are in use. Processing RX first makes wp stable for the rest of
+  // this loop iteration, so all 4 TX fills see the same snapshot.
+  if (rx_3b_first_half_ready) {
+    rx_3b_first_half_ready = 0;
+    __DSB();
+    Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
+  }
+  if (rx_3b_second_half_ready) {
+    rx_3b_second_half_ready = 0;
+    __DSB();
+    Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
+  }
+
+  // SAI1_A: channels 0-7
+  if (need_fill_first_half) {
+    need_fill_first_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0);
+    __DSB();
+    uint32_t dt = DWT->CYCCNT - t0;
+    if (dt < fill_min_cycles) fill_min_cycles = dt;
+    if (dt > fill_max_cycles) fill_max_cycles = dt;
+    fill_sum_cycles += dt;
+    fill_all_cycles += dt;
+    fill_sample_count++;
+  }
+  if (need_fill_second_half) {
+    need_fill_second_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 0);
+    __DSB();
+    uint32_t dt = DWT->CYCCNT - t0;
+    if (dt < fill_min_cycles) fill_min_cycles = dt;
+    if (dt > fill_max_cycles) fill_max_cycles = dt;
+    fill_sum_cycles += dt;
+    fill_all_cycles += dt;
+    fill_sample_count++;
+  }
+
+  // SAI1_B: channels 8-15 (DAC1 U3)
+  if (need_fill_1b_first_half) {
+    need_fill_1b_first_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_1b[0], AUDIO_BUFFER_SAMPLES, 8);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+  if (need_fill_1b_second_half) {
+    need_fill_1b_second_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_1b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 8);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+
+  // SAI2_A: channels 16-23 (DAC2 U1)
+  if (need_fill_2a_first_half) {
+    need_fill_2a_first_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+  if (need_fill_2a_second_half) {
+    need_fill_2a_second_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+
+  // SAI2_B: channels 24-31 (DAC3 U4)
+  if (need_fill_2b_first_half) {
+    need_fill_2b_first_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+  if (need_fill_2b_second_half) {
+    need_fill_2b_second_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+
+  in_service = 0;
+}
 
 /**
   * @brief  The application entry point.
@@ -953,108 +1081,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-    // ===== Deferred buffer fill: beamform from delay line =====
-    // ISR sets flag, we process here in main context.
-    //
-    // SAI3_B RX must run BEFORE the 4 TX fills below: all 4 TX groups read
-    // delay_write_pos independently, so if RX advanced it between two TX
-    // fills within the same pass, those groups would read different time
-    // windows — a phase skew across DAC banks that's silent in passthrough
-    // (delay=0) but would break beamforming once real per-channel delays
-    // are in use. Processing RX first makes wp stable for the rest of
-    // this loop iteration, so all 4 TX fills see the same snapshot.
-    if (rx_3b_first_half_ready) {
-      rx_3b_first_half_ready = 0;
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
-    }
-    if (rx_3b_second_half_ready) {
-      rx_3b_second_half_ready = 0;
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
-    }
-
-    // SAI1_A: channels 0-7
-    if (need_fill_first_half) {
-      need_fill_first_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0);
-      __DSB();
-      uint32_t dt = DWT->CYCCNT - t0;
-      if (dt < fill_min_cycles) fill_min_cycles = dt;
-      if (dt > fill_max_cycles) fill_max_cycles = dt;
-      fill_sum_cycles += dt;
-      fill_all_cycles += dt;
-      fill_sample_count++;
-    }
-    if (need_fill_second_half) {
-      need_fill_second_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 0);
-      __DSB();
-      uint32_t dt = DWT->CYCCNT - t0;
-      if (dt < fill_min_cycles) fill_min_cycles = dt;
-      if (dt > fill_max_cycles) fill_max_cycles = dt;
-      fill_sum_cycles += dt;
-      fill_all_cycles += dt;
-      fill_sample_count++;
-    }
-
-    // SAI1_B: channels 8-15 (DAC1 U3)
-    if (need_fill_1b_first_half) {
-      need_fill_1b_first_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer_1b[0], AUDIO_BUFFER_SAMPLES, 8);
-      __DSB();
-      fill_all_cycles += DWT->CYCCNT - t0;
-    }
-    if (need_fill_1b_second_half) {
-      need_fill_1b_second_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer_1b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 8);
-      __DSB();
-      fill_all_cycles += DWT->CYCCNT - t0;
-    }
-
-    // SAI2_A: channels 16-23 (DAC2 U1)
-    if (need_fill_2a_first_half) {
-      need_fill_2a_first_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
-      __DSB();
-      fill_all_cycles += DWT->CYCCNT - t0;
-    }
-    if (need_fill_2a_second_half) {
-      need_fill_2a_second_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
-      __DSB();
-      fill_all_cycles += DWT->CYCCNT - t0;
-    }
-
-    // SAI2_B: channels 24-31 (DAC3 U4)
-    if (need_fill_2b_first_half) {
-      need_fill_2b_first_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
-      __DSB();
-      fill_all_cycles += DWT->CYCCNT - t0;
-    }
-    if (need_fill_2b_second_half) {
-      need_fill_2b_second_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
-      __DSB();
-      fill_all_cycles += DWT->CYCCNT - t0;
-    }
+    Service_Fills();
 
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
     if (autofocus_enabled) Cal_Process();
@@ -2176,7 +2203,24 @@ static void MX_GPIO_Init(void)
  *        UART4 (PA0/PA1) stays reserved for the ESP32 binary protocol.
  */
 static void UART_Print(const char *str) {
-  HAL_UART_Transmit(&huart7, (uint8_t*)str, strlen(str), 100);
+  /* TX byte a byte, atendiendo los fills pendientes mientras se espera el TXE.
+   *
+   * Antes esto era un HAL_UART_Transmit bloqueante. A 115200 cada carácter son
+   * ~87 µs, así que el heartbeat (~238 chars) bloqueaba el main loop ~20 ms —
+   * el DOBLE del deadline de 10 ms del fill. Cada deadline perdido hace que el
+   * DMA reemita medio buffer viejo en los 32 canales a la vez: un salto de fase
+   * audible como un "pop", una vez por segundo, y más fuerte cada 10 s cuando
+   * sale el bloque verbose. Medido en el modo 12 (tono enfocado) el 2026-08-14.
+   *
+   * Ahora el tiempo muerto entre carácter y carácter se usa para servir los
+   * fills. La consola se ve igual: que la UART quede idle unos µs de más entre
+   * bytes no corrompe nada, sólo espacia los caracteres. */
+  while (*str) {
+    while (!(huart7.Instance->ISR & USART_ISR_TXE_TXFNF)) {
+      Service_Fills();
+    }
+    huart7.Instance->TDR = (uint8_t)*str++;
+  }
 }
 
 /**

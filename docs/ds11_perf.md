@@ -223,17 +223,43 @@ el audio sea correcto**. Hay que escuchar:
 Si algo suena mal, revertir es una línea (`OPT = -Og` en `firmware/Makefile`) y el
 problema queda acotado a un bug de `volatile` que vale la pena encontrar igual.
 
-### Underruns residuales — los prints bloqueantes
+### ✅ Underruns residuales — RESUELTO (2026-08-14): eran audibles
 
-Los ~14 por 20 s que quedan en modo 7 son la causa A. Opciones, de menor a mayor
-esfuerzo:
+Fernando escuchó **"un pedito cada vez que se imprime el serial"** en modo 12. Eso
+cerró el caso: los underruns no eran un contador feo, eran **audio corrupto**. Cada
+uno es medio buffer reemitido en los 32 canales a la vez = un salto de fase de
+10 ms, que en un tono continuo se oye como un pop.
 
-1. **Subir UART7 a 921600** — una línea. 238 chars pasan de 20,7 ms a 2,6 ms, que
-   entra cómodo en el slack de un ciclo de 10 ms. Hay que cambiar el `screen` a
-   921600 (ver `Mis-comandos.md`).
-2. **`UART_Print` por DMA o interrupción** — el arreglo correcto; necesita un buffer
-   de TX y decidir qué hacer si se llena.
-3. Bajar la cadencia del heartbeat a cada 5 s.
+Este documento decía que la causa A "no es un problema del pipeline de audio". Era
+cierto sobre la **causa** y falso sobre la **consecuencia**.
+
+Había tres bloqueos, todos por encima del deadline de 10 ms:
+
+| bloqueo | duración | underruns |
+|---|---|---|
+| heartbeat (~238 chars @115200) | ~20 ms | +2/s |
+| bloque `Fill/Jitter/Temp` (cada 10 s) | ~18 ms extra | +8 |
+| `EEPROM: Saving config` (2 páginas) | ~12 ms | +12 |
+
+**El arreglo: usar el tiempo muerto en vez de acortarlo.**
+
+1. El despacho de fills salió del main loop a **`Service_Fills()`** (con guard de
+   reentrada, defensivo por si algún fill imprime en el futuro).
+2. **`UART_Print` dejó de ser `HAL_UART_Transmit`**: ahora manda byte a byte y, en
+   los ~87 µs que espera el TXE de cada carácter, llama a `Service_Fills()`. Que la
+   UART quede idle unos µs de más entre bytes no corrompe nada — sólo espacia los
+   caracteres, y la consola se ve igual.
+3. La EEPROM usa un hook **`EEPROM_Yield()`** (`__weak` en `eeprom_config.c`,
+   redefinido en `main.c`) en lugar del `HAL_Delay(6)` del ciclo de escritura. El
+   chip tarda lo mismo; la diferencia es que el MCU ya no se queda mirando.
+
+**Resultado medido: `underruns = 0` sostenido**, tanto en modo 12 como en modo 15
+(el fill más caro), y sin un solo deadline perdido durante un guardado de EEPROM.
+Confirmado a oído: el pop desapareció.
+
+Esto además **saca del backlog subir UART7 a 921600** — ya no hace falta. Y es lo
+que vuelve al instrumento apto para una instalación: con un pop por segundo no lo
+era.
 
 ### D-cache
 

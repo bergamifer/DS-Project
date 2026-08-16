@@ -29,6 +29,15 @@ typedef enum {
  * @brief Initialize I2C3 peripheral + detect EEPROM
  * @return HAL_OK if I2C3 init succeeded (EEPROM may or may not be present)
  */
+/**
+ * @brief Hook llamado mientras la EEPROM completa su ciclo de escritura.
+ *
+ * Por defecto no hace nada (definición __weak). main.c la redefine para servir
+ * los fills de audio pendientes: sin eso, los ~12 ms que bloquea un guardado
+ * se comen deadlines de fill y producen un "pop" en los 32 canales.
+ */
+void EEPROM_Yield(void);
+
 HAL_StatusTypeDef EEPROM_Init(void);
 
 /**
