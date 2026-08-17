@@ -261,6 +261,55 @@ Esto además **saca del backlog subir UART7 a 921600** — ya no hace falta. Y e
 que vuelve al instrumento apto para una instalación: con un pop por segundo no lo
 era.
 
+### 🔴 El presupuesto de latencia real — completo (2026-08-16)
+
+Leyendo los datasheets del AK5538 y del PCM1690 aparecieron los dos términos que
+faltaban. **El `Total pipeline` que imprime el heartbeat subestima la latencia
+real en ~1 ms**, porque sólo cuenta buffer + fill:
+
+| término | valor | ¿se puede bajar? |
+|---|---|---|
+| **Buffer (480 muestras)** | **10000 µs** | ✅ **sí — es el 88 %** |
+| Fill | 668 µs | ya optimizado (era 1493) |
+| Group delay del ADC (AK5538) | 396 → **104 µs** | ✅ hecho (`R04=0x02`) |
+| Group delay del DAC (PCM1690) | **583 µs** | ❌ **fijo** |
+| **TOTAL real** | **11,6 → 11,4 ms** | |
+
+**El DAC no se puede mejorar**: el PCM1690 da 28/fs de group delay con nuestro
+SCKI de 512 fs. La opción de 19/fs existe sólo con SCKI de 128 fs o 192 fs, y
+esas frecuencias romperían el modo single-rate de 8 canales que necesitamos
+(ver [pcm1690_ref.md](pcm1690_ref.md) y el descubrimiento #26 del histórico).
+**583 µs es un piso del hardware.**
+
+Por lo tanto **la única palanca que queda es el buffer**, que son 10 de los
+11,4 ms. Ver la sección siguiente.
+
+### Bajar el buffer de 480 a 240 muestras — la optimización grande pendiente
+
+Ahorraría **5 ms**: la latencia total pasaría de 11,4 ms a **6,4 ms (−44 %)**.
+
+**Ahora es viable**: con la CPU al 26,6 % hay lugar para el overhead extra de
+duplicar la tasa de callbacks (estimado: subiría a ~30 %). Con el 59 % de antes
+no lo era.
+
+**Pero tiene un prerrequisito bloqueante.** El deadline de fill pasaría de 10 ms a
+**5 ms**, y hoy hay una operación que no entra:
+
+> `UART_Protocol_SendStatus()` usa `HAL_UART_Transmit` **bloqueante**: 54 bytes a
+> 115200 = **~4,7 ms**. Entra bajo un deadline de 10 ms; **no entra bajo uno de 5 ms**.
+> Cada `GET /status` produciría underruns — o sea pops, como los de agosto.
+
+**Secuencia correcta** (requiere hardware en banco):
+
+1. Aplicar a `UART_Protocol_SendStatus` el mismo tratamiento que a `UART_Print`:
+   mandar byte a byte sirviendo `Service_Fills()` en la espera. Los ACK/NACK
+   también bloquean, aunque son tramas cortas.
+2. Verificar con `/status` en bucle que `Undr` sigue en 0 **con el buffer actual**.
+3. Recién ahí bajar `AUDIO_BUFFER_SAMPLES` a 240 y volver a medir CPU y underruns.
+
+No hacerlo a ciegas: cambia el timing del DMA, la tasa de callbacks y el deadline
+a la vez. Es exactamente el tipo de cambio que hay que medir, no razonar.
+
 ### D-cache
 
 El otro factor ~2-3 que queda sobre la mesa. Necesita configurar la MPU para marcar

@@ -747,3 +747,48 @@ Tj = 25°C + 16.3°C = 41.3°C  ← Bien dentro del rango
 **Documento:** PCM1690 Configuration Reference
 **Última actualización:** 2026-01-23
 **Versión:** 1.0
+
+---
+
+## Datos del datasheet relevantes para DS11 (2026-08-16)
+
+> Fuente: `datasheets/pcm1690.pdf` (SBAS448B, rev. agosto 2015), §6.6-6.7.
+
+### Group delay: 583 µs, y es un piso del hardware
+
+| SCKI | group delay (single/dual) |
+|---|---|
+| **512 fs ← el nuestro** | **28/fs = 583 µs @48 kHz** |
+| 128 fs y 192 fs | 19/fs = 396 µs |
+
+La opción más rápida exige SCKI de 128 o 192 fs, pero **necesitamos 512 fs** para
+que el PCM1690 auto-detecte single-rate y acepte los 8 canales por DIN1 (ver el
+descubrimiento #26: con 256 fs entra en dual-rate y los canales 5-8 se van a DIN2,
+que no está conectado). Así que **583 µs es fijo** y es el término de latencia más
+grande después del buffer. Anotado en [ds11_perf.md](ds11_perf.md).
+
+### Consumo: los 4 DACs son el mayor consumidor estático de la placa
+
+| | típico | máximo |
+|---|---|---|
+| ICC (5 V) por chip | 74 mA | 110 mA |
+| IDD (3,3 V) por chip | 57 mA | 90 mA |
+| **Disipación por chip** | **558 mW** | 847 mW |
+| **× 4 chips** | **2,23 W** | 3,39 W |
+
+Son el **14 % del presupuesto total del buck (15,45 W)** sin producir sonido —
+más que los 32 PAM8302A en reposo juntos (0,66 W). Detalle completo en
+[presupuesto_potencia.md](presupuesto_potencia.md).
+
+En full power-down el consumo cae a 170 µA + 60 µA por chip, pero eso requiere
+parar SCKI/BCK/LRCK, o sea que no sirve como control de mute en operación.
+
+### Otros datos útiles
+
+- **Salida diferencial: 1,6 × VCC1 Vpp**, centrada en 0,5 × VCC1. Con VCC1 = 5 V
+  son 8 Vpp diferenciales centrados en 2,5 V.
+- **Impedancia de carga mínima**: 5 kΩ con acople AC, 15 kΩ con acople DC.
+- **Separación entre canales: 109 dB** @48 kHz — no es un limitante para el
+  beamforming.
+- **THD+N típico −94 dB**, rango dinámico 113 dB.
+- Rango de temperatura: −40 a +85 °C (grado consumer).
