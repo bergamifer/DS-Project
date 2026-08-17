@@ -924,18 +924,45 @@ int main(void)
     HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
     v = 0x40;  // Control2: TDM[1:0]=10 → TDM256
     HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+    /* Control3 (0x04): [DP][0][0][0][0][0][SD][SLOW]
+     * SD=1 → SHORT DELAY, SLOW=0 → sharp roll-off  →  R04 = 0x02.
+     *
+     * Baja el group delay del filtro de diezmado de 19/fs a 5/fs = de 396 µs a
+     * 104 µs a 48 kHz (datasheet §9, fs=48k). **Los 292 µs son gratis**: el
+     * passband (22 kHz) y la atenuación de stopband (85 dB) son IDÉNTICOS entre
+     * SHARP y SHORT DELAY SHARP; lo único que cambia es que el filtro deja de
+     * ser de fase lineal (ΔGD pasa de 0 a 2.8/fs máx.).
+     *
+     * Por qué esa distorsión de fase NO afecta al beamforming: el filtro es el
+     * mismo en los 8 canales, así que es un retardo COMÚN. El patrón del haz lo
+     * fijan los delays RELATIVOS que aplica el STM32, que no se tocan. Sólo
+     * afecta marginalmente al timbre.
+     *
+     * El registro manda sobre el strapping: la placa tiene los pines SD y SLOW a
+     * GND (IC3.48, IC3.47), pero el datasheet §"Operation Mode Control" dice que
+     * "in serial control mode, register settings are prioritized so that all pin
+     * settings except the MSN pin setting are ignored", y estamos en modo I2C
+     * (I2C=H en IC3.54, PSN=L en IC3.53). El readback de abajo lo verifica. */
+    v = 0x02;
+    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x04, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
     v = 0x01;  // RSTN=1 — release (stable MCLK/BICK/LRCK already running)
     HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
     HAL_Delay(5);
 
     // Readback verify R01-R03
-    uint8_t r1 = 0xEE, r2 = 0xEE, r3 = 0xEE;
+    uint8_t r1 = 0xEE, r2 = 0xEE, r3 = 0xEE, r4 = 0xEE;
     HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &r1, 1, 50);
     HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &r2, 1, 50);
     HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &r3, 1, 50);
-    sprintf(uart_buf, "  readback R01=0x%02X R02=0x%02X R03=0x%02X (want R02=0x31 R03=0x40)\r\n",
-            r1, r2, r3);
+    HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x04, I2C_MEMADD_SIZE_8BIT, &r4, 1, 50);
+    sprintf(uart_buf,
+            "  readback R01=0x%02X R02=0x%02X R03=0x%02X R04=0x%02X"
+            " (want R02=0x31 R03=0x40 R04=0x02)\r\n", r1, r2, r3, r4);
     UART_Print(uart_buf);
+    /* R04=0x02 confirma que el registro pisó al strapping de los pines SD/SLOW
+     * → group delay del ADC = 5/fs = 104 µs en vez de 19/fs = 396 µs.
+     * Si lee 0x00, el chip está ignorando el registro: revisar que I2C=H y
+     * PSN=L, y volver a contar los 396 µs en el presupuesto de latencia. */
   }
 
   // === STEP 3: PCM1690 init (shared RST/MUTE bus, DS10 style) ===

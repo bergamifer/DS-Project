@@ -175,18 +175,56 @@ Dentro de cada cable, los pines van así:
   no va a funcionar (no se rompe, simplemente no se escucha nada). Si hay que usar
   micrófono, tiene que pasar antes por una interfaz o preamplificador.
 
-### 💡 Un detalle técnico que conviene saber
+### ⚠️ Los cables tienen que ser dedicados — no sirve un cable de red común
 
-De los 4 canales de cada cable, **sólo el 1 y el 4 caen sobre pares realmente
-trenzados** de un cable de red estándar. Los canales 2 y 3 usan pines que en un
-cable común pertenecen a pares distintos.
+Un cable de red trae **4 pares de cables trenzados**, y el trenzado es lo que
+cancela el ruido. El problema es que **la placa agrupa los pines de una forma y el
+cable estándar los trenza de otra**:
 
-**Qué implica**: en tiradas largas de cable, las entradas 2 y 3 van a tomar algo
-más de ruido y de interferencia entre canales.
+| | pares que agrupa |
+|---|---|
+| **La placa DS11** | (1,2) (3,4) (5,6) (7,8) |
+| **Un cable de red estándar** (T568B) | (1,2) (3,6) (4,5) (7,8) |
 
-**Qué hacer**: para los cables más largos o las señales más delicadas, **usar las
-entradas 1 y 4** de cada conector. En tiradas cortas (pocos metros) no se nota.
-Está anotado para corregir en la próxima versión de la placa.
+Coinciden en dos y no coinciden en dos. Resultado: con un cable común, **las
+entradas 2 y 3 de cada conector viajan por dos pares distintos** y pierden la
+cancelación de ruido. Funcionan, pero toman más zumbido e interferencia del canal
+vecino — y eso empeora cuanto más largo es el cable.
+
+### ✅ La solución: cables armados a medida
+
+Se arreglan **completamente** armando los cables, sin tocar la placa. La receta es
+un cable T568B normal **con dos conductores intercambiados**:
+
+```
+        pin      T568B normal        CABLE DS  ← usar este
+        ───────────────────────────────────────────────────
+         1       blanco/naranja      blanco/naranja
+         2       naranja             naranja
+         3       blanco/verde        blanco/verde
+         4       azul            →   verde          ← cambia
+         5       blanco/azul         blanco/azul
+         6       verde           →   azul           ← cambia
+         7       blanco/marrón       blanco/marrón
+         8       marrón              marrón
+```
+
+**Sólo se intercambian los conductores de los pines 4 y 6**, y hay que hacerlo
+**igual en las dos puntas**. Así el cable sigue siendo pin-a-pin (1→1, 2→2, …), o
+sea que cada señal llega donde tiene que llegar, pero ahora **los cuatro canales
+viajan sobre pares realmente trenzados**.
+
+⚠️ **Etiquetar estos cables.** Por fuera son idénticos a un cable de red y no lo
+son. Conviene ponerles una funda de color o una etiqueta tipo **"DS AUDIO — NO ES
+RED"**. Nada se rompe si se confunden, pero se pierde media hora buscando un
+zumbido que no existe.
+
+> **Si no hay cables a medida a mano**: usar sólo las **entradas 1 y 4** de cada
+> conector, que son las que sí caen sobre pares trenzados en un cable estándar.
+> Se pierden la mitad de los canales pero funciona bien.
+
+En tiradas cortas —dos o tres metros sobre una mesa— con cualquier cable alcanza.
+Esto importa cuando los cables cruzan una sala.
 
 ---
 
