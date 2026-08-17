@@ -1,6 +1,6 @@
-# DS10 — GPIO Control y Señales de Sistema
+# DS11 — GPIO Control y Señales de Sistema
 
-**Placa:** DS10 (STM32H743VIT6)
+**Placa:** DS11 (STM32H743VIT6) — GPIO idéntico a DS10
 **Última revisión:** Abril 2026 — reescrito para DS10
 
 > **Cambio mayor DS9→DS10:** DS9 tenía 12 pines GPIO de control por-chip para los 4 PCM1690 (RST×4, AMUTEI×4, AMUTEO×4). DS10 simplifica a un bus compartido de 3 señales. PCM1802 (ADC 2ch) reemplazado por AK5538VN (ADC 8ch) con su propia señal PDN.
@@ -205,4 +205,4 @@ Para minimizar consumo y EMI, los pines sin función se configuran como Analog:
 ---
 
 *DS10 GPIO Control — Abril 2026*
-*Ver [ds10_pin_map.md](ds10_pin_map.md) para mapa completo de todos los pines*
+*Ver [pin_map.md](pin_map.md) para mapa completo de todos los pines*

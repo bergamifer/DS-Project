@@ -1,6 +1,6 @@
-# DS10 Board Pin Map — STM32H743VIT6 LQFP100
+# DS10/DS11 Board Pin Map — STM32H743VIT6 LQFP100
 
-> **Hardware:** DS10 PCB (STM32H743VIT6 + AK5538VN + 4×PCM1690 + 32×PAM8302A + ESP32-C3-Mini)
+> **Hardware:** DS10 y DS11 PCB (pinout idéntico, verificado en el netlist DS11) (STM32H743VIT6 + AK5538VN + 4×PCM1690 + 32×PAM8302A + ESP32-C3-Mini)
 > **Netlist verificado:** 2026-04-02 (574 nets — DS10_DESIGN_REVIEW.md)
 > **Fuente de verdad en código:** `firmware/Core/Inc/pin_definitions.h`
 

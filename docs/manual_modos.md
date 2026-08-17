@@ -1,7 +1,27 @@
 # Manual de modos de operación — DS11 (firmware STM32)
 
 > Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (16 modos, índices 0–15).
-> Última actualización: 2026-07-12.
+> Última actualización: 2026-08-16.
+>
+> **¿Primera vez con el equipo?** Empezá por [guia_operacion.md](guia_operacion.md),
+> que explica el conexionado y el encendido en lenguaje llano. Este manual asume
+> que la placa ya está andando.
+
+## ⚠️ Antes que nada: los amplificadores arrancan APAGADOS
+
+Desde el incidente de brown-out del 2026-08-04, el pin SD de los 32 PAM8302A
+**no** se habilita solo al final del boot. Ningún modo suena hasta que se los
+enciende:
+
+```bash
+curl -X POST http://<IP>/amps -d '{"on":true}'     # encender
+curl -X POST http://<IP>/amps -d '{"on":false}'    # apagar (botón de pánico)
+```
+
+Además de evitar el tirón de corriente, es la herramienta que separa limpio dos
+hipótesis: si algo reinicia con amps ON y no con OFF, **es alimentación**; si
+reinicia igual con OFF, hay que buscar en otro lado. Con los amps apagados corre
+todo el pipeline —SAI, DMA, beamforming, los 4 bancos— en silencio absoluto.
 
 ## Cómo se cambia de modo
 
@@ -165,7 +185,7 @@ heartbeat = nivel en el foco. Para re-escanear, salir y volver a entrar.
 Generador de tono **interno** (−6 dBFS) que se escribe en `beam_line` en las
 mismas posiciones/cadencia que el RX beam, así el path de TX steering corre
 **sin cambios** (delays fraccionales Q8, gains, signos). Plan de diseño:
-`docs/ds10_tone_beam_plan.md`.
+los modos 12-13 de `manual_modos.md`.
 
 - Acumulador de fase Q16 sobre la tabla de seno de 48 muestras con
   interpolación lineal → el delay sigue siendo un delay de TIEMPO real a
@@ -250,6 +270,7 @@ lugares distintos, simultáneamente.
 
 | Control | Vía | Efecto |
 |---------|-----|--------|
+| **Amplificadores** | `POST /amps {"on":true}` → `CMD_SET_AMPS` (0x0A) | Enable del banco de 32 PAM8302A (pin SD, PD3). **Arranca en 0** — sin esto no suena nada. No se persiste: cada boot arranca apagado. |
 | **Volumen maestro** | `POST /volume {"db":-20}` → `CMD_SET_VOLUME` | **Único maestro**: atenuación del PCM1690 (0…−63 dB, ≤−64 = mute), 0.5 dB/paso. Se persiste en EEPROM (debounce 3 s). Default −24 dB. |
 | **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (52 bytes) | mute_global, gains/delays/mutes de los primeros 16 canales. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
 | **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32; `type:"mf"` con `src` 0-7 — re-apunta el foco de UNA fuente MULTIFOCUS (tonos del 14 o entradas del 15, según el modo activo). No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
@@ -265,12 +286,22 @@ lugares distintos, simultáneamente.
     tiempo distintas y el enfoque vertical no es coherente — ver la sección
     "Sincronismo entre bancos" abajo.
   - **CPU** = fracción del presupuesto (480M ciclos/s) gastada en los 4 fills.
-    El valor que importa es en modo 15, que es el fill más caro.
+    **Valor de referencia medido (2026-08-14, soak de 19,6 h): 26,6% en modo 7**,
+    con `Fill avg = 668 µs`. Si volvés a ver ~60%, revirtió el I-cache o el `-O2`
+    (ver `ds11_perf.md`). El valor en modo 15, el fill más caro, sigue sin anotarse.
 - `ADCpk: c0..c7 | OVF RXdma=100/s` — picos de entrada + liveness del DMA RX.
 - `BEAM az=<az> pk=` — solo en modos beam.
 - Cada 10 s (verbose): estadísticas de fill (µs) **de SAI1_A solamente**,
   jitter y temperatura del CPU. Para el costo total usar la línea CPU.
 - Reporte de test completo cada 60 s con PASS/FAIL del pipeline.
+
+**Sobre `Undr` (underruns)**: hasta el 2026-08-14 subía ~2/s de forma constante y
+eso era **audible** — un "pop" por segundo, y uno más fuerte cada 10 s. La causa
+eran los prints bloqueantes y el guardado de EEPROM, que superaban el deadline de
+10 ms del fill. Se corrigió haciendo que `UART_Print` y el ciclo de escritura de la
+EEPROM **sirvan los fills mientras esperan** (`Service_Fills()` / `EEPROM_Yield()`).
+**Ahora el valor esperado es 0 sostenido.** Si vuelve a subir, algo bloquea el main
+loop más de 10 ms y se va a escuchar.
 
 ## Sincronismo entre bancos (crítico desde DS11)
 
@@ -290,8 +321,13 @@ difieren en 480 muestras → **hasta ~10 ms (3,4 m de camino acústico) de
 offset entre las filas 0-1 y las filas 2-3**.
 
 **Regla firme**: los cuatro `HAL_SAI_Transmit_DMA` del arranque van
-**consecutivos, sin nada en el medio** — en particular sin `UART_Print`, que
-es bloqueante (~3,6 ms para 41 caracteres a 115200). Los prints van después.
-Verificar siempre con la línea `SYNC` del heartbeat.
+**consecutivos, sin nada en el medio** — en particular sin `UART_Print`. Los
+prints van después. Verificar siempre con la línea `SYNC` del heartbeat.
+
+**✅ Medido (2026-08-14): 4 µs al principio, 1 µs (839 ciclos) tras las
+optimizaciones, y estable arranque tras arranque a lo largo de 19,6 h.** Son 1,4 mm
+de camino acústico contra un pitch de 80 mm entre parlantes: irrelevante. La regla
+funcionó y el riesgo está cerrado. Como el offset es reproducible, una calibración
+de AUTOFOCUS **sí sobreviviría** un ciclo de alimentación.
 
 En DS10 esto era invisible porque sólo estaba poblado un banco (U2).

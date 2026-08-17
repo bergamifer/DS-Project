@@ -1,6 +1,6 @@
 # DS11 — Recomendaciones de Upgrade (placa de producción)
 
-**Base:** hallazgos del bring-up DS10 ([ds10_bringup_findings.md](ds10_bringup_findings.md))
+**Base:** hallazgos del bring-up DS10 ([ds10_bringup_findings.md](historico/ds10_bringup_findings.md))
 **Criterio:** DS11 es candidata a placa de producción — debe salir funcionando sin bodges ni sorpresas.
 **Última revisión:** 2026-07-02 (agregada revisión de netlist DS11 con Fable — ver sección siguiente)
 
@@ -192,4 +192,4 @@ DAC de nuevo a 0dB.
 ---
 
 *Recomendaciones DS11 v1.0 — derivadas del bring-up DS10 (mayo-junio 2026)*
-*Ver [ds10_bringup_findings.md](ds10_bringup_findings.md) para el detalle de cada hallazgo*
+*Ver [ds10_bringup_findings.md](historico/ds10_bringup_findings.md) para el detalle de cada hallazgo*

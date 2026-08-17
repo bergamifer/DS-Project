@@ -243,7 +243,7 @@ static const ui_state_t ui_states[] = {
   { .name = "AUTOFOCUS scan (mic->ADC c0)",  .af = 1 },
   // Internal tone → beam_line → the TX steering path runs UNCHANGED (Q8
   // fractional delays, gains, signs): directionality validation with no mic
-  // on the board (docs/ds10_tone_beam_plan.md). DS11: las 4 filas pobladas →
+  // on the board (docs/historico (plan implementado: modos 12-13)). DS11: las 4 filas pobladas →
   // fy=0 (centro del array); en DS10 iba a -240 para apuntar al plano de la
   // única fila poblada. Ahora la apertura vertical (480mm) también enfoca.
   // 2kHz spot @1m: ±14cm; 1kHz: ±27cm (ratio ~2 is the self-validating
@@ -297,7 +297,7 @@ static volatile uint8_t beam_out_shift = 5;
 static volatile uint8_t  tone_enabled = 0;
 static volatile uint16_t tone_freq_hz = 2000;
 static uint32_t tone_phase_q16 = 0;
-/* Dither de frecuencia (Fase B, docs/ds10_tone_beam_plan.md): triángulo ±5%
+/* Dither de frecuencia (Fase B, docs/historico (plan implementado: modos 12-13)): triángulo ±5%
  * a ~3Hz alrededor de tone_base_hz. El haz es de retardos puros (banda ancha)
  * → no cambia; los modos de la sala se promedian y la medición se estabiliza.
  * El acumulador de fase de Tone_NextSample es continuo → sin clicks. La
@@ -2557,7 +2557,7 @@ static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
   if (req->type == 1) {
     /* El tono interno se PRESERVA a propósito: steerear el foco del tono
      * (modos 12/13 + POST /beam type=tx) es el protocolo de medición
-     * mic-fijo/foco-móvil (docs/ds10_next_steps.md §A). */
+     * mic-fijo/foco-móvil (docs/protocolo_medicion.md §A). */
     tx_steer_enabled = 1;
     Beam_UpdateDelays(0);                 // RX source: broadside
     Beam_UpdateTxFocus(req->fx_mm, req->fy_mm, req->fz_mm);

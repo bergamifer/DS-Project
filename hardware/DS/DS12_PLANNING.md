@@ -156,6 +156,40 @@ Ya hubo que reemplazar RN1-4 (62Ω sin stock) por 16 discretas de 75Ω. RN5/RN6 
 4.7k array) siguen siendo arrays. Para DS12, evaluar discretas de entrada: menos riesgo
 de rotación en JLCPCB y de quiebres de stock. (Trade-off: área.)
 
+### 6d. Pinout de J9: 2 de cada 4 canales NO caen sobre pares trenzados
+Detectado el 2026-08-16 trazando el netlist para escribir la guía de operación.
+
+La placa empareja los pines del RJ45 de forma **consecutiva**:
+
+| pines J9 | entrada | cap de acople | AK5538 |
+|---|---|---|---|
+| 1(+), 2(−) | 1 | C309/C308 | AIN1P/N |
+| 3(+), 4(−) | 2 | C307/C306 | AIN2P/N |
+| 5(+), 6(−) | 3 | C305/C304 | AIN3P/N |
+| 7(+), 8(−) | 4 | C303/C302 | AIN4P/N |
+
+(y las entradas 5-8 igual, en los jacks 3/4 — pines 25-32 / 37-44.)
+
+Pero **un cable de red estándar (T568A/B) trenza los pares (1,2), (3,6), (4,5),
+(7,8)**. O sea:
+
+- entrada 1 = pines 1,2 → ✅ es un par trenzado real
+- entrada 2 = pines 3,4 → ❌ pin 3 es del par verde, pin 4 del azul
+- entrada 3 = pines 5,6 → ❌ pin 5 es del azul, pin 6 del verde
+- entrada 4 = pines 7,8 → ✅ es un par trenzado real
+
+**Consecuencia**: en las entradas 2 y 3 la señal diferencial viaja por dos pares
+distintos → se pierde el rechazo de modo común y sube la diafonía. Con tiradas
+cortas no se nota; con cables largos sí, y justo esas entradas son las que van a
+llevar señal de programa en la intervención de 8 canales.
+
+**Para DS12**: remapear a **(1,2) / (3,6) / (4,5) / (7,8)** para que las cuatro
+entradas caigan sobre pares trenzados reales. Es sólo ruteo, cero costo de BOM.
+
+**Mientras tanto (DS11)**: usar las **entradas 1 y 4** de cada jack para las
+tiradas más largas o las señales más delicadas. Anotado en
+[../../docs/guia_operacion.md](../../docs/guia_operacion.md) §5.
+
 ### 7. Serial number: la etiqueta salió con "JLCJLCJLCJLC" literal
 En la tirada de DS11 se puso el placeholder de JLCPCB pero **no lo reemplazaron por
 un número de serie** — quedó el texto literal impreso. Puede ser un error de

@@ -9,11 +9,11 @@ Control via WiFi (HTTP), pipeline DMA circular, latencia ~20ms extremo a extremo
 > desde el repo `DS` original. Un solo lugar para firmware (STM32 + ESP32) y diseño
 > de PCB (DS9-DS11).
 
-> **Placa activa: DS10** (en bring-up, junio 2026). DS9 quedó como histórico.
-> Estado completo del bring-up: [docs/ds10_bringup_findings.md](docs/ds10_bringup_findings.md).
-> Recomendaciones para la placa de producción: [docs/ds11_upgrades.md](docs/ds11_upgrades.md).
-> Roadmap de beamforming (Fases 0-4, implementadas en `feature/beamforming`):
-> [docs/beamforming_roadmap.md](docs/beamforming_roadmap.md).
+> **Placa activa: DS11** (32 canales, en operación desde agosto 2026). DS9 y DS10 son históricos.
+> **¿Primera vez con el equipo? Empezá por la [guía de uso y conexionado](docs/guia_operacion.md)** —
+> está escrita en lenguaje llano, sin dar por sabido nada de audio ni de electrónica.
+> Reporte del ciclo DS11: [docs/reporte_2026-08.md](docs/reporte_2026-08.md).
+> Manual de los 16 modos: [docs/manual_modos.md](docs/manual_modos.md).
 
 ---
 
@@ -90,7 +90,7 @@ Fill_Audio_Beamform()   <- per-channel: delay[0-64] / gain[0-255] / mute
 | SAI3_B | Master RX TDM256 | PD8(SCK) PD9(SD) PD10(FS) — AF6 | ADC 8ch | DMA1_S4 req114 |
 | PE2 | MCLK out (24.576 MHz) | SAI1_MCLK_A — AF6 | — | — |
 
-Mapa completo de pines: [docs/ds10_pin_map.md](docs/ds10_pin_map.md).
+Mapa completo de pines: [docs/pin_map.md](docs/pin_map.md).
 
 ---
 
@@ -151,17 +151,20 @@ firmware_esp32c3/               # ESP32-C3 firmware
   main/main.c                   # WiFi + HTTP + UART bridge + UI web embebida (fase 4)
 docs/
   reporte_2026-07.md            # REPORTE: camino recorrido y registro de decisiones
-  beamforming_roadmap.md        # Fases 0-4 del beamforming (todas implementadas)
-  ds10_bringup_findings.md      # Registro completo del bring-up DS10 (8 hallazgos)
+  reporte_2026-08.md            # REPORTE: bring-up DS11 (cortos, performance, soak)
+  guia_operacion.md             # GUIA DE USO: conexionado y flasheo, lenguaje llano
+  manual_modos.md               # Los 16 modos de operacion, uno por uno
   ds11_upgrades.md              # Hallazgos y racional de la revision DS11 (netlist)
-  ds10_pin_map.md               # Mapa completo de pines DS10
+  pin_map.md                    # Mapa completo de pines (DS10/DS11 — idéntico)
   audio_architecture.md         # Arquitectura de audio
   ak5538vn_ref.md               # Referencia AK5538VN ADC (config CKS+TDM verificada)
   pcm1690_ref.md                # Referencia PCM1690 DAC
   gpio_control.md               # Control GPIO (DAC RST/MUTE, amps, ADC)
-  DS_Hardware_Map_v2.md         # Mapa de hardware (única copia — la de hardware/DS es puntero)
   memory_map.md                 # Layout de RAM del H743 (regla DMA vs DTCM)
-  historico/                    # DS9: pin audit, pin map, PCM1802, esquemático PDF
+  ds11_errata.md                # Los dos cortos de fabrica de la tirada DS11
+  ds11_perf.md                  # Performance del pipeline (caches, -O2, soak 19,6 h)
+  protocolo_medicion.md         # Metodologia de medicion acustica (mic fijo, foco movil)
+  historico/                    # DS10 bring-up + esquematico DS9
 stm32/                          # Referencia RM0433 (clocks, SAI, DMA, I2C, GPIO)
 webserver/                      # Control web multi-dispositivo (Flask + SQLite) — ver su README
 sitio/                          # Página pública del proyecto (HTML autocontenido, fuente del artifact)

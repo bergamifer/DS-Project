@@ -85,7 +85,7 @@ cd firmware && make flash
 
 ```bash
 # Monitor serial ST-Link (UART7, PA8/PA15)
-minicom -D /dev/tty.usbmodem1102 -b 115200
+minicom -D /dev/tty.usbmodem21102 -b 115200
 
 # Buscar puertos serie
 ls /dev/tty.usb*
@@ -189,8 +189,8 @@ ESP32 GPIO1 (RX) ──── PA0 (STM32 UART4 TX)   ← firmware: STM32_UART_RX
 | `firmware/Core/Src/epaper.c` | Driver SSD1681 e-paper |
 | `firmware/STM32H743XX_FLASH.ld` | Linker script (.dma_buffer → RAM_D2) |
 | `firmware/Makefile` | Build config (TARGET=ds11_beamforming) |
-| `docs/historico/ds9_pin_audit.md` | Errores SAI en PCB DS9 y workarounds |
-| `docs/DS_Hardware_Map_v2.md` | Mapa completo de pines DS9 |
+| `docs/pin_map.md` | Mapa completo de pines (DS10/DS11) |
+| `docs/guia_operacion.md` | Guía de uso y conexionado (lenguaje no técnico) |
 
 
 curl -X POST http://192.168.100.44/command \

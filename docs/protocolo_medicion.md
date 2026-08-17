@@ -1,8 +1,12 @@
-# DS10 — Mediciones de mañana + backlog de implementación
+# Protocolo de medición acústica del enfoque
 
-> Escrito 2026-07-10. Contexto: primer encendido con 8 parlantes (fila 1 / U2). El walker
-> validó el mapeo (ch0-7 = izq→der). Al reproducir tono se oyeron nodos de sala pero no se
-> encontró el foco concreto → casi seguro los **modos propios de la sala** tapan el foco.
+> **Metodología, no bitácora.** Nació el 2026-07-10 para la DS10 (8 parlantes, array
+> lineal) y sigue vigente para DS11 (32 parlantes, array 2D) — lo que cambia son los
+> números, no el método.
+>
+> El principio central —**mic fijo, mover el foco**— es lo más importante de este
+> documento: es lo que separa medir el haz de medir la sala. Los resultados de julio
+> quedan como referencia de qué esperar.
 
 ---
 

@@ -224,7 +224,7 @@ Para cada footprint nuevo: verificar pin 1 y dimensiones contra datasheet, agreg
 - [ ] Al llegar la DS11: `WALKER_NUM_CH` y `CAL_NUM_CH` de 8 → 32; correr **channel walker**
       para validar mapeo+polaridad real; **AUTOFOCUS** mide TOF y polaridad por parlante.
 - [ ] PE12 pasa de ANALOG a salida GPIO (driver de los LEDs RJ45) — cambio de una línea en
-      el init, anotado en [docs/beamforming_roadmap.md](../../docs/beamforming_roadmap.md).
+      el init, anotado en `docs/ds11_perf.md`.
 
 ---
 

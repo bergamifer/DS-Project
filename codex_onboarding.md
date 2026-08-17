@@ -41,7 +41,7 @@ LEÉ ESTOS ARCHIVOS, EN ESTE ORDEN:
 2. docs/ds11_upgrades.md       — revisión de hardware DS11, riesgos conocidos
 3. firmware/Core/Src/main.c    — TODO el firmware STM32 (~3200 líneas)
 4. firmware/Core/Inc/uart_protocol.h — protocolo binario con el ESP32
-5. docs/ds10_next_steps.md     — plan de mediciones + backlog + bugs históricos
+5. docs/protocolo_medicion.md — metodología de medición acústica (mic fijo, foco móvil)
 6. git show 3d7d6d6            — el cambio a DS11 sin probar
 
 RESTRICCIONES REALES DEL SISTEMA (violarlas rompe el audio):

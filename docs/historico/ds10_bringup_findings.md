@@ -120,7 +120,7 @@ Detectado en revisión de código antes del primer flash: el firmware tenía la 
 
 **Heartbeat verboso bloqueante:** el bloque de diagnóstico de cada 10º heartbeat (`Fill`/`Jitter`/`Temp`/`TXbuf`/`fills-per-SAI`/dumps hex de ADC) bloqueaba UART7 ~50ms → ~15 underruns espurios por bloque (ya documentado en el propio código como trade-off aceptado durante el bring-up). Los dumps de `TXbuf`/`fills-per-SAI`/hex ADC eran ayudas específicas para los bugs ya resueltos de "canales mudos" y "ADC raileado" — se eliminaron, dejando solo `Fill`/`Jitter`/`Temp`. Redujo el costo a ~4 underruns por bloque. El test automático de 60s (que exige `Underruns==0`) sigue marcando `TEST FAILED` por este residual, aunque `Err` y jitter (las métricas que importan) están perfectas — pendiente si se quiere 100% limpio: bajar la frecuencia del bloque de cada 10 a cada 30-60 heartbeats (UART7 no tiene canal DMA asignado, así que no puede hacerse no-bloqueante sin agregar config DMA nueva).
 
-**Roadmap de beamforming real:** a partir de esta revisión de arquitectura se armó un plan de fases (channel walker, RX delay-and-sum, TX steering por geometría, precisión sub-muestra, protocolo ESP32) documentado en [beamforming_roadmap.md](beamforming_roadmap.md).
+**Roadmap de beamforming real:** a partir de esta revisión de arquitectura se armó un plan de fases (channel walker, RX delay-and-sum, TX steering por geometría, precisión sub-muestra, protocolo ESP32) documentado en `beamforming_roadmap.md` (eliminado — todas las fases implementadas, ver `ds11_perf.md`).
 
 ---
 
