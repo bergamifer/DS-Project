@@ -26,7 +26,44 @@
 
 **Salida útil: 5,15 V × 3 A = 15,45 W** para *toda* la placa.
 
-### 🔴 Conviene bajar la tensión de entrada, no sólo alejarse de los 24 V
+### ⚠️ CORRECCIÓN (2026-08-16): 12 V sirve en banco, NO en daisy-chain
+
+> La recomendación de abajo se escribió mirando el buck **en aislamiento** e ignoró
+> la arquitectura del sistema. **Fernando señaló el problema: con distribución en
+> daisy-chain, bajar la tensión obliga a cables mucho más gruesos.** Tiene razón, y
+> los números lo confirman.
+
+A igual potencia, la corriente escala inverso a la tensión, y las pérdidas en el
+cable van con **I²R**. Para una cadena de 4 placas a plena carga (~17 W de entrada
+c/u) sobre 10 m de cable de 1,5 mm² (0,23 Ω ida y vuelta):
+
+| | corriente | caída | **pérdida en el cable** |
+|---|---|---|---|
+| **20 V** | 3,4 A | 0,79 V (4 %) | **2,7 W** |
+| **12 V** | 5,7 A | 1,33 V (11 %) | **7,6 W** |
+
+El buck ahorra ~0,3-0,6 W por placa al bajar de 19 V a 12 V — entre 1,2 y 2,4 W en
+las cuatro. **El cable pierde 4,9 W más.** O sea que a 12 V se pierde más en el
+cable de lo que se ahorra en los conversores: el balance da **negativo**.
+
+Es el mismo principio por el que las redes eléctricas distribuyen en alta tensión y
+bajan cerca del consumo. **Tensión alta para transportar, baja para convertir.**
+
+**Recomendación corregida:**
+
+| topología | tensión | por qué |
+|---|---|---|
+| **Una placa en banco**, cable corto | **12 V** | menos calor en el buck, más margen al máximo absoluto, cable irrelevante |
+| **Daisy-chain de varias placas** | **19-20 V** | el ahorro del buck no compensa el I²R del cable |
+
+Y el calor del buck a 19 V se relativiza: sólo supera el límite de disipación cerca
+de **2 A de salida**, y por el presupuesto de la sección 3 tampoco podemos sostener
+esa carga. **El problema térmico se auto-limita** por el mismo techo de potencia.
+
+Para DS12 esto refuerza el ítem del buck de mayor capacidad: uno más eficiente a
+entrada alta resuelve las dos cosas a la vez, sin obligar a elegir.
+
+### Conviene bajar la tensión de entrada, no sólo alejarse de los 24 V (⚠️ ver corrección arriba)
 
 La eficiencia del buck **empeora cuanto más alta es la entrada** (gráficos de
 Efficiency vs Output Current, VOUT = 5 V):
