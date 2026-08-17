@@ -578,9 +578,12 @@ static void Cal_Process(void);
  * El guard de reentrada es defensivo: hoy ningun fill imprime, pero si alguno lo
  * hiciera en el futuro esto evita la recursion en vez de desbordar el stack.
  */
-/* Override del hook de eeprom_config.c: durante los ~12 ms que bloquea un
- * guardado, seguir sirviendo los fills en vez de dejar morir los deadlines. */
-void EEPROM_Yield(void) { Service_Fills(); }
+/* Overrides de los hooks __weak de eeprom_config.c y uart_protocol.c: durante
+ * los ~12 ms de un guardado en EEPROM y los ~5,2 ms de una trama de status,
+ * seguir sirviendo los fills en vez de dejar morir los deadlines. Los tres
+ * bloqueos largos del sistema (print, EEPROM, status) quedan así cooperativos. */
+void EEPROM_Yield(void)        { Service_Fills(); }
+void UART_Protocol_Yield(void) { Service_Fills(); }
 
 static void Service_Fills(void) {
   static volatile uint8_t in_service = 0;
@@ -2532,9 +2535,21 @@ static uint8_t Apply_Master_Volume(int8_t db) {
     int16_t a = (db > 0) ? 0 : db;          // clamp positives to 0 dB
     atten = (uint8_t)(255 + a * 2);
   }
+  /* 32 escrituras I2C (4 DACs × 8 canales) a 100 kHz ≈ 300 µs cada una =
+   * **~9,6 ms de bloqueo**, justo en el borde del deadline de fill de 10 ms del
+   * buffer de 480 muestras. Con el de 240 (deadline 5 ms) se perderían dos
+   * deadlines seguros. Por eso se sirve el pipeline entre transacción y
+   * transacción: el I2C en sí dura ~300 µs, que entra en cualquier caso.
+   *
+   * Sin esto, cada cambio de volumen mete un pop en los 32 canales — el mismo
+   * mecanismo que los prints y la EEPROM antes del arreglo del 2026-08-14.
+   * Es seguro llamar Service_Fills() acá porque esta función corre sólo desde
+   * el main loop (ver el comentario de arriba), nunca desde una ISR. */
   for (uint32_t d = 0; d < 4; d++)
-    for (uint8_t ch = 1; ch <= 8; ch++)
+    for (uint8_t ch = 1; ch <= 8; ch++) {
       PCM1690_SetAttenuation(&hi2c1, dac_addrs[d], ch, atten);
+      Service_Fills();
+    }
   return atten;
 }
 

@@ -292,23 +292,49 @@ Ahorraría **5 ms**: la latencia total pasaría de 11,4 ms a **6,4 ms (−44 %)*
 duplicar la tasa de callbacks (estimado: subiría a ~30 %). Con el 59 % de antes
 no lo era.
 
-**Pero tiene un prerrequisito bloqueante.** El deadline de fill pasaría de 10 ms a
-**5 ms**, y hoy hay una operación que no entra:
+**Prerrequisitos: ✅ RESUELTOS (2026-08-16).** El deadline de fill pasa de 10 ms a
+**5 ms**, así que hubo que auditar todo lo que bloquea el main loop. Aparecieron
+**dos** operaciones que no entraban, no una:
 
-> `UART_Protocol_SendStatus()` usa `HAL_UART_Transmit` **bloqueante**: 54 bytes a
-> 115200 = **~4,7 ms**. Entra bajo un deadline de 10 ms; **no entra bajo uno de 5 ms**.
-> Cada `GET /status` produciría underruns — o sea pops, como los de agosto.
+| operación | bloqueo | ¿entraba en 10 ms? | ¿en 5 ms? | estado |
+|---|---|---|---|---|
+| `UART_Print` (heartbeat) | ~20 ms | ❌ | ❌ | ✅ resuelto 2026-08-14 |
+| `EEPROM_SaveConfig` | ~12 ms | ❌ | ❌ | ✅ resuelto 2026-08-14 |
+| `UART_Protocol_SendStatus` | ~5,2 ms | ✅ justo | ❌ | ✅ **resuelto ahora** |
+| **`Apply_Master_Volume`** | **~9,6 ms** | ⚠️ **al borde** | ❌ | ✅ **resuelto ahora** |
+| `send_ack` / `send_nack` | 434 µs | ✅ | ✅ | se deja bloqueante (ver abajo) |
+| `Cal_Process` (AUTOFOCUS) | troceado | ✅ | ✅ | ya era cooperativo |
 
-**Secuencia correcta** (requiere hardware en banco):
+> 🔴 **`Apply_Master_Volume` era un hallazgo no previsto**: hace **32 escrituras
+> I²C** (4 DACs × 8 canales) a 100 kHz ≈ 300 µs cada una = **~9,6 ms**. Estaba
+> justo en el borde del deadline actual, o sea que **cada cambio de volumen ya
+> venía metiendo un pop** en los 32 canales — con el buffer de 480. No se había
+> detectado porque los cambios de volumen son esporádicos y el pop se confundía
+> con el del heartbeat.
 
-1. Aplicar a `UART_Protocol_SendStatus` el mismo tratamiento que a `UART_Print`:
-   mandar byte a byte sirviendo `Service_Fills()` en la espera. Los ACK/NACK
-   también bloquean, aunque son tramas cortas.
-2. Verificar con `/status` en bucle que `Undr` sigue en 0 **con el buffer actual**.
-3. Recién ahí bajar `AUDIO_BUFFER_SAMPLES` a 240 y volver a medir CPU y underruns.
+Los ACK/NACK **se dejan bloqueantes a propósito**: se mandan desde el parser, que
+corre dentro de `HAL_UART_RxCpltCallback` — **contexto de ISR**, donde no se puede
+servir el pipeline (correr un fill de 668 µs dentro de una interrupción bloquearía
+todo lo demás). Son 5 bytes = 434 µs, que entra de sobra en ambos deadlines.
 
-No hacerlo a ciegas: cambia el timing del DMA, la tasa de callbacks y el deadline
-a la vez. Es exactamente el tipo de cambio que hay que medir, no razonar.
+El mecanismo es el mismo en los cuatro casos: **usar el tiempo muerto en vez de
+acortarlo**, vía hooks `__weak` (`EEPROM_Yield`, `UART_Protocol_Yield`) que `main.c`
+redefine para llamar a `Service_Fills()`, o llamándola directamente donde el código
+ya vive en `main.c`.
+
+### Cómo hacer el cambio, cuando haya hardware
+
+1. `AUDIO_BUFFER_SAMPLES` 480 → **240** en `main.c` (`ADC_BUFFER_SAMPLES` lo sigue
+   automáticamente).
+2. Verificar en el heartbeat: `Half`/`Full` pasan de 50/s a **100/s**, `CPU fills`
+   sube de 26,6 % a ~30 % (estimado), `Err` sigue en 0.
+3. `Undr` tiene que quedar en **0** — con `/status` en bucle y cambiando volumen,
+   que son los dos casos recién arreglados.
+4. La línea `Total pipeline` del log debería pasar de 10668 µs a **5668 µs**.
+
+Si aparecen underruns que no se explican por los cuatro bloqueos de la tabla, el
+sospechoso siguiente es el overhead de callbacks: al duplicar la tasa, el costo
+fijo por callback se paga el doble.
 
 ### D-cache
 

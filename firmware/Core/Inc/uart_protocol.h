@@ -147,7 +147,21 @@ uint8_t UART_Protocol_GetBeamRequest(ds_beam_req_t *req);
 uint8_t UART_Protocol_StatusRequested(void);
 
 /**
- * @brief Send a CMD_STATUS frame to the ESP32 (blocking, ~5ms @115200).
+ * @brief Hook llamado mientras SendStatus espera al UART.
+ *
+ * Por defecto no hace nada (definición __weak). main.c la redefine para servir
+ * los fills de audio pendientes. Sin eso, los ~5,2 ms que tarda la trama de
+ * status bloquean el main loop — tolerable con el buffer de 480 muestras
+ * (deadline 10 ms), inadmisible si se baja a 240 (deadline 5 ms).
+ */
+void UART_Protocol_Yield(void);
+
+/**
+ * @brief Send a CMD_STATUS frame to the ESP32.
+ *
+ * ~5,2 ms a 115200, pero NO bloquea el pipeline de audio: sirve los fills
+ * pendientes entre byte y byte vía UART_Protocol_Yield(). Llamar SOLO desde el
+ * main loop — nunca desde una ISR.
  */
 void UART_Protocol_SendStatus(const ds_status_t *st);
 

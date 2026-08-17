@@ -265,6 +265,10 @@ static void process_byte(uint8_t byte)
  * ACK / NACK responses
  * ============================================================ */
 
+/* Default no-op; main.c la redefine para servir los fills de audio mientras
+ * SendStatus espera al UART. Ver el comentario en UART_Protocol_SendStatus. */
+__weak void UART_Protocol_Yield(void) { }
+
 static void send_ack(void)
 {
     uint8_t ack[] = {PROTO_HEADER_1, PROTO_HEADER_2, CMD_ACK, PROTO_FOOTER_1, PROTO_FOOTER_2};
@@ -393,5 +397,24 @@ void UART_Protocol_SendStatus(const ds_status_t *st)
     frame[fi++] = x;
     frame[fi++] = PROTO_FOOTER_1;
     frame[fi++] = PROTO_FOOTER_2;
-    HAL_UART_Transmit(huart_esp, frame, fi, 50);
+
+    /* TX byte a byte atendiendo los fills de audio entre carácter y carácter.
+     *
+     * La trama de status son ~60 bytes = ~5,2 ms bloqueado a 115200. Eso entra
+     * bajo el deadline de fill de 10 ms del buffer de 480 muestras, pero **no
+     * entraría bajo uno de 5 ms** si se baja el buffer a 240 — cada GET /status
+     * produciría un pop, igual que los prints antes del arreglo del 2026-08-14.
+     * Con esto el cambio de buffer deja de estar bloqueado por acá.
+     *
+     * Sólo se puede hacer porque SendStatus se llama desde el MAIN LOOP
+     * (main.c, tras UART_Protocol_StatusRequested). Los ACK/NACK se mandan desde
+     * el parser, que corre dentro de HAL_UART_RxCpltCallback — contexto de ISR —
+     * y ahí NO se puede servir el pipeline: hay que dejarlos bloqueantes. Son 5
+     * bytes = 434 µs, que entra de sobra en cualquiera de los dos deadlines. */
+    for (uint16_t i = 0; i < fi; i++) {
+        while (!(huart_esp->Instance->ISR & USART_ISR_TXE_TXFNF)) {
+            UART_Protocol_Yield();
+        }
+        huart_esp->Instance->TDR = frame[i];
+    }
 }

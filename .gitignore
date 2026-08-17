@@ -108,3 +108,5 @@ __pycache__/
 ### Local secrets — WiFi credentials etc., NEVER commit (public repo) ###
 secrets.h
 firmware_esp32c3/main/secrets.h
+# Config personal de Claude Code (no compartir: rutas y permisos locales)
+.claude/settings.local.json
