@@ -1206,6 +1206,24 @@ int main(void)
        * tras remover C290 — ver docs/ds11_errata.md). */
       uint8_t amps_on;
       if (UART_Protocol_GetAmpsRequest(&amps_on)) {
+        if (amps_on) {
+          /* "on" SIEMPRE pasa por off primero — no es redundante.
+           *
+           * El PAM8302A tiene un UVLO ENCLAVADO: del datasheet, "when the supply
+           * voltage drops to 2.1 V or below, the PAM8302A goes into a state of
+           * shutdown, and the device comes out of its shutdown state by reset the
+           * power supply or SD pin". O sea que tras cualquier hundimiento del
+           * +5VA, los amps que hayan cruzado 2,1 V quedan MUDOS aunque SD siga
+           * alto — y como SD ya está en 1, un "amps on" no los recuperaría.
+           *
+           * El síntoma sería "se me murieron algunos canales" sin causa visible,
+           * que es exactamente el tipo de cosa que hace perder una tarde. Con el
+           * pulso, cualquier "amps on" sirve además como comando de recuperación.
+           *
+           * 2 ms alcanzan de sobra: el SD del PAM8302A responde en microsegundos. */
+          HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
+          HAL_Delay(2);
+        }
         HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN,
                           amps_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
         amps_enabled = amps_on;
@@ -1434,7 +1452,20 @@ int main(void)
         int32_t temp = Read_CPU_Temperature();
         if (temp != -999) {
           int32_t t_abs = temp >= 0 ? temp : -temp;
-          sprintf(uart_buf, "     Temp: %ld.%ld C\r\n", temp / 10, t_abs % 10);
+          /* Aviso térmico. A VOS0 (480 MHz) la T_J máxima es 105 °C, NO 125 —
+           * Table 113 del datasheet. Correr a 480 MHz cuesta 20 °C de margen, y
+           * estamos además en el máximo simultáneo de fCPU, HCLK y PCLK.
+           *
+           * El soak al aire libre dio 38-40 °C, o sea 65 °C de sobra. Pero esto
+           * va a terminar en una caja con 32 amplificadores adentro, y AN5036 §4.4
+           * advierte que la disipación CRECE con la temperatura de juntura: el
+           * calentamiento no es lineal, se realimenta. Por eso el aviso avisa
+           * temprano (85 °C) en vez de justo antes del límite. */
+          const char *warn = "";
+          if (temp >= 1000)     warn = "  <<< CRITICO: limite VOS0 = 105 C";
+          else if (temp >= 850) warn = "  <<< ALTO (limite VOS0 = 105 C)";
+          sprintf(uart_buf, "     Temp: %ld.%ld C%s\r\n",
+                  temp / 10, t_abs % 10, warn);
           UART_Print(uart_buf);
         }
 

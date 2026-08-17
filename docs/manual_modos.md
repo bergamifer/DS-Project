@@ -18,6 +18,13 @@ curl -X POST http://<IP>/amps -d '{"on":true}'     # encender
 curl -X POST http://<IP>/amps -d '{"on":false}'    # apagar (botón de pánico)
 ```
 
+> 💡 **`on` sirve además como comando de recuperación.** Desde 2026-08-17 siempre
+> pulsa SD a 0 y de vuelta a 1, aunque ya estuviera encendido. Es por el **UVLO
+> enclavado del PAM8302A**: tras cualquier hundimiento del +5VA, los amps que hayan
+> cruzado 2,1 V quedan mudos hasta que se cicle SD o la alimentación — y como SD ya
+> estaba alto, un "on" sin pulso no los recuperaba. Si alguna vez faltan canales sin
+> causa visible, mandá `amps on` antes de sospechar del hardware.
+
 Además de evitar el tirón de corriente, es la herramienta que separa limpio dos
 hipótesis: si algo reinicia con amps ON y no con OFF, **es alimentación**; si
 reinicia igual con OFF, hay que buscar en otro lado. Con los amps apagados corre
