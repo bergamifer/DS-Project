@@ -336,12 +336,76 @@ Si aparecen underruns que no se explican por los cuatro bloqueos de la tabla, el
 sospechoso siguiente es el overhead de callbacks: al duplicar la tasa, el costo
 fijo por callback se paga el doble.
 
-### D-cache
+### ❌ D-cache: SACADO DEL ROADMAP (2026-08-17)
 
-El otro factor ~2-3 que queda sobre la mesa. Necesita configurar la MPU para marcar
-RAM_D2 como no-cacheable (o Write-Through) antes de habilitarlo, para que los
-buffers DMA no requieran mantenimiento manual. No es urgente ahora que el modo 15
-entra.
+> **Corrección.** Este documento venía diciendo que el D-cache era "el otro factor
+> ~2-3 que queda sobre la mesa". **Es falso**, y AN4891 §5.2 lo dice explícito:
+>
+> > *"Enabling the cache allows the best performance to be reached for all memory
+> > accesses **except for TCM-RAMs for which there is no effect on Cortex-M7 access
+> > performance**."*
+>
+> **El D-cache no cachea la TCM.** Y desde que movimos `delay_line` a DTCM, los dos
+> arrays calientes del pipeline —`delay_line` y `beam_line`— **ya viven ahí**. O sea
+> que habilitar el D-cache **no tocaría ni una sola de las lecturas del lazo interno**.
+
+Lo único que quedaría por ganar son las **escrituras a `audio_buffer*` en RAM_D2** —
+que son justo los buffers que el DMA toca, o sea los que exigirían mantenimiento de
+caché en cada callback, con las erratas §2.1.1 (corrupción en write-through) y §2.1.5
+(store tras invalidate sin barrera) encima.
+
+**Riesgo alto, ganancia chica, sobre el único camino que no podemos permitirnos
+romper.** Queda descartado, no pospuesto.
+
+### ✅ Lo que AN4891 sí valida, y por una razón mejor que la que dimos
+
+Mover `delay_line` a DTCM fue correcto, pero el argumento bueno no era la velocidad:
+
+> *"For highest data storage access performance by the Cortex-M7, the best location
+> of R/W data is DTCM-RAM, since it is accessed **without latency with deterministic
+> accesses**. [...] The other RAM locations do not provide deterministic access when
+> cache is enabled **while still showing similar performance access as DTCM-RAM**."*
+
+O sea: con caché, las otras memorias rinden **parecido en promedio** — pero **sólo la
+DTCM es determinista**. En un pipeline con deadline duro de 10 ms (o 5 ms tras bajar
+el buffer), **el determinismo vale más que el promedio**: lo que nos rompe no es una
+latencia media alta, es un peor caso ocasional que se pasa del deadline.
+
+### 🔵 La palanca que sí queda: MDMA
+
+AN4891 describe **nuestro caso de uso con todas las letras** (§5.1 y §5.2):
+
+> *"Whenever possible, if the data is located in SRAM1, SRAM2 or SRAM3, the user can
+> copy it into the DTCM-RAM **using the MDMA** so that it is processed afterward by
+> the CPU with more determinism and better performance."*
+>
+> *"**Audio data frames** can be processed in DTCM-RAM by copying them from SRAM1,
+> SRAM2, or SRAM3 to DTCM-RAM using MDMA."*
+
+Hoy esa copia la hace la **CPU**: `Process_ADC_Half` mueve 480×8 muestras de
+`audio_buffer_3b_rx` (RAM_D2, vía AXI) a `delay_line` (DTCM), 100 veces por segundo.
+Son ~1,5 MB/s de copia desde memoria lenta, pagados en ciclos de CPU que podrían
+estar haciendo beamforming.
+
+Dos aplicaciones posibles, en orden de relación beneficio/riesgo:
+
+1. **Entrada (más simple)**: reemplazar la copia de `Process_ADC_Half` por MDMA.
+   ⚠️ No es una copia lineal — hace *deinterleave* (`rx_buf[i*8+ch] → delay_line[ch][…]`).
+   El MDMA soporta transferencias 2D/strided, así que es viable, pero hay que
+   configurarlo con cuidado y verificarlo.
+2. **Salida (más ganancia, más costo de RAM)**: llenar en un buffer de staging en
+   DTCM y que el MDMA lo copie a los `audio_buffer*` de RAM_D2. Eso dejaría el lazo
+   de fill **enteramente en DTCM, lecturas y escrituras a 0 wait states**.
+   ⚠️ Cuesta DTCM: 3840 muestras × 4 B = 15 KB por banco. Con ~68 KB libres entran
+   los 4 (61 KB) muy justo, o se reutiliza un solo staging secuencialmente.
+
+⚠️ **Gotcha documentado** (§5.2): *"In the case of concurrent accesses of MDMA and
+Cortex-M7 to the DTCM-RAM, the application speed can decrease if the Cortex-M7 does
+not have the highest priority access"* — se ajusta por `CM7_AHBSCR`. Hay que
+contemplarlo desde el principio, no descubrirlo midiendo.
+
+**Nada de esto se toca antes de que el buffer de 240 esté medido y estable.** Es la
+optimización *siguiente*, no una alternativa.
 
 ---
 
