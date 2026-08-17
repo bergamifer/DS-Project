@@ -749,6 +749,37 @@ int main(void)
 
   // Startup message
   UART_Print("\r\n=== DS11 Beamforming Audio (32ch) ===\r\n");
+
+  /* Revisión de silicio — NO es cosmético.
+   *
+   * Errata ES0392 §2.2.21: "VOS0 voltage scaling level is not available on
+   * silicon revision Y and W devices. This limits the maximum CPU frequency to
+   * 400 MHz." Workaround: usar revisión V o X.
+   *
+   * Este firmware configura VOS0 + 480 MHz. Sobre un chip revisión Y o W eso
+   * queda FUERA DE ESPECIFICACIÓN: la escritura de VOS0 no toma efecto y el
+   * core termina corriendo a 480 MHz con el voltaje de VOS1. La placa de banco
+   * aguantó 19,6 h con Err=0, lo que indica que su silicio es V o X — pero eso
+   * NO está garantizado para las demás placas de la tirada ni para tiradas
+   * futuras: JLCPCB puede entregar otro date code sin avisar.
+   *
+   * Por eso se imprime en cada arranque. Si alguna vez sale Y o W, hay que
+   * bajar a 400 MHz (PLL1 P=2 con N=160) antes de confiar en nada más. */
+  {
+    uint32_t rev = (DBGMCU->IDCODE >> 16) & 0xFFFFu;
+    const char *name, *verdict;
+    switch (rev) {
+      case 0x1001: name = "Z"; verdict = "!! SIN VOS0 — 480MHz FUERA DE SPEC"; break;
+      case 0x1003: name = "Y"; verdict = "!! SIN VOS0 — 480MHz FUERA DE SPEC"; break;
+      case 0x2001: name = "X"; verdict = "OK (VOS0 disponible)";               break;
+      case 0x2003: name = "V"; verdict = "OK (VOS0 disponible)";               break;
+      default:     name = "?"; verdict = "DESCONOCIDA — verificar ES0392";     break;
+    }
+    sprintf(uart_buf, "Silicio: rev %s (REV_ID=0x%04lX) — %s\r\n",
+            name, (unsigned long)rev, verdict);
+    UART_Print(uart_buf);
+  }
+
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("PLL3: 24.576MHz MCLK (512xfS) — MckOverSampling=ENABLE\r\n");
   UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");

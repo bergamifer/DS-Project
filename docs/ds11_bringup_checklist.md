@@ -47,6 +47,15 @@ Por UART7 (J7, 115200 8N1) o por el monitor del ESP32, que lo reenvía con
 prefijo `[STM32]`.
 
 - [ ] `=== DS11 Beamforming Audio (32ch) ===`
+- [ ] 🔴 **`Silicio: rev X` o `rev V`** — ES0392 §2.2.21 dice que **VOS0 no existe
+      en las revisiones Y y W**, que quedan limitadas a 400 MHz. Este firmware
+      configura **VOS0 + 480 MHz**: sobre un chip Y o W eso corre **fuera de
+      especificación** (la escritura de VOS0 no toma efecto y el core queda a
+      480 MHz con el voltaje de VOS1). Si el banner dice **Y, W o Z**, parar y
+      bajar a 400 MHz antes de seguir. La placa de banco aguantó 19,6 h con
+      `Err=0`, o sea que su silicio está bien — pero **JLCPCB puede entregar otro
+      date code en la próxima tirada sin avisar**, y por eso se verifica en cada
+      arranque.
 - [ ] `SAI DMA: 1B=OK 2B=OK 1A=OK 2A=OK` — los cuatro bloques arrancaron.
 - [ ] `PCM1690: 4/4 DACs initialized OK` ← **el número clave de DS11.** En
       DS10 era 4/4 también, pero sólo U2 sacaba audio (rework fallado). Acá
