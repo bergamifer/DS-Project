@@ -6,6 +6,63 @@
 
 ---
 
+> **Revisión cruzada 2026-08-17** (netlist + datasheets): apareció una tanda de
+> hallazgos nuevos, varios de ellos P0. Están abajo como ítems 0.x, antes que el
+> resto, porque **cambian decisiones de arquitectura** y conviene resolverlos antes
+> de tocar nada más. Los que involucran alimentación están verificados contra
+> `DS.txt` y el BOM de producción; el análisis completo, en `../../docs/presupuesto_potencia.md` §3bis.
+
+## 🔴 Prioridad 0 — decidir antes que nada
+
+### 0.1. Riel digital+analógico independiente del riel de amplificadores
+Hoy `+3V3` y `+3,3VA` cuelgan de `+5VA` por **FB2 (bead genérico) + D9 (SS34)**, que
+se comen ~0,5 V y dejan al AP1117-33 con ~250-350 mV sobre su dropout. **Esto explica
+el brown-out de agosto mejor que la falta de bulk**: no es energía almacenada, es
+margen de dropout en serie. Y de paso mete el riel del ADC aguas abajo de 32 amps
+class-D. **Solución: buck propio para el riel digital**, desde la entrada.
+
+### 0.2. El TVS: con 19-20 V y un buck de 26 V no existe solución
+El ítem 1 propone "TVS de standoff más bajo (SMBJ18/20A)". **No funciona**: lo que
+importa es el **VC (clamping)**, que en la familia SMBJ es ~1,6× el VRWM.
+
+| parte | VRWM | VC | ¿< 26 V? |
+|---|---|---|---|
+| SMBJ13A | 13 V | 21,5 V | sí |
+| SMBJ18A | 18 V | 29,2 V | **no** |
+| SMBJ20A | 20 V | 32,4 V | **no** |
+| SMBJ24A (actual) | 24 V | 38,9 V | no |
+
+Para clampear bajo 26 V hace falta VRWM ≤ 16 V, **por debajo del punto de operación**.
+Es geométricamente imposible. Las dos salidas coherentes:
+
+- **A**: sistema a 12 V + MP2315S + **SMBJ13A**. Sólo sirve para una placa sola (ver
+  la corrección de daisy-chain en `presupuesto_potencia.md` §1).
+- **B (recomendada)**: sistema a 19-24 V y **se elige el buck para que quepa sobre el
+  clamp del TVS**, no al revés. Con el SMBJ24A ya en BOM hace falta un buck de
+  **VIN abs max ≥ 42 V**. El TVS pasa de inútil a correcto sin cambiar de parte.
+
+En cualquier caso hace falta **impedancia serie** entre el conector y el TVS (el
+fusible del 0.4 sirve): un TVS colgado de una fuente de baja impedancia no coordina.
+
+### 0.3. Los amplificadores están limitados térmicamente antes que el buck
+El encapsulado es **MSOP-8 → θJA = 180 °C/W**. Con OTP a 120 °C y 40 °C de ambiente,
+cada PAM8302A sólo puede disipar **0,44 W** — que es exactamente lo que disipa dando
+sus 2,5 W nominales. **Un buck más grande no habilita la potencia plena**; eso exigiría
+migrar a `PAM8302AAYCR` (U-DFN3030, θJA 47,9) con pad térmico y vías bajo los 32.
+Decisión grande: hay que tomarla explícitamente, no dejarla implícita en el ítem del buck.
+
+### 0.4. No hay fusible ni protección de polaridad inversa — y el jack barrel lo empeora
+En toda la placa no hay un solo MOSFET ni fusible. El SMBJ24A es unidireccional: ante
+polaridad invertida conduce en directa y queda como un corto. **El ítem 6b (jack barrel)
+es la principal fuente de errores de polaridad que existe**; ponerlo sin protección es
+la combinación que quema placas de laboratorio. La serigrafía no es protección.
+
+⚠️ **Topología**: J11 y J12 están en el mismo net `+24V` — la placa es un **nodo de paso**
+del daisy-chain. Por eso el fusible y el P-FET **no van en serie con la entrada** (cortarían
+la cadena entera), sino en una **derivación** que alimenta el buck local.
+
+---
+
 ## 🔴 Prioridad alta
 
 ### 1. Margen del buck a 24V — el TVS NO protege al MP2315S

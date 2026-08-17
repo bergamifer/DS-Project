@@ -147,12 +147,16 @@ cálculo que asuma que las demandas se reparten en el tiempo no aplica acá.
 
 ### El bulk no es lo que salva los picos
 
-Con **660 µF** (tras remover C290; eran 880 µF), la energía disponible antes de
-caer de 5,15 V a 4,5 V es:
+> ⚠️ **Corrección (2026-08-17)**: el bulk de `+5VA` son **cinco** electrolíticos de
+> 220 µF, no cuatro — además de C290-C293 está **C71** (verificado en el netlist y
+> en el BOM: los 5 comparten el part number C25503905). O sea eran **1100 µF** y
+> tras remover C290 quedan **880 µF**, no 660. `ds11_errata.md` también lo dice mal.
 
-`E = ½·C·(V₁²−V₂²) = ½ · 660 µF · (5,15² − 4,5²) ≈ 2,1 mJ`
+Con **880 µF**, la energía disponible antes de caer de 5,15 V a 4,5 V es:
 
-Ante un déficit de 15 W, eso alcanza para **≈ 140 µs**. Un pico musical dura
+`E = ½·C·(V₁²−V₂²) = ½ · 880 µF · (5,15² − 4,5²) ≈ 2,8 mJ`
+
+Ante un déficit de 15 W, eso alcanza para **≈ 190 µs**. Un pico musical dura
 milisegundos, o sea **dos órdenes de magnitud más**.
 
 > **El bulk filtra el rizado de conmutación, no sostiene picos musicales.** Lo que
@@ -163,6 +167,98 @@ milisegundos, o sea **dos órdenes de magnitud más**.
 > parecía** — pasó de 184 µs a 140 µs de reserva, y en ninguno de los dos casos
 > el bulk era el mecanismo de protección. Repoblarlo sigue siendo deseable, pero
 > no es el factor que decide si hay brown-out.
+
+---
+
+## 3bis. Tres hallazgos posteriores que cambian el cuadro
+
+> Salieron de una revisión cruzada del netlist contra los datasheets (2026-08-17).
+> Los cuatro puntos de abajo están **verificados contra `hardware/DS/DS.txt` y el
+> BOM de producción**, no inferidos.
+
+### 🔴 A. Los amplificadores están limitados térmicamente ANTES que el buck
+
+El encapsulado en el netlist es **`Package_SO:MSOP-8_3x3mm_P0.65mm`**, y el
+datasheet del PAM8302A da **θJA = 180 °C/W para MSOP-8** (contra 115 para SO-8 y
+47,9 para U-DFN3030). Con OTP a 120 °C mínimo y 40 °C de ambiente dentro de una caja:
+
+`P_disipable = (120 − 40) / 180 = 0,44 W por amplificador`
+
+Un PAM8302A dando 2,5 W sobre 4 Ω con 85 % de eficiencia disipa **exactamente
+0,44 W**. O sea: **un solo amplificador a potencia plena ya está en el límite de su
+protección térmica — aislado — y hay 32 calentándose entre sí.**
+
+> **Esto invalida la idea de que un buck más grande habilite la potencia plena**
+> (§5.1 de este documento decía eso). El cuello de botella no es la fuente: son los
+> amplificadores. Habilitar potencia plena exigiría cambiar el encapsulado a
+> `PAM8302AAYCR` (U-DFN3030), con pad térmico y vías bajo cada uno de los 32.
+
+Nota operativa: **el peor caso térmico no es la música, es el tono sostenido.** El
+channel walker y el chirp del AUTOFOCUS son senoidales en fase en todos los canales,
+con crest factor 0 dB. Los procedimientos de test son la condición más dura que ve
+la placa.
+
+### 🔴 B. El riel digital cuelga del de amplificadores por un bead y un Schottky
+
+Verificado en el netlist, la cadena es:
+
+```
++5VA (5,15 V) → FB2 → D9 (SS34) → +5V → U11 (AP1117-33) → +3V3
+                                       → U10 (AP2125)   → +3,3VA (ADC)
+```
+
+**FB2 es el mismo bead genérico que las 64 salidas de parlante** (mismo part number
+en el BOM), pero acá lleva la corriente completa del riel digital + analógico. Entre
+su DCR y el Vf del SS34 se van **~0,5 V**, dejando al AP1117-33 con apenas
+**~250-350 mV** sobre su dropout antes de perder regulación.
+
+Dos consecuencias:
+
+1. **Explica por qué repoblar C290 no iba a arreglar el brown-out**: no es un
+   problema de energía almacenada, es de **margen de dropout en serie**. El bulk
+   está del lado equivocado de esos 0,5 V.
+2. **El +3,3VA del ADC** —sus AVDD y sus cuatro VREFH— está aguas abajo de 32
+   amplificadores class-D, filtrado sólo por ese bead saturado.
+
+**Prueba de banco que lo cierra en una tarde**: puentear FB2 y D9 con hilo (con
+ST-Link y USB desconectados, porque D9 es lo que impide el backfeed) y repetir el
+walker a volumen. Si desaparecen los reinicios, diagnóstico confirmado.
+
+### 🟡 C. El buck tiene el modo de ahorro por salteo de pulsos ACTIVADO
+
+R35 (100 k, VCC→AAM) y R36 (9,09 k, AAM→GND) fijan V_AAM ≈ 0,47 V. El datasheet del
+MP2315S es explícito: *"Tie AAM to VCC or leave AAM floating to disable AAM mode"*.
+
+O sea que a carga liviana —la condición normal de esta placa— el conversor entra en
+**burst**, y la frecuencia de repetición del burst **cae en banda audible y varía con
+la carga**. Ese rizado va al riel de los 32 amps (PSRR del PAM8302A = 50 dB @1 kHz,
+peor arriba) y, por la cadena de B, al riel analógico del ADC.
+
+**Se corrige hoy en DS11 removiendo un solo componente: R36.** Eso deja AAM tirado a
+VCC por R35 → PWM forzado a 500 kHz fijo, fuera de banda. Cuesta ~0,2-0,4 W más de
+disipación a carga liviana; para una placa de audio es un intercambio obvio, y es
+reversible.
+
+### ✅ D. Lo que sí está bien: VCAP
+
+Table 114 del datasheet (Rev 11) pide **2,2 µF con ESR < 100 mΩ** en cada pin VCAP,
+y admite dos capacitores. La placa tiene **C37 y C39 = 2,2 µF 0603** (LCSC C23630) en
+U7.48 y U7.73. **Correcto.** Único matiz para DS12: verificar el dieléctrico, porque
+el datasheet sólo tolera ±20 % y un X5R chico puede perder más que eso por DC bias.
+
+### ⚠️ E. A 480 MHz el chip tiene 105 °C de T_J máxima, no 125
+
+Table 113 del datasheet:
+
+| Power scale | Max T_J | Max frecuencia |
+|---|---|---|
+| **VOS0** | **105 °C** | 480 MHz |
+| VOS1 | 125 °C | 400 MHz |
+
+Correr a 480 MHz **cuesta 20 °C de margen térmico**. Y estamos en el máximo
+simultáneo de las tres: fCPU 480, HCLK 240, PCLK 120 MHz. El soak midió 38-40 °C de
+juntura, así que hay 65 °C de sobra — pero **eso fue al aire libre**. En una caja
+cerrada, con los 32 amplificadores adentro, el margen es lo primero que se gasta.
 
 ---
 
