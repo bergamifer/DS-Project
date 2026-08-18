@@ -201,6 +201,16 @@ static uint32_t test_tone_phase = 0;
 static volatile uint8_t adc_monitor_enabled = 1;   /* 1 = live ADC→DAC monitor */
 static volatile uint8_t adc_monitor_shift = 5;     /* gain boost: 5 = ×32 ≈ +30dB */
 
+/* Medición de nivel STICKY — ver el comentario en Process_ADC_Half.
+ * adc_peak_hold: pico por canal sobre TODAS las muestras (escala 24-bit).
+ * adc_ovf_latch: cuántos medios buffers vieron el pin OVF alto (ADC saturando).
+ * out_clip_count: cuántas muestras de SALIDA se recortaron (boost excesivo).
+ * Los tres se limpian al imprimirse. Juntos separan las dos saturaciones
+ * posibles, que suenan igual pero se arreglan distinto. */
+static volatile int32_t  adc_peak_hold[ADC_CHANNELS];
+static volatile uint32_t adc_ovf_latch = 0;
+static volatile uint32_t out_clip_count = 0;
+
 /* ===== Operating states — cycled with user button K2 (PA4, press = LOW) =====
  * Flat list: each press advances one state and prints the new one on UART7.
  *   0 ADC monitor  → 1 channel walker → 2..6 RX beam at preset azimuths → wrap
@@ -1390,26 +1400,40 @@ int main(void)
         // floor (~100) on quiet inputs and jumps to the signal amplitude when a
         // tone is injected — linear with the generator level. Use this to map
         // input→TDM slot and confirm the ADC tracks a real signal.
-        int32_t pk[ADC_CHANNELS] = {0};
-        for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
-          for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
-            int32_t v = audio_buffer_3b_rx[f * ADC_CHANNELS + ch] >> 8; // 24-bit
-            int32_t a = v < 0 ? -v : v;
-            if (a > pk[ch]) pk[ch] = a;
-          }
+        /* Peak-hold acumulado en Process_ADC_Half sobre TODAS las muestras del
+         * último segundo (no una ventana de 10 ms como antes) + latch del pin
+         * OVF. Se leen y se limpian acá. */
+        int32_t pk[ADC_CHANNELS];
+        for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
+          pk[ch] = adc_peak_hold[ch];
+          adc_peak_hold[ch] = 0;
         }
-        // RX DMA liveness (~100/s) + live OVF (PA15): 1 = analog over-range.
+        uint32_t ovf_n  = adc_ovf_latch;   adc_ovf_latch  = 0;
+        uint32_t clip_n = out_clip_count;  out_clip_count = 0;
+
+        // RX DMA liveness (~100/s).
         static uint32_t last_rx3b = 0;
         uint32_t rx_now = cb_rx3b_count;
         uint32_t rx_per_sec = rx_now - last_rx3b;
         last_rx3b = rx_now;
-        int ovf = HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN);
 
         sprintf(uart_buf,
-                "     ADCpk: c0=%ld c1=%ld c2=%ld c3=%ld c4=%ld c5=%ld c6=%ld c7=%ld | OVF=%d RXdma=%lu/s\r\n",
+                "     ADCpk: c0=%ld c1=%ld c2=%ld c3=%ld c4=%ld c5=%ld c6=%ld c7=%ld | RXdma=%lu/s\r\n",
                 (long)pk[0], (long)pk[1], (long)pk[2], (long)pk[3],
-                (long)pk[4], (long)pk[5], (long)pk[6], (long)pk[7], ovf, rx_per_sec);
+                (long)pk[4], (long)pk[5], (long)pk[6], (long)pk[7], rx_per_sec);
         UART_Print(uart_buf);
+
+        /* Las dos saturaciones, separadas. Sólo se imprime si alguna ocurrió,
+         * para que cuando aparezca la línea sea inequívoca:
+         *   OVF>0  → satura el ADC       → bajar la fuente / poner atenuador
+         *   CLIP>0 → satura el boost     → usar otro modo, no tocar el hardware
+         * ADCpk de referencia: 8388607 es fondo de escala; 838860 son -20 dBFS. */
+        if (ovf_n || clip_n) {
+          sprintf(uart_buf,
+                  "     >>> SATURACION: ADC(OVF)=%lu  SALIDA(clip)=%lu  <<<\r\n",
+                  (unsigned long)ovf_n, (unsigned long)clip_n);
+          UART_Print(uart_buf);
+        }
 
         // RX beam meter: peak of the freshest 480 beam samples. With the same
         // signal injected on all mics: steering at the (electrical) source
@@ -2891,11 +2915,30 @@ static inline int32_t Tone_NextSample(void) {
 
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
   uint32_t wp = delay_write_pos;
+
+  /* Latch del pin OVF del AK5538. Antes se leía en el heartbeat, o sea UNA VEZ
+   * POR SEGUNDO — y el `ADCpk` de ahí se calculaba sobre una sola ventana de
+   * 10 ms, o sea el 1% del tiempo. Con ese muestreo se concluyó que "al ADC le
+   * sobran 45 dB" mientras Fernando reportaba saturación audible: los picos
+   * musicales pasaban entre medición y medición.
+   *
+   * Acá corre 100 veces por segundo y el peak-hold ve TODAS las muestras, así
+   * que la pregunta "¿satura el ADC o satura la salida?" pasa a tener respuesta
+   * en vez de discusión. Ambos se limpian al imprimirlos. */
+  if (HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN)) adc_ovf_latch++;
+
+  int32_t pk[ADC_CHANNELS];
+  for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) pk[ch] = adc_peak_hold[ch];
   for (uint32_t i = 0; i < samples; i++) {
     for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
-      delay_line[ch][(wp + i) & DELAY_LINE_MASK] = rx_buf[i * ADC_CHANNELS + ch];
+      int32_t v = rx_buf[i * ADC_CHANNELS + ch];
+      delay_line[ch][(wp + i) & DELAY_LINE_MASK] = v;
+      v >>= 8;                                   /* escala 24-bit, como ADCpk */
+      if (v < 0) v = -v;
+      if (v > pk[ch]) pk[ch] = v;
     }
   }
+  for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) adc_peak_hold[ch] = pk[ch];
 
   /* AUTOFOCUS capture: append the measurement mic (24-bit) until the window
    * is full. Started in the same loop pass as the chirp emission, so the
@@ -3189,8 +3232,12 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
         uint32_t src = (ch_offset + ch) & 7u;
         int32_t s = delay_line[src][read_pos] >> 8; // 32-bit ADC → 24-bit
         s <<= adc_monitor_shift;                    // gain boost
-        if (s > 8388607) s = 8388607;               // clamp to +FS
-        else if (s < -8388608) s = -8388608;        // clamp to -FS
+        /* Contar los recortes: es lo que distingue "satura el ADC" (que se
+         * arregla bajando la fuente o con atenuador) de "satura el boost de
+         * +30 dB de este modo" (que se arregla usando otro modo). Suenan
+         * igual y se arreglan distinto. */
+        if (s > 8388607)       { s = 8388607;  out_clip_count++; }
+        else if (s < -8388608) { s = -8388608; out_clip_count++; }
         buffer[i * AUDIO_CHANNELS + ch] = s;
       }
     }
