@@ -350,7 +350,13 @@ lugares distintos, simultáneamente.
   la versión "de laboratorio" de este modo, con tonos en vez de entradas.
 - **Focos default**: entrada N → fx = −700 + 200·N mm (−700…+700, paso 200),
   fy = −240, fz = 1000. Re-entrar al modo resetea a estos defaults.
-- **Mover una entrada de lugar** (en vivo):
+- **El pad de la página web** es la forma normal de manejar este modo: vista en
+  planta (X horizontal, Z = distancia, el array abajo) con 8 puntos arrastrables,
+  uno por entrada, más un slider de altura para el punto seleccionado. Manda el
+  mismo `POST /beam type:"mf"` de abajo, con throttle de 150 ms mientras se
+  arrastra — cada POST espera el ACK del STM32 por UART a 115200, así que sin
+  throttle la UI se traba encolando tramas.
+- **Mover una entrada de lugar** (en vivo, equivalente por comando):
   `POST /beam {"type":"mf","src":5,"fx":200,"fy":0,"fz":800}` — en este
   modo `src` va de 0 a 7 y re-apunta esa entrada sin tocar las demás.
 - **Niveles**: usa la **ganancia de entrada** global (`/ingain`, default 0 dB =
