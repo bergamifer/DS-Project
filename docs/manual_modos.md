@@ -55,7 +55,7 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 
 | # | Nombre (UART) | Fuente | Salida | Notas |
 |---|---------------|--------|--------|-------|
-| 0 | `ADC monitor (+30dB)` | ADC ch0–7 en vivo | Las 8 entradas repetidas en cada fila | Boost ×32, modo por defecto |
+| 0 | `ADC monitor (+30dB)` | ADC ch0–7 en vivo | Las 8 entradas repetidas en cada fila | Boost ×32, modo por defecto. ⚠️ **No sirve para juzgar niveles de línea** — ver abajo |
 | 1 | `Channel walker (1s/ch)` | Tono 1 kHz interno | Un canal por vez, 1 s cada uno | **32 canales** = 32 s por vuelta |
 | 2 | `RX beam az=0 (broadside)` | Beam delay-and-sum de los 8 ADC | Beam mono en todos los canales | Boost ×32 |
 | 3 | `RX beam az=+30` | ídem, steering +30° | ídem | |
@@ -76,6 +76,39 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
 
 ---
+
+## ⚠️ El modo 0 satura con fuentes de línea, y no es culpa del ADC
+
+Observado el 2026-08-18 con una Mac conectada: por encima del ~20% de volumen de la
+fuente, "satura". **El ADC no tiene nada que ver.**
+
+Medido en ese momento: picos de **46778 sobre 8388607** = **−45 dBFS**, con `OVF=0`
+sostenido. **Al ADC le sobraban 45 dB de headroom.**
+
+Lo que clipea es el **boost de +30 dB del propio modo 0** (`adc_monitor_shift = 5`,
+×32), que existe para poder escuchar un micrófono, no una salida de línea. Con la
+fuente al 20% ya estás a −15 dBFS *después* del boost.
+
+**Conclusión práctica: no hace falta atenuador ni resistencias de entrada.** Para
+fuentes de línea usá el **modo 15**, que aplica `mf_in_shift = 2` (×4, +12 dB) — ahí
+podés subir bastante más la fuente. El modo 0 es una herramienta de diagnóstico de
+micrófonos, no un monitor de nivel.
+
+> 💡 **Cómo verificar el nivel de verdad**: mirá `OVF` en `/status`. Mientras esté en
+> **0**, el ADC no satura, sin importar lo que escuches. Si pasa a 1, ahí sí hay que
+> bajar la fuente.
+
+### Observación pendiente: diafonía entre canales del mismo cable
+
+En esa misma sesión, con señal en c6/c7 (~20000-46000), los canales **c4 y c5 del
+mismo cable RJ45** marcaban 150-330 contra 50-60 de los canales del *otro* cable.
+Son unos **−38 dB** respecto de la señal.
+
+Dos mecanismos posibles, no verificados: los **pares partidos** del pinout de J9
+(ver `../hardware/DS/DS12_PLANNING.md` §6d), o —más probable con fuentes
+desbalanceadas— la **impedancia común del retorno de masa**, que con una ficha
+stereo comparte el cuerpo entre los dos canales. Vale la pena separarlo antes de
+atribuirlo al cable.
 
 ## Modo 0 — ADC monitor (+30 dB)
 

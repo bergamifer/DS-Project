@@ -209,7 +209,21 @@ Traducido a deadlines perdidos:
 
 ## 5. Pendiente
 
-### ⚠️ Prueba de escucha del `-O2` — obligatoria antes de confiar
+### ✅ Prueba de escucha del `-O2` — APROBADA (2026-08-18)
+
+> **`>>> TEST PASSED: DMA pipeline clean! <<<` con `Total Underruns: 0`** — primera
+> vez en todo el proyecto. Modos 1, 12, 0 y 14 verificados a oído: **sin crujidos,
+> sin ruido de fondo, sin pops.** Las 8 entradas analógicas capturando.
+>
+> El `-O2` queda validado. No hubo bugs latentes de `volatile`.
+
+Y el arreglo del pop del volumen quedó **medido**, no sólo escuchado: 6 cambios de
+volumen + un guardado de EEPROM + un pulso de amps, todo con `underruns = 0`. Antes,
+cada cambio costaba ~9,6 ms de bloqueo, o sea al menos un deadline perdido.
+
+<details><summary>La instrucción original (histórica)</summary>
+
+#### Prueba de escucha del `-O2` — obligatoria antes de confiar
 
 Cambiar el nivel de optimización puede destapar bugs latentes de `volatile` en
 código compartido entre ISR y main loop. La telemetría dice que está bien
@@ -222,6 +236,8 @@ el audio sea correcto**. Hay que escuchar:
 
 Si algo suena mal, revertir es una línea (`OPT = -Og` en `firmware/Makefile`) y el
 problema queda acotado a un bug de `volatile` que vale la pena encontrar igual.
+
+</details>
 
 ### ✅ Underruns residuales — RESUELTO (2026-08-14): eran audibles
 
