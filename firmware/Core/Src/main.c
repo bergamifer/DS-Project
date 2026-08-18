@@ -190,10 +190,30 @@ static beam_config_t beam_config;
 
 /* ===== Test Tone: 1kHz sine @ 48kHz sample rate =====
  * 48 samples per period (48000/1000 = 48), amplitude = -6dBFS (0x400000 peak)
- * 480 samples per half-buffer = exactly 10 periods → no phase error across calls
- * SET test_tone_enabled = 0 to restore normal beamforming mode
- */
-static const int32_t sine_table_1khz[48] = {
+ * 240 samples por medio buffer = exactamente 5 períodos → sin error de fase
+ * entre llamadas. SET test_tone_enabled = 0 to restore normal beamforming mode
+ *
+ * ⚠️ NO const, A PROPÓSITO — no lo "arregles".
+ *
+ * Con `const` la tabla queda en .rodata, o sea en FLASH, y como el D-cache está
+ * apagado cada lectura paga los wait states del flash. Sin const va a .data,
+ * que este linker script pone en DTCMRAM (0 wait states, ver la sección .data
+ * en STM32H743XX_FLASH.ld) y el startup la copia sola.
+ *
+ * No es cosmético: el modo 14 lee esta tabla DOS veces por (muestra × canal ×
+ * fuente) = 61440 lecturas por ventana de 5 ms, y con la tabla en flash perdía
+ * el 15% de los deadlines (1234 underruns en 20 s medidos el 2026-08-18)
+ * mientras el modo 15 —que es MÁS pesado pero lee delay_line desde DTCM— no
+ * perdía ninguno. Misma causa raíz que el arreglo de rendimiento de agosto: en
+ * este chip lo que importa no es cuántas operaciones hacés sino de qué memoria
+ * leés. Los modos 12/13 la leen una vez por muestra, por eso nunca sufrieron.
+ *
+ * La sección explícita tampoco es opcional: sacar el `const` no alcanza, porque
+ * con -O2 GCC ve que nadie la escribe y la manda a .rodata igual. Verificar con
+ *   arm-none-eabi-nm build/ds11_beamforming.elf | grep sine_table
+ * → tiene que dar 0x2000xxxx (DTCM) y 'd', no 0x08xxxxxx y 'r'. */
+__attribute__((section(".data")))
+static int32_t sine_table_1khz[48] = {
          0,   547466,  1085575,  1605080,  2097152,  2553318,
    2965812,  3327563,  3632372,  3875034,  4051387,  4158422,
    4194304,  4158422,  4051387,  3875034,  3632372,  3327563,
@@ -402,18 +422,25 @@ static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
  * Para senos, un retardo de tiempo d equivale EXACTO a un offset de fase
  * d×inc — se precalcula en mf_phoff_q16 al setear foco/frecuencia, así el
  * fill no multiplica en 64 bits por muestra. La fase de cada ventana se
- * deriva de mf_frame (avanzado solo por el fill de SAI1_A, como el walker);
- * los otros bancos lo ven +480, pero con frecuencias múltiplo de 100 Hz eso
- * es un número entero de períodos (error residual <0.05° por truncado de
- * inc) → los 4 bancos quedan en fase también en DS11. */
+ * deriva de mf_frame.
+ *
+ * ⚠️ mf_frame lo avanza el ÚLTIMO banco (ch_offset 24), no el primero. Antes lo
+ * avanzaba SAI1_A y los otros tres lo veían ya adelantado un buffer entero: eso
+ * sólo era inocuo si f×buffer/48000 daba entero, o sea con buffer de 480 y
+ * frecuencias múltiplo de 100 Hz. Al bajar el buffer a 240 la condición pasó a
+ * ser múltiplo de **200**, y 1300/1900/2100 dejaron de cumplirla → las filas
+ * 2-3 quedaban en CONTRAFASE con las 0-1 para 3 de los 4 tonos, o sea el foco
+ * de esos tonos se cancelaba en vez de sumarse. Avanzando al final, los 4
+ * bancos leen el mismo valor y la restricción de frecuencia desaparece. */
 #define MF_MAX_SRC   8              // techo: las 8 entradas de la intervención
 #define MF_NUM_SRC   4              // fuentes activas hoy (4 tonos)
 #define MF_SRC_SHIFT 2              // c/fuente a -6dBFS/4 → suma ≤ -6dBFS
 #define TONE_PERIOD_Q16 (48u << 16)
 static volatile uint8_t mfocus_enabled = 0;
-// Defaults: frecuencias múltiplo de 100 (fase exacta entre bancos), sin
-// relaciones armónicas entre sí, todas < 2140 Hz (límite d=λ/2). Focos
-// separados 300mm ≥ ancho del spot (~±14cm @2kHz, ~±23cm @1.3kHz).
+// Defaults: sin relaciones armónicas entre sí, todas < 2140 Hz (límite d=λ/2).
+// Focos separados 300mm ≥ ancho del spot (~±14cm @2kHz, ~±23cm @1.3kHz).
+// Ya NO hace falta que sean múltiplo de nada: la fase entre bancos dejó de
+// depender de la frecuencia al mover el avance de mf_frame al último banco.
 static const uint16_t mf_def_freq[MF_NUM_SRC] = { 1300, 1600, 1900, 2100 };
 static const int16_t  mf_def_fx[MF_NUM_SRC]   = { -450, -150,  150,  450 };
 static uint16_t mf_freq_hz[MF_MAX_SRC];
@@ -3246,7 +3273,9 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
         if (ph[s] >= TONE_PERIOD_Q16) ph[s] -= TONE_PERIOD_Q16;
       }
     }
-    if (ch_offset == 0) mf_frame += samples;
+    /* Avanza el ÚLTIMO banco (ver la nota de mf_frame): así los 4 rinden la
+     * misma ventana con la misma fase, sin depender de la frecuencia. */
+    if (ch_offset == AUDIO_CHANNELS * 3) mf_frame += samples;
     return;
   }
 

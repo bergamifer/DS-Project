@@ -471,3 +471,84 @@ La firma es exactamente la predicha por los prints bloqueantes: **+2 por segundo
 y **+8 en el segundo donde cae el bloque `verbose`** (cada 10 s). Antes eran +4 y
 +10; bajó porque con los fills más rápidos el main loop recupera más rápido tras el
 bloqueo. Sigue sin ser un problema del pipeline de audio.
+
+---
+
+## 7. El buffer de 240 destapó dos bugs en el modo 14 (2026-08-18)
+
+Bajar el buffer de 480 a 240 muestras salió limpio en el modo 0 —`TEST PASSED`,
+0 underruns, latencia total de 10121 a **5054 µs**— y con eso se dio por buena.
+**No alcanzaba: el modo 0 es el más barato de todos.** Probando modo por modo
+después, el 14 estaba roto de dos maneras distintas.
+
+Ambos bugs son de la misma familia: **el buffer no es sólo un número de latencia,
+es el período que aparece en varios invariantes del pipeline.**
+
+### 7.1 La tabla de senos estaba en FLASH
+
+**Síntoma**: en modo 14 el `/status` daba `timeout` y se acumulaban **1234
+underruns en 20 segundos** (~15% de los deadlines). El modo 15 —que es *más*
+pesado: 8 fuentes contra 4— no perdía **ninguno**.
+
+Que el modo más pesado ande y el más liviano no, descarta el presupuesto de CPU
+como explicación. La diferencia está en **de qué memoria lee cada uno**:
+
+```
+$ arm-none-eabi-nm build/ds11_beamforming.elf | grep -E "delay_line|sine_table"
+20006e00 b delay_line          ← DTCM, 0 wait states
+08011aa0 r sine_table_1khz     ← FLASH, 4 wait states, y el D-cache está apagado
+```
+
+El modo 15 lee `delay_line` desde DTCM. El modo 14 lee `sine_table_1khz` **dos
+veces por (muestra × canal × fuente)** = 61440 lecturas a flash por ventana de
+5 ms. Los modos 12/13 usan la misma tabla pero una sola vez por muestra (240 por
+fill), por eso nunca sufrieron.
+
+**Es la misma causa raíz que el arreglo de agosto**: en este chip, con las cachés
+de datos apagadas, lo que domina no es cuántas operaciones hacés sino de qué
+memoria leés.
+
+**Fix**: sacar el `const` **y** forzar la sección.
+
+```c
+__attribute__((section(".data")))
+static int32_t sine_table_1khz[48] = { ... };
+```
+
+Sacar el `const` solo **no alcanza**: con `-O2` GCC ve que nadie escribe la tabla
+y la manda a `.rodata` igual. Con la sección explícita cae en `.data`, que este
+linker script ubica en DTCMRAM y el startup copia solo (+192 B de `.data`).
+
+**Resultado: 1234 → 0 underruns**, y `/status` vuelve a responder dentro del modo.
+
+> **Cómo verificarlo** (vale para cualquier tabla que se lea en un lazo de fill):
+> `arm-none-eabi-nm build/ds11_beamforming.elf | grep <tabla>` tiene que dar
+> `0x2000xxxx` y `d`/`b`, no `0x08xxxxxx` y `r`.
+
+### 7.2 Tres de los cuatro tonos quedaron en contrafase
+
+`mf_frame` lo avanzaba el fill de **SAI1_A**, o sea el primer banco, y los otros
+tres lo leían **ya adelantado un buffer entero**. Eso era inocuo sólo si
+`f × buffer / 48000` daba entero:
+
+| buffer | condición sobre f | 1300 | 1600 | 1900 | 2100 |
+|---|---|---|---|---|---|
+| 480 | múltiplo de **100** | ✅ 13 | ✅ 16 | ✅ 19 | ✅ 21 |
+| 240 | múltiplo de **200** | ❌ 6,5 | ✅ 8 | ❌ 9,5 | ❌ 10,5 |
+
+Con el buffer de 240, **las filas 2-3 quedaron en contrafase con las 0-1 para 3 de
+los 4 tonos**: en el punto focal se cancelaban en vez de sumarse — el foco de esos
+tonos no estaba débil, estaba *invertido*. No lo detecta ninguna telemetría; era
+audible y nada más.
+
+**Fix**: avanzar `mf_frame` en el **último** banco (`ch_offset == AUDIO_CHANNELS*3`)
+en vez del primero. Así los cuatro leen el mismo valor, rinden la misma ventana con
+la misma fase, y la restricción sobre la frecuencia **desaparece** en vez de
+cambiar de número.
+
+### La lección de método
+
+Validar un cambio de buffer **en el modo más barato no valida nada**. La regla para
+la próxima vez que se toque `AUDIO_BUFFER_SAMPLES`: recorrer los modos 0, 12, 14 y
+15 midiendo el delta de `underruns` en una ventana fija, y revisar a mano todo
+invariante que mencione el tamaño del buffer (`grep -n "480\|buffer" main.c`).
