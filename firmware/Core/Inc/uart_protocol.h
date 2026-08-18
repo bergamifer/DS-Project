@@ -72,7 +72,7 @@
 /**
  * @brief Device configuration received from ESP32
  *
- * 52 bytes, little-endian, packed — can be cast directly from payload
+ * 102 bytes, little-endian, packed — can be cast directly from payload
  * since both STM32 (Cortex-M7) and ESP32 (Xtensa/RISC-V) are LE.
  */
 typedef struct __attribute__((packed)) {

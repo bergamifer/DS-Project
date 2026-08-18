@@ -125,7 +125,7 @@
 
 /* USER CODE END PM */
 
-/* Beamforming config — 32 channels (expandable from ESP32's 16-ch ds_config_t) */
+/* Beamforming config — los 32 canales, mismo alcance que el ds_config_t del ESP32 */
 typedef struct {
     uint8_t  master_gain;                   // 0-255 → 0.0-1.0
     uint8_t  mute_global;                   // 0=unmuted, 1=muted
