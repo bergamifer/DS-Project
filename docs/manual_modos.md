@@ -388,9 +388,18 @@ lugares distintos, simultáneamente.
 | **Amplificadores** | `POST /amps {"on":true}` → `CMD_SET_AMPS` (0x0A) | Enable del banco de 32 PAM8302A (pin SD, PD3). **Arranca en 0** — sin esto no suena nada. No se persiste: cada boot arranca apagado. |
 | **Volumen maestro** | `POST /volume {"db":-20}` → `CMD_SET_VOLUME` | **Único maestro**: atenuación del PCM1690 (0…−63 dB, ≤−64 = mute), 0.5 dB/paso. Se persiste en EEPROM (debounce 3 s). Default −24 dB. |
 | **Ganancia de entrada** | `POST /ingain {"db":0}` → `CMD_SET_INGAIN` | Ganancia de la etapa de ENTRADA, 0…36 dB en pasos de 1 dB (multiplicador Q8). Global, **no** por modo. Se persiste en EEPROM (debounce 3 s). Default 0 dB = línea; 30 dB = preset micrófono. Ver "Las DOS ganancias" arriba. |
-| **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (52 bytes) | mute_global, gains/delays/mutes de los primeros 16 canales. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
+| **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (102 bytes) | mute_global, gains/delays/mutes de **los 32 canales** (hasta 2026-08-18 eran 16 — media matriz: las filas 3 y 4 no se podían silenciar ni atenuar desde la red). ⚠️ El ESP32 manda siempre los 32: **los canales que no estén en el JSON van en cero**, o sea mudos. La respuesta HTTP ahora refleja el ACK del STM32, no sólo que se envió. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
 | **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32; `type:"mf"` con `src` 0-7 — re-apunta el foco de UNA fuente MULTIFOCUS (tonos del 14 o entradas del 15, según el modo activo). No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
-| **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2), ganancia de entrada y los dos contadores de saturación (`ingain_db`, `adc_ovf`, `out_clip`, proto v3). |
+| **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2), ganancia de entrada y los dos contadores de saturación (`ingain_db`, `adc_ovf`, `out_clip`, proto v3), estado real de amps y beam custom (`amps`, `custom`, proto v4). |
+
+> ⚠️ **`mode` puede mentir, y `custom` es el que avisa.** `POST /beam` cambia lo
+> que suena **sin** tocar `ui_state_idx` — a propósito, para que el próximo K2
+> retome el ciclo desde el último preset elegido. La consecuencia es que la página
+> puede mostrar "modo 13" mientras la placa hace otra cosa; costó una sesión de
+> debug el 2026-08-18. Con `custom: true` la UI lo dice. Lo limpia elegir un modo.
+>
+> `amps` también es estado real, leído del firmware: antes la web sólo recordaba
+> el último botón apretado, y eso se vuelve falso con un reboot o con el K2 largo.
 
 > **Los contadores de saturación son MONOTÓNICOS**: lo que importa es que *crezcan*
 > entre dos lecturas — eso es "está saturando ahora", no "saturó alguna vez". Antes

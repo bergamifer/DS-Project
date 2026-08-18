@@ -54,11 +54,18 @@
 #define CMD_NACK            0x15
 
 /* Payload constraints */
-#define PROTO_MAX_PAYLOAD   64
-#define CFG_PAYLOAD_SIZE    52
-#define CFG_NUM_CHANNELS    16
-#define PROTO_VERSION       3   /* v2: + master_vol_db; v3: + in_gain_db y los
-                                 * dos contadores de saturación en ds_status_t */
+/* Techo del payload. Era 64 y el status ya ocupaba 63 — un campo más y el ESP32
+ * empezaba a descartar la trama por larga, sin error visible. 128 deja lugar
+ * para el status extendido y para una config de los 32 canales (102 bytes).
+ * ⚠️ Cambiarlo obliga a cambiarlo EN AMBOS LADOS (firmware_esp32c3). */
+#define PROTO_MAX_PAYLOAD   128
+/* Los 32 canales de DS11. Era 16 —la mitad del array— así que gains/mutes/delays
+ * de las filas 3 y 4 no se podían tocar desde el ESP32. */
+#define CFG_PAYLOAD_SIZE    102
+#define CFG_NUM_CHANNELS    32
+#define PROTO_VERSION       4   /* v2: + master_vol_db; v3: + in_gain_db y los
+                                 * dos contadores de saturación; v4: +
+                                 * state_flags, y ds_config_t pasa a 32 canales */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -72,11 +79,13 @@ typedef struct __attribute__((packed)) {
     uint8_t  mute_global;       /* 0=unmuted, 1=muted */
     uint16_t delays[CFG_NUM_CHANNELS];  /* delay_samples per channel (LE) */
     uint8_t  gains[CFG_NUM_CHANNELS];   /* gain per channel (0-255) */
-    uint16_t mutes;             /* bitfield: bit N = channel N muted */
+    uint32_t mutes;             /* bitfield: bit N = channel N muted. 32 bits
+                                 * porque con 16 no se podía silenciar más allá
+                                 * del canal 15 — la mitad del array. */
 } ds_config_t;
 
 _Static_assert(sizeof(ds_config_t) == CFG_PAYLOAD_SIZE,
-               "ds_config_t must be exactly 52 bytes");
+               "ds_config_t must be exactly CFG_PAYLOAD_SIZE bytes");
 
 /**
  * @brief Custom beam request (CMD_SET_BEAM) — steer outside the K2 presets.
@@ -115,14 +124,31 @@ typedef struct __attribute__((packed)) {
     uint8_t  in_gain_db;     /* v3: ganancia de ENTRADA actual (0..36) */
     uint32_t adc_ovf_count;  /* v3: medios buffers con OVF alto, MONOTÓNICO */
     uint32_t out_clip_count; /* v3: muestras de salida recortadas, MONOTÓNICO */
-} ds_status_t;               /* 54 + 1 + 4 + 4 = 63 bytes */
+    uint8_t  state_flags;    /* v4: ver STATE_F_* */
+} ds_status_t;               /* 54 + 1 + 4 + 4 + 1 = 64 bytes */
 
-_Static_assert(sizeof(ds_status_t) == 63, "ds_status_t must be 63 bytes");
-/* ⚠️ 63 de 64: el status ya casi llena PROTO_MAX_PAYLOAD. El próximo campo
- * obliga a subir ese límite EN AMBOS LADOS (acá y en firmware_esp32c3), o el
- * ESP32 descarta la trama por larga y el status se queda mudo sin error. */
+/* Estado REAL, no el nominal.
+ *
+ * STATE_F_CUSTOM existe porque `mode_idx` puede mentir: UI_ApplyCustomBeam
+ * (POST /beam) cambia lo que suena sin tocar ui_state_idx, a propósito, para
+ * que el próximo K2 retome el ciclo donde estaba. La consecuencia es que la
+ * página puede mostrar "modo 13" mientras la placa hace otra cosa — eso costó
+ * una sesión entera de debug el 2026-08-18. Con este bit la UI dice la verdad.
+ * Lo limpia UI_ApplyState, o sea elegir un modo.
+ *
+ * STATE_F_AMPS: la UI no tenía forma de saber si los amps están encendidos —
+ * sólo recordaba el último botón apretado, y eso se vuelve falso con un reboot
+ * o con el K2 largo. */
+#define STATE_F_AMPS    0x01    /* banco de 32 PAM8302A habilitado */
+#define STATE_F_CUSTOM  0x02    /* beam custom: mode_idx NO describe lo que suena */
+
+_Static_assert(sizeof(ds_status_t) == 64, "ds_status_t must be 64 bytes");
+/* ⚠️ Un payload por encima de PROTO_MAX_PAYLOAD hace que el ESP32 descarte la
+ * trama por larga y el endpoint quede mudo SIN dar error — de ahí los asserts. */
 _Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,
                "ds_status_t no entra en PROTO_MAX_PAYLOAD");
+_Static_assert(CFG_PAYLOAD_SIZE <= PROTO_MAX_PAYLOAD,
+               "ds_config_t no entra en PROTO_MAX_PAYLOAD");
 
 /**
  * @brief Initialize UART protocol module

@@ -72,19 +72,25 @@
 #define CMD_SET_INGAIN   0x0B   // payload: uint8 dB (0..36) — ganancia de ENTRADA
 #define CMD_ACK          0x06
 #define CMD_NACK         0x15
-#define NUM_CHANNELS     16
-#define PROTO_MAX_PAYLOAD 64
+#define NUM_CHANNELS     32     // los 32 de DS11 (era 16 = media matriz)
+// Techo del payload. DEBE coincidir con PROTO_MAX_PAYLOAD del STM32: si el
+// STM32 manda mas de lo que aca se acepta, la trama se descarta por larga y el
+// endpoint queda mudo SIN error visible.
+#define PROTO_MAX_PAYLOAD 128
 #define ESP_IP_PUSH_MS   10000  // reenvio periodico: si el STM32 resetea, recupera la IP
 
-typedef struct {
+// Espejo de ds_config_t del STM32 — 102 bytes packed LE. packed explicito: sin
+// el, el uint32 de mutes se alinearia distinto y el STM32 leeria basura.
+typedef struct __attribute__((packed)) {
     uint8_t  master_gain;
     uint8_t  mute_global;
     uint16_t delays[NUM_CHANNELS];
     uint8_t  gains[NUM_CHANNELS];
-    uint16_t mutes;
+    uint32_t mutes;         // 32 bits: con 16 no se podia silenciar mas alla del ch15
 } ds_config_t;
+_Static_assert(sizeof(ds_config_t) == 102, "ds_config_t debe ser 102 bytes");
 
-// Espejo de ds_status_t del STM32 (uart_protocol.h) — 63 bytes packed LE (v3).
+// Espejo de ds_status_t del STM32 (uart_protocol.h) — 64 bytes packed LE (v4).
 // Extender SOLO appendeando campos (proto_ver versiona el layout).
 typedef struct __attribute__((packed)) {
     uint8_t  proto_ver;
@@ -101,7 +107,11 @@ typedef struct __attribute__((packed)) {
     uint8_t  in_gain_db;      // v3: ganancia de ENTRADA actual (0..36)
     uint32_t adc_ovf_count;   // v3: MONOTONICO — satura el ADC (bajar la fuente)
     uint32_t out_clip_count;  // v3: MONOTONICO — satura la salida (bajar ingain)
+    uint8_t  state_flags;     // v4: bit0 amps encendidos, bit1 beam custom activo
 } ds_status_t;
+_Static_assert(sizeof(ds_status_t) == 64, "ds_status_t debe ser 64 bytes");
+#define STATE_F_AMPS    0x01
+#define STATE_F_CUSTOM  0x02
 
 // Espejo de ui_states[] del STM32 — actualizar junto con el firmware STM32.
 // El indice es lo que viaja en CMD_SET_MODE; el nombre es solo para la UI.
@@ -372,11 +382,23 @@ static uint8_t calc_checksum(const uint8_t *data, int len)
     return xor;
 }
 
-static void uart_send_config(const ds_config_t *cfg)
+// Forward: definido mas abajo, junto al resto del transporte UART.
+static int uart_send_and_wait_ack(uint8_t cmd, const uint8_t *payload,
+                                  uint16_t len, int timeout_ms);
+
+// Serializa la config y la manda. Devuelve 1 = ACK, 0 = NACK, -1 = timeout.
+//
+// El armado de la trama y la espera del ACK los hace uart_send_and_wait_ack,
+// igual que el resto de los comandos: antes esta funcion tenia su PROPIA copia
+// del framing y mandaba a ciegas, sin lock del UART ni ACK. El HTTP contestaba
+// "Config sent to STM32" pasara lo que pasara, asi que un largo de payload mal
+// calculado —justo lo que cambio al pasar de 16 a 32 canales— se habria visto
+// como exito.
+static int uart_send_config(const ds_config_t *cfg)
 {
-    // Payload: master_gain(1) + mute_global(1) + delays(32) + gains(16) + mutes(2) = 52 bytes
-    const uint16_t payload_len = 1 + 1 + (NUM_CHANNELS * 2) + NUM_CHANNELS + 2;
-    uint8_t payload[52];
+    // master_gain(1) + mute_global(1) + delays(64) + gains(32) + mutes(4) = 102
+    const uint16_t payload_len = 1 + 1 + (NUM_CHANNELS * 2) + NUM_CHANNELS + 4;
+    uint8_t payload[sizeof(ds_config_t)];
     int idx = 0;
 
     payload[idx++] = cfg->master_gain;
@@ -391,30 +413,15 @@ static void uart_send_config(const ds_config_t *cfg)
     }
     payload[idx++] = cfg->mutes & 0xFF;
     payload[idx++] = (cfg->mutes >> 8) & 0xFF;
+    payload[idx++] = (cfg->mutes >> 16) & 0xFF;
+    payload[idx++] = (cfg->mutes >> 24) & 0xFF;
 
-    // Trama: Header(2) + Cmd(1) + Length(2) + Payload(52) + Checksum(1) + Footer(2) = 60 bytes
-    uint8_t frame[60];
-    int fi = 0;
-
-    frame[fi++] = PROTO_HEADER_1;
-    frame[fi++] = PROTO_HEADER_2;
-    frame[fi++] = CMD_UPDATE_CFG;
-    frame[fi++] = payload_len & 0xFF;
-    frame[fi++] = (payload_len >> 8) & 0xFF;
-    memcpy(&frame[fi], payload, payload_len);
-    fi += payload_len;
-    frame[fi++] = calc_checksum(payload, payload_len);
-    frame[fi++] = PROTO_FOOTER_1;
-    frame[fi++] = PROTO_FOOTER_2;
-
-    int sent = uart_write_bytes(STM32_UART_NUM, frame, fi);
-    printf("[ESP32] Trama enviada al STM32: %d bytes (master_gain=%d, mute_global=%d)\n",
-           sent, cfg->master_gain, cfg->mute_global);
-
-    // Debug hex (solo los primeros 10 bytes para no saturar el log)
-    printf("[ESP32] HEX[0..9]: ");
-    for (int i = 0; i < 10 && i < fi; i++) printf("%02X ", frame[i]);
-    printf("...\n");
+    int ack = uart_send_and_wait_ack(CMD_UPDATE_CFG, payload, payload_len, 400);
+    printf("[ESP32] Config -> STM32: %u bytes, %s (master_gain=%d, mute_global=%d)\n",
+           (unsigned)payload_len,
+           ack == 1 ? "ACK" : (ack == 0 ? "NACK" : "sin respuesta"),
+           cfg->master_gain, cfg->mute_global);
+    return ack;
 }
 
 // Trama generica: Header + Cmd + Len + Payload + Checksum + Footer
@@ -511,23 +518,28 @@ static bool parse_and_send_command(const char *json_str)
                 cfg.delays[c] = delay   ? (uint16_t)delay->valueint              : 0;
                 cfg.gains[c]  = gain    ? (uint8_t)(gain->valuedouble * 255.0)   : 0;
                 if (ch_mute && ch_mute->valueint)
-                    cfg.mutes |= (1 << c);
+                    cfg.mutes |= (1u << c);   // 1u: con 32 canales c llega a 31
             }
         }
     }
 
     printf("[ESP32] ========================================\n");
 
-    uart_send_config(&cfg);
+    int ack = uart_send_config(&cfg);
     cJSON_Delete(root);
-    return true;
+    return ack == 1;      // solo es exito si el STM32 la acepto
 }
 
 // ============== HTTP Handlers ==============
 
 static esp_err_t command_handler(httpd_req_t *req)
 {
-    char buf[2048];
+    /* Un JSON con los 32 canales son ~2,5 KB — con 2048 no entraba y el POST
+     * moria en "Content too large". 4096 deja margen para formato indentado.
+     * `static` para que viva en .bss y no como marco de 4 KB en la pila de la
+     * task HTTP (8 KB en total); el server corre en una sola task, asi que no
+     * hay dos requests usandolo a la vez. */
+    static char buf[4096];
     int received  = 0;
     int remaining = req->content_len;
 
@@ -556,7 +568,8 @@ static esp_err_t command_handler(httpd_req_t *req)
     snprintf(resp, sizeof(resp),
         "{\"status\":\"%s\",\"device_id\":\"" DEVICE_ID "\",\"message\":\"%s\"}",
         ok ? "ok" : "error",
-        ok ? "Config sent to STM32" : "JSON parse error");
+        ok ? "Config aplicada por el STM32"
+           : "JSON invalido, o el STM32 no la acepto (ver log serie)");
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp, strlen(resp));
@@ -579,7 +592,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"proto_ver\":%u,\"mode\":%u,\"mode_name\":\"%s\",\"num_modes\":%u,"
             "\"rx_az\":%d,\"focus\":{\"fx\":%d,\"fy\":%d,\"fz\":%d},"
             "\"underruns\":%lu,\"sai_errors\":%lu,\"ovf\":%u,\"cal_state\":%u,"
-            "\"vol_db\":%d,\"ingain_db\":%u,"
+            "\"vol_db\":%d,\"ingain_db\":%u,\"amps\":%s,\"custom\":%s,"
             "\"adc_ovf\":%lu,\"out_clip\":%lu,"
             "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
             "\"uptime_ms\":%lu}",
@@ -588,6 +601,8 @@ static esp_err_t status_handler(httpd_req_t *req)
             (unsigned long)s->underruns, (unsigned long)s->sai_errors,
             s->ovf, s->cal_state, (int)s->master_vol_db,
             s->in_gain_db,
+            (s->state_flags & STATE_F_AMPS)   ? "true" : "false",
+            (s->state_flags & STATE_F_CUSTOM) ? "true" : "false",
             (unsigned long)s->adc_ovf_count, (unsigned long)s->out_clip_count,
             (long)s->adc_pk[0], (long)s->adc_pk[1], (long)s->adc_pk[2],
             (long)s->adc_pk[3], (long)s->adc_pk[4], (long)s->adc_pk[5],
@@ -846,6 +861,7 @@ static const char INDEX_HTML[] =
 ".row{display:flex;gap:8px;align-items:center}.row button{flex:0 0 auto}"
 "</style></head><body>"
 "<h1>DS Beamformer <span id=link style='font-size:.6em;color:#888'>...</span></h1>"
+"<div id=custom style='color:#f84;font-size:.85em;margin-bottom:10px'></div>"
 "<div class=card><h2>Volumen maestro</h2>"
 "<div class=row><input type=range id=vol min=-63 max=0 value=0 step=1>"
 "<span class=val id=volv>0 dB</span></div>"
@@ -862,7 +878,9 @@ static const char INDEX_HTML[] =
 "<div class=card><h2>Amplificadores</h2>"
 "<div class=row><button onclick=setAmps(1)>Encender amps</button>"
 "<button onclick=setAmps(0)>Apagar amps</button>"
-"<span class=val id=ampsv>arrancan apagados</span></div></div>"
+"<span class=val id=ampsv>...</span></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Arrancan apagados. "
+"El estado que se muestra viene de la placa, no de esta p&aacute;gina.</div></div>"
 "<div class=card><h2>Modo</h2><div class=grid id=modes></div></div>"
 "<div class=card><h2>RX beam (az&deg;)</h2>"
 "<div class=row><input type=range id=az min=-90 max=90 value=0 step=5>"
@@ -992,6 +1010,11 @@ static const char INDEX_HTML[] =
 "for(let i=0;i<N;i++)document.getElementById('m'+i).className=(i==s.mode)?'on':'';"
 "if(s.vol_db!=null&&s.vol_db>-64&&Date.now()-volTouch>3000){vol.value=s.vol_db;volv.textContent=s.vol_db+' dB';}"
 "if(s.ingain_db!=null&&Date.now()-igTouch>3000){ig.value=s.ingain_db;igv.textContent=s.ingain_db+' dB';}"
+/* El estado de los amps y el "custom" vienen del STM32, no de lo que la pagina
+ * recuerde haber clickeado: un reboot o el K2 largo lo cambian por afuera. */
+"if(s.amps!=null){ampsv.textContent=s.amps?'ON':'OFF';ampsv.style.color=s.amps?'#6d6':'#888';}"
+"const cm=document.getElementById('custom');"
+"cm.textContent=s.custom?'\u26a0 beam modificado a mano \u2014 el modo marcado no es lo que suena':'';"
 /* Los contadores del STM32 son monotonicos: lo que importa es que CREZCAN
  * entre dos polls — eso es "esta saturando ahora", no "saturo alguna vez". */
 "if(s.out_clip!=null){const c=document.getElementById('clipv');"

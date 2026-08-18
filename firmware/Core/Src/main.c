@@ -525,6 +525,9 @@ static const uint8_t dac_addrs[4] = {
  * estable. Asi un problema de alimentacion no deja la placa en loop de
  * reinicio imposible de diagnosticar. */
 static volatile uint8_t amps_enabled = 0;
+/* 1 = un POST /beam pisó los flags de modo: ui_state_idx ya no describe lo que
+ * suena. Se publica en el status (STATE_F_CUSTOM) para que la UI no mienta. */
+static volatile uint8_t custom_beam_active = 0;
 
 // EEPROM deferred save flag (set when config changes, save in low-priority window)
 static volatile uint8_t eeprom_save_pending = 0;
@@ -1371,6 +1374,8 @@ int main(void)
         st.in_gain_db = in_gain_db;
         st.adc_ovf_count = adc_ovf_latch;
         st.out_clip_count = out_clip_count;
+        st.state_flags = (amps_enabled ? STATE_F_AMPS : 0)
+                       | (custom_beam_active ? STATE_F_CUSTOM : 0);
         for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
           int32_t pk = 0;
           for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
@@ -1389,12 +1394,13 @@ int main(void)
       const ds_config_t *cfg = UART_Protocol_GetConfig();
       beam_config.master_gain = cfg->master_gain;
       beam_config.mute_global = cfg->mute_global;
-      // Map 16 ESP32 channels into first 16 beam channels
-      for (uint32_t i = 0; i < CFG_NUM_CHANNELS; i++) {
+      /* Desde 2026-08-18 la config del ESP32 cubre los 32 canales; antes eran
+       * 16 y las filas 3 y 4 no se podían silenciar ni atenuar desde la red. */
+      for (uint32_t i = 0; i < CFG_NUM_CHANNELS && i < BEAM_NUM_CHANNELS; i++) {
         beam_config.delays[i] = cfg->delays[i];
         beam_config.gains[i] = cfg->gains[i];
       }
-      beam_config.mutes = (uint32_t)cfg->mutes;  // lower 16 bits
+      beam_config.mutes = cfg->mutes;
       // In RX beam mode, delays[0..7] act as RAW per-mic RX delays —
       // experimentation path that overrides the computed steering table.
       if (beam_enabled) {
@@ -2768,6 +2774,11 @@ static uint8_t Apply_Master_Volume(int8_t db) {
  * K2 press resumes cycling from the last preset (documented behavior).
  */
 static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
+  /* A partir de acá ui_state_idx deja de describir lo que suena. Se avisa por
+   * telemetría (STATE_F_CUSTOM) en vez de mover el índice, porque moverlo
+   * rompería la otra propiedad que sí se quiere: que el próximo K2 retome el
+   * ciclo desde el último preset elegido. */
+  custom_beam_active = 1;
   if (req->type == 2) {
     /* MULTIFOCUS: az_deg lleva el índice de fuente (reuso del struct, sin
      * cambio de tamaño de trama). Validar ANTES de tocar flags — un src
@@ -3051,6 +3062,7 @@ static void Set_In_Gain(uint8_t db) {
 static void UI_ApplyState(uint8_t idx) {
   const ui_state_t *st = &ui_states[idx];
   ui_state_idx = idx;
+  custom_beam_active = 0;      // elegir un modo vuelve a poner al día lo que se ve
   walker_enabled = st->walker;
   tx_steer_enabled = st->tx;
   if (st->beam && !beam_enabled) memset(beam_line, 0, sizeof(beam_line));

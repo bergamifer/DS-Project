@@ -71,7 +71,11 @@ static volatile uint8_t amps_req_flag = 0;
 static volatile uint8_t factory_reset_flag = 0;
 
 /* Pre-formatted print buffer for non-blocking IT transmission */
-#define PRINT_BUF_SIZE 1200
+/* Una línea por canal (~45 chars) + ~200 de encabezado y cierre. Con 32 canales
+ * son ~1640, y el buffer estaba en 1200 desde que la config tenía 16 — pasar a
+ * 32 lo desbordaba. El bucle de abajo además chequea el espacio restante, así
+ * que un CFG_NUM_CHANNELS mayor trunca en vez de pisar memoria. */
+#define PRINT_BUF_SIZE 2048
 static char print_buf[PRINT_BUF_SIZE];
 
 /* Forward declarations */
@@ -129,10 +133,14 @@ void UART_Protocol_PrintConfig(void)
     uint32_t gain_pct = ((uint32_t)cfg->master_gain * 100) / 255;
     pos += sprintf(&print_buf[pos], "Master gain: %u (%lu%%)\r\n", cfg->master_gain, gain_pct);
     pos += sprintf(&print_buf[pos], "Global mute: %s\r\n", cfg->mute_global ? "YES" : "no");
-    pos += sprintf(&print_buf[pos], "Mutes bitfield: 0x%04X\r\n", cfg->mutes);
+    pos += sprintf(&print_buf[pos], "Mutes bitfield: 0x%08lX\r\n",
+                   (unsigned long)cfg->mutes);
     pos += sprintf(&print_buf[pos], "--- Channels ---\r\n");
 
     for (uint8_t ch = 0; ch < CFG_NUM_CHANNELS; ch++) {
+        /* 64 = holgura para la línea más larga posible. Truncar es preferible a
+         * escribir fuera del buffer si alguien sube CFG_NUM_CHANNELS. */
+        if (pos > PRINT_BUF_SIZE - 64) break;
         uint32_t ch_gain_pct = ((uint32_t)cfg->gains[ch] * 100) / 255;
         uint8_t ch_muted = (cfg->mutes >> ch) & 1;
         pos += sprintf(&print_buf[pos], "Ch%02u: delay=%5u  gain=%3u(%2lu%%)  mute=%u\r\n",
