@@ -1,7 +1,34 @@
-# Manual de modos de operación — DS10 (firmware STM32)
+# Manual de modos de operación — DS11 (firmware STM32)
 
 > Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (16 modos, índices 0–15).
-> Última actualización: 2026-07-12.
+> Última actualización: 2026-08-16.
+>
+> **¿Primera vez con el equipo?** Empezá por [guia_operacion.md](guia_operacion.md),
+> que explica el conexionado y el encendido en lenguaje llano. Este manual asume
+> que la placa ya está andando.
+
+## ⚠️ Antes que nada: los amplificadores arrancan APAGADOS
+
+Desde el incidente de brown-out del 2026-08-04, el pin SD de los 32 PAM8302A
+**no** se habilita solo al final del boot. Ningún modo suena hasta que se los
+enciende:
+
+```bash
+curl -X POST http://<IP>/amps -d '{"on":true}'     # encender
+curl -X POST http://<IP>/amps -d '{"on":false}'    # apagar (botón de pánico)
+```
+
+> 💡 **`on` sirve además como comando de recuperación.** Desde 2026-08-17 siempre
+> pulsa SD a 0 y de vuelta a 1, aunque ya estuviera encendido. Es por el **UVLO
+> enclavado del PAM8302A**: tras cualquier hundimiento del +5VA, los amps que hayan
+> cruzado 2,1 V quedan mudos hasta que se cicle SD o la alimentación — y como SD ya
+> estaba alto, un "on" sin pulso no los recuperaba. Si alguna vez faltan canales sin
+> causa visible, mandá `amps on` antes de sospechar del hardware.
+
+Además de evitar el tirón de corriente, es la herramienta que separa limpio dos
+hipótesis: si algo reinicia con amps ON y no con OFF, **es alimentación**; si
+reinicia igual con OFF, hay que buscar en otro lado. Con los amps apagados corre
+todo el pipeline —SAI, DMA, beamforming, los 4 bancos— en silencio absoluto.
 
 ## Cómo se cambia de modo
 
@@ -28,8 +55,8 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 
 | # | Nombre (UART) | Fuente | Salida | Notas |
 |---|---------------|--------|--------|-------|
-| 0 | `ADC monitor (+30dB)` | ADC ch0–7 en vivo | Cada canal DAC reproduce su canal ADC | Boost ×32, modo por defecto |
-| 1 | `Channel walker (1s/ch)` | Tono 1 kHz interno | Un canal por vez, 1 s cada uno | Valida mapeo canal→parlante |
+| 0 | `ADC monitor (+30dB)` | ADC ch0–7 en vivo | Las 8 entradas repetidas en cada fila | Boost ×32, modo por defecto. ⚠️ **No sirve para juzgar niveles de línea** — ver abajo |
+| 1 | `Channel walker (1s/ch)` | Tono 1 kHz interno | Un canal por vez, 1 s cada uno | **32 canales** = 32 s por vuelta |
 | 2 | `RX beam az=0 (broadside)` | Beam delay-and-sum de los 8 ADC | Beam mono en todos los canales | Boost ×32 |
 | 3 | `RX beam az=+30` | ídem, steering +30° | ídem | |
 | 4 | `RX beam az=-30` | ídem, −30° | ídem | |
@@ -50,11 +77,45 @@ la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
 
 ---
 
+## ⚠️ El modo 0 satura con fuentes de línea, y no es culpa del ADC
+
+Observado el 2026-08-18 con una Mac conectada: por encima del ~20% de volumen de la
+fuente, "satura". **El ADC no tiene nada que ver.**
+
+Medido en ese momento: picos de **46778 sobre 8388607** = **−45 dBFS**, con `OVF=0`
+sostenido. **Al ADC le sobraban 45 dB de headroom.**
+
+Lo que clipea es el **boost de +30 dB del propio modo 0** (`adc_monitor_shift = 5`,
+×32), que existe para poder escuchar un micrófono, no una salida de línea. Con la
+fuente al 20% ya estás a −15 dBFS *después* del boost.
+
+**Conclusión práctica: no hace falta atenuador ni resistencias de entrada.** Para
+fuentes de línea usá el **modo 15**, que aplica `mf_in_shift = 2` (×4, +12 dB) — ahí
+podés subir bastante más la fuente. El modo 0 es una herramienta de diagnóstico de
+micrófonos, no un monitor de nivel.
+
+> 💡 **Cómo verificar el nivel de verdad**: mirá `OVF` en `/status`. Mientras esté en
+> **0**, el ADC no satura, sin importar lo que escuches. Si pasa a 1, ahí sí hay que
+> bajar la fuente.
+
+### Observación pendiente: diafonía entre canales del mismo cable
+
+En esa misma sesión, con señal en c6/c7 (~20000-46000), los canales **c4 y c5 del
+mismo cable RJ45** marcaban 150-330 contra 50-60 de los canales del *otro* cable.
+Son unos **−38 dB** respecto de la señal.
+
+Dos mecanismos posibles, no verificados: los **pares partidos** del pinout de J9
+(ver `../hardware/DS/DS12_PLANNING.md` §6d), o —más probable con fuentes
+desbalanceadas— la **impedancia común del retorno de masa**, que con una ficha
+stereo comparte el cuerpo entre los dos canales. Vale la pena separarlo antes de
+atribuirlo al cable.
+
 ## Modo 0 — ADC monitor (+30 dB)
 
 Ruta directa ADC→DAC para *escuchar* lo que captura el AK5538. Cada canal de
-salida reproduce su canal ADC homólogo (DAC ch0 ← ADC ch0, etc.; los canales
-de salida 8–31 repiten ADC ch0). La señal del ADC es débil (hum ~−55 dBFS),
+salida reproduce su canal ADC homólogo (DAC ch0 ← ADC ch0, etc.). En DS11 las
+8 entradas se **repiten en cada fila** de 8 parlantes: la entrada N suena en la
+columna N de las 4 filas. La señal del ADC es débil (hum ~−55 dBFS),
 así que se aplica `adc_monitor_shift = 5` (×32 ≈ +30 dB) y clamp a ±FS 24-bit.
 
 - **Uso**: verificar cadena de entrada, mapear entrada física → slot TDM
@@ -64,9 +125,11 @@ así que se aplica `adc_monitor_shift = 5` (×32 ≈ +30 dB) y clamp a ±FS 24-b
 ## Modo 1 — Channel walker (1 s/canal)
 
 Tono de 1 kHz a −6 dBFS en **un solo canal de salida por vez**, avanzando cada
-`WALKER_SECONDS_PER_CH` (1 s). Recorre `WALKER_NUM_CH` canales — **8 en DS10**
-(solo U2/DAC0 poblado); subir a 32 en DS11 para validar el mapa completo de
-parlantes y el cableado JSPK.
+`WALKER_SECONDS_PER_CH` (1 s). Recorre `WALKER_NUM_CH` canales — **32 en DS11**
+(los 4 PCM1690 poblados): una vuelta completa dura 32 s y valida el mapa
+canal→parlante y el cableado JSPK, incluida la doble inversión deliberada de
+los canales impares (al JST llega la polaridad correcta — ver
+`docs/ds11_upgrades.md`).
 
 - UART7 imprime en cada avance: `WALKER: chN (DACd slotS)`.
 - **Uso**: validar mapeo canal→parlante y, con osciloscopio o mic, la polaridad.
@@ -105,7 +168,7 @@ onda converjan en el punto focal.
   adyacentes de `beam_line`. Tope `TX_MAX_DELAY_SAMPLES = 128`.
 - Geometría de parlantes: 4×8 patrón ladrillo (`Beam_InitTxGeometry`), pitch
   X 80 mm / Y 160 mm, filas 2 y 4 corridas +40 mm. Mapeo ch = fila·8 + col
-  (**placeholder** — validar con el walker en DS11).
+  (validar con el walker sobre la DS11 ya poblada).
 - Marco de referencia: el del OYENTE mirando los conos. +X = derecha del
   oyente, +Y = hacia la fila 4, +Z = hacia el oyente. Coordenadas del foco
   relativas al centro del array.
@@ -133,7 +196,7 @@ mapeo de canales y polaridad invertida de parlantes.
 **Preparación**: colocar un micrófono EN el punto focal deseado, conectado a
 la entrada 1 del ADC (canal c0). Entrar al modo (K2 o `POST /mode`).
 
-**Secuencia por parlante** (los `CAL_NUM_CH` = 8 poblados en DS10):
+**Secuencia por parlante** (los `CAL_NUM_CH` = 32 de la DS11, ~8 s de scan):
 
 1. `SETTLE` — 100 ms de silencio (decaimiento de la sala).
 2. `ARM` → emite un **chirp de 10 ms** (500 Hz → 6 kHz lineal, −6 dBFS, fades
@@ -162,7 +225,7 @@ heartbeat = nivel en el foco. Para re-escanear, salir y volver a entrar.
 Generador de tono **interno** (−6 dBFS) que se escribe en `beam_line` en las
 mismas posiciones/cadencia que el RX beam, así el path de TX steering corre
 **sin cambios** (delays fraccionales Q8, gains, signos). Plan de diseño:
-`docs/ds10_tone_beam_plan.md`.
+los modos 12-13 de `manual_modos.md`.
 
 - Acumulador de fase Q16 sobre la tabla de seno de 48 muestras con
   interpolación lineal → el delay sigue siendo un delay de TIEMPO real a
@@ -174,9 +237,9 @@ mismas posiciones/cadencia que el RX beam, así el path de TX steering corre
   se estabiliza aunque la sala sea mala. Sin clicks (fase continua).
 - `beam_out_shift = 0` en estos modos (el ×32 de los modos ADC clipearía
   brutalmente contra los PAM: el tono ya es −6 dBFS).
-- Foco (0, **−240**, 1000) mm: fy = −240 pone el foco en el plano de la fila 1
-  — la única poblada en DS10 (un array lineal no discrimina en Y de todos
-  modos).
+- Foco (0, **0**, 1000) mm: con las 4 filas pobladas en DS11 el foco va al
+  centro del array y la apertura vertical (480 mm) también enfoca. En DS10
+  iba a fy = −240 para apuntar al plano de la única fila poblada.
 - **Test auto-validante**: caminar con un mic o el oído a 1 m. El spot a 2 kHz
   (~±14 cm) debe ser aproximadamente la mitad de ancho que a 1 kHz (~±27 cm).
   Relación ~2 = el steering funciona.
@@ -205,7 +268,7 @@ mañana serán `delay_line[src]` (los ADC), con las mismas tablas.
   similar): en cada posición domina el pico de la frecuencia cuyo foco está
   ahí. El mapa espacial se "lee" por frecuencia, sin mover nada.
 - **Mover un foco individual** (sin re-entrar al modo):
-  `POST /beam {"type":"mf","src":2,"fx":300,"fy":-240,"fz":1000}` —
+  `POST /beam {"type":"mf","src":2,"fx":300,"fy":0,"fz":1000}` —
   re-apunta SOLO la fuente 2, conservando su frecuencia. `src` fuera de rango
   se rechaza sin tocar el modo en curso. Si no estabas en modo 14, un `mf`
   te mete en él.
@@ -232,7 +295,7 @@ lugares distintos, simultáneamente.
 - **Focos default**: entrada N → fx = −700 + 200·N mm (−700…+700, paso 200),
   fy = −240, fz = 1000. Re-entrar al modo resetea a estos defaults.
 - **Mover una entrada de lugar** (en vivo):
-  `POST /beam {"type":"mf","src":5,"fx":200,"fy":-240,"fz":800}` — en este
+  `POST /beam {"type":"mf","src":5,"fx":200,"fy":0,"fz":800}` — en este
   modo `src` va de 0 a 7 y re-apunta esa entrada sin tocar las demás.
 - **Niveles**: boost de entrada +12 dB (`mf_in_shift = 2`, nivel de línea).
   Si distorsiona, **bajar el volumen de la fuente** (hay clamp, pero suena
@@ -247,6 +310,7 @@ lugares distintos, simultáneamente.
 
 | Control | Vía | Efecto |
 |---------|-----|--------|
+| **Amplificadores** | `POST /amps {"on":true}` → `CMD_SET_AMPS` (0x0A) | Enable del banco de 32 PAM8302A (pin SD, PD3). **Arranca en 0** — sin esto no suena nada. No se persiste: cada boot arranca apagado. |
 | **Volumen maestro** | `POST /volume {"db":-20}` → `CMD_SET_VOLUME` | **Único maestro**: atenuación del PCM1690 (0…−63 dB, ≤−64 = mute), 0.5 dB/paso. Se persiste en EEPROM (debounce 3 s). Default −24 dB. |
 | **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (52 bytes) | mute_global, gains/delays/mutes de los primeros 16 canales. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
 | **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32; `type:"mf"` con `src` 0-7 — re-apunta el foco de UNA fuente MULTIFOCUS (tonos del 14 o entradas del 15, según el modo activo). No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
@@ -255,7 +319,55 @@ lugares distintos, simultáneamente.
 ## Diagnóstico por UART7 (115200 8N1, J7 → ST-Link VCP)
 
 - Heartbeat 1/s: `[Ns] Half: 50/s, Full: 50/s, Err, Undr, RX bytes | ESP: <ip>`
+- **`SYNC bancos: <n> us | CPU fills: <n>%`** — las dos métricas de DS11:
+  - **SYNC** = desfase entre los ciclos de DMA de los dos masters SAI
+    (SAI1_A = filas 0-1, SAI2_A = filas 2-3). **Debe dar pocos µs.** Si da
+    milisegundos, los dos medios arrays están reproduciendo ventanas de
+    tiempo distintas y el enfoque vertical no es coherente — ver la sección
+    "Sincronismo entre bancos" abajo.
+  - **CPU** = fracción del presupuesto (480M ciclos/s) gastada en los 4 fills.
+    **Valor de referencia medido (2026-08-14, soak de 19,6 h): 26,6% en modo 7**,
+    con `Fill avg = 668 µs`. Si volvés a ver ~60%, revirtió el I-cache o el `-O2`
+    (ver `ds11_perf.md`). El valor en modo 15, el fill más caro, sigue sin anotarse.
 - `ADCpk: c0..c7 | OVF RXdma=100/s` — picos de entrada + liveness del DMA RX.
 - `BEAM az=<az> pk=` — solo en modos beam.
-- Cada 10 s (verbose): estadísticas de fill (µs), jitter y temperatura del CPU.
+- Cada 10 s (verbose): estadísticas de fill (µs) **de SAI1_A solamente**,
+  jitter y temperatura del CPU. Para el costo total usar la línea CPU.
 - Reporte de test completo cada 60 s con PASS/FAIL del pipeline.
+
+**Sobre `Undr` (underruns)**: hasta el 2026-08-14 subía ~2/s de forma constante y
+eso era **audible** — un "pop" por segundo, y uno más fuerte cada 10 s. La causa
+eran los prints bloqueantes y el guardado de EEPROM, que superaban el deadline de
+10 ms del fill. Se corrigió haciendo que `UART_Print` y el ciclo de escritura de la
+EEPROM **sirvan los fills mientras esperan** (`Service_Fills()` / `EEPROM_Yield()`).
+**Ahora el valor esperado es 0 sostenido.** Si vuelve a subir, algo bloquea el main
+loop más de 10 ms y se va a escuchar.
+
+## Sincronismo entre bancos (crítico desde DS11)
+
+`SAI1_A` (ch0-15, filas 0-1) y `SAI2_A` (ch16-31, filas 2-3) son **dos masters
+asíncronos entre sí**: comparten PLL3 —misma frecuencia, sin deriva— pero cada
+uno arranca su propio stream cuando se le pone `SAIEN`, y **ese offset inicial
+queda fijo para siempre**. No hay nada en el hardware que los realinee: cada
+grupo de DACs recibe su BCK/FS por pines distintos (PE4/PE5 → U2+U3,
+PD12/PD13 → U1+U4), así que tampoco se pueden encadenar por SYNCEXT sin
+cambiar la placa.
+
+**Por qué importa**: el pipeline llena los 4 buffers tomando el mismo
+`delay_write_pos` en una sola pasada del main loop. Eso sólo vale si los 4
+callbacks caen en la misma pasada. Con los masters desfasados, los fills de
+cada banco ocurren en pasadas distintas y pueden tomar valores de `wp` que
+difieren en 480 muestras → **hasta ~10 ms (3,4 m de camino acústico) de
+offset entre las filas 0-1 y las filas 2-3**.
+
+**Regla firme**: los cuatro `HAL_SAI_Transmit_DMA` del arranque van
+**consecutivos, sin nada en el medio** — en particular sin `UART_Print`. Los
+prints van después. Verificar siempre con la línea `SYNC` del heartbeat.
+
+**✅ Medido (2026-08-14): 4 µs al principio, 1 µs (839 ciclos) tras las
+optimizaciones, y estable arranque tras arranque a lo largo de 19,6 h.** Son 1,4 mm
+de camino acústico contra un pitch de 80 mm entre parlantes: irrelevante. La regla
+funcionó y el riesgo está cerrado. Como el offset es reproducible, una calibración
+de AUTOFOCUS **sí sobreviviría** un ciclo de alimentación.
+
+En DS10 esto era invisible porque sólo estaba poblado un banco (U2).

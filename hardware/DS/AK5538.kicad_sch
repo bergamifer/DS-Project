@@ -6620,6 +6620,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 160.02 55.88 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "d6be7c21-789e-476d-b3d6-f7602a483456")
 		)
@@ -6682,7 +6693,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 223.52 139.7 0)
 			(hide yes)
 			(show_name no)
@@ -6737,7 +6748,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 223.52 139.7 90)
 			(hide yes)
 			(show_name no)
@@ -6748,7 +6759,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 223.52 139.7 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 223.52 139.7 90)
 			(hide yes)
 			(show_name no)
@@ -6883,6 +6905,17 @@
 			)
 		)
 		(property "LCSC" "C25117"
+			(at 228.6 110.49 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 228.6 110.49 90)
 			(hide yes)
 			(show_name no)
@@ -7108,6 +7141,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 66.04 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "9a4c6b2d-7add-46b2-ae85-ed6d32caf2cc")
 		)
@@ -7234,6 +7278,17 @@
 			)
 		)
 		(property "LCSC" "C1525"
+			(at 85.09 107.95 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 85.09 107.95 90)
 			(hide yes)
 			(show_name no)
@@ -7447,6 +7502,17 @@
 			)
 		)
 		(property "LCSC" "C22950"
+			(at 162.56 77.47 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 162.56 77.47 90)
 			(hide yes)
 			(show_name no)
@@ -7671,6 +7737,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 85.09 99.06 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "f941f12e-0823-461c-9318-da344d548670")
 		)
@@ -7797,6 +7874,17 @@
 			)
 		)
 		(property "LCSC" "C25117"
+			(at 194.31 66.04 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 194.31 66.04 90)
 			(hide yes)
 			(show_name no)
@@ -7935,6 +8023,17 @@
 			)
 		)
 		(property "LCSC" "C23630"
+			(at 199.39 78.74 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 199.39 78.74 90)
 			(hide yes)
 			(show_name no)
@@ -8230,6 +8329,17 @@
 			)
 		)
 		(property "LCSC" "C23630"
+			(at 199.39 107.95 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 199.39 107.95 90)
 			(hide yes)
 			(show_name no)
@@ -8631,6 +8741,28 @@
 				)
 			)
 		)
+		(property "LCSC" "C5158049"
+			(at 166.37 170.1098 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
+			(at 151.13 176.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "7ce80214-5b18-47f3-ad4e-6a8725c3eaad")
 		)
@@ -8778,7 +8910,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 204.47 137.16 0)
 			(hide yes)
 			(show_name no)
@@ -8833,7 +8965,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 204.47 137.16 90)
 			(hide yes)
 			(show_name no)
@@ -8844,7 +8976,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 204.47 137.16 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 204.47 137.16 90)
 			(hide yes)
 			(show_name no)
@@ -9150,6 +9293,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 73.66 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "01ec44d8-a37f-4b7b-a621-d0edab4e99d1")
 		)
@@ -9331,6 +9485,17 @@
 			)
 		)
 		(property "Price" "0.0225"
+			(at 96.52 107.95 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 96.52 107.95 90)
 			(hide yes)
 			(show_name no)
@@ -9867,6 +10032,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 63.5 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "5f65fed4-f2e5-468b-a5db-cb7e161a6cf1")
 		)
@@ -9980,6 +10156,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 41.91 71.12 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "2213a86e-9ad2-44ed-bd48-6644ae36b72d")
 		)
@@ -10083,6 +10270,17 @@
 			)
 		)
 		(property "Price" "0.0225"
+			(at 114.3 107.95 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 114.3 107.95 90)
 			(hide yes)
 			(show_name no)
@@ -10231,6 +10429,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 100.33 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "4207ccde-864f-40b1-9f89-7c065b725a17")
 		)
@@ -10357,6 +10566,17 @@
 			)
 		)
 		(property "LCSC" "C1525"
+			(at 154.94 55.88 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 154.94 55.88 90)
 			(hide yes)
 			(show_name no)
@@ -10816,6 +11036,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 161.29 60.96 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "336931e5-380f-428e-971a-001a787656f7")
 		)
@@ -11105,6 +11336,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 273.05 110.49 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "ae6989c2-f81a-455a-b6f8-812bc10d2321")
 		)
@@ -11320,6 +11562,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 100.33 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "52dd850a-71d7-4c8d-ae71-b59ea42900da")
 		)
@@ -11423,6 +11676,17 @@
 			)
 		)
 		(property "Price" " 0.3817"
+			(at 256.54 71.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 256.54 71.12 0)
 			(hide yes)
 			(show_name no)
@@ -11696,6 +11960,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 212.09 102.87 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "SH"
 			(uuid "a974539c-a617-4f5d-a56c-d78c5041b494")
 		)
@@ -11949,6 +12224,17 @@
 			)
 		)
 		(property "Price" " 0.3817"
+			(at 256.54 102.87 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 256.54 102.87 0)
 			(hide yes)
 			(show_name no)
@@ -12247,6 +12533,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 71.12 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "8d2a9bef-8e3e-4025-8052-486c72fde300")
 		)
@@ -12482,6 +12779,28 @@
 				)
 			)
 		)
+		(property "LCSC" "C5158049"
+			(at 149.86 138.3598 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
+			(at 134.62 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "728ce3fe-6194-4e9f-a737-a68b577ba367")
 		)
@@ -12701,6 +13020,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 76.2 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "1727fecc-ebf5-4bbb-b0e4-47d7cd66ec28")
 		)
@@ -12837,6 +13167,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 105.41 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "06caea0c-fd7b-4426-8f4f-22898514e67b")
 		)
@@ -12899,7 +13240,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 223.52 144.78 0)
 			(hide yes)
 			(show_name no)
@@ -12954,7 +13295,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 223.52 144.78 90)
 			(hide yes)
 			(show_name no)
@@ -12965,7 +13306,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 223.52 144.78 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 223.52 144.78 90)
 			(hide yes)
 			(show_name no)
@@ -13038,7 +13390,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 204.47 144.78 0)
 			(hide yes)
 			(show_name no)
@@ -13093,7 +13445,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 204.47 144.78 90)
 			(hide yes)
 			(show_name no)
@@ -13104,7 +13456,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 204.47 144.78 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 204.47 144.78 90)
 			(hide yes)
 			(show_name no)
@@ -13351,6 +13714,28 @@
 				)
 			)
 		)
+		(property "LCSC" "C5158049"
+			(at 100.33 170.1098 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
+			(at 85.09 176.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "92ea5769-1b8f-4f3f-83a8-af324697aa37")
 		)
@@ -13484,6 +13869,17 @@
 			)
 		)
 		(property "LCSC" "C1525"
+			(at 114.3 100.33 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 114.3 100.33 90)
 			(hide yes)
 			(show_name no)
@@ -13710,6 +14106,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 81.28 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "17cb5405-a5a0-4396-9614-c78d974828a9")
 		)
@@ -13780,6 +14187,28 @@
 			)
 		)
 		(property "Description" "Ultra low capacitance double rail-to-rail ESD protection diode, SOT-143"
+			(at 52.07 176.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C5158049"
+			(at 67.31 170.1098 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 52.07 176.53 0)
 			(hide yes)
 			(show_name no)
@@ -13920,6 +14349,17 @@
 			)
 		)
 		(property "LCSC" "C22950"
+			(at 99.06 113.03 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 99.06 113.03 90)
 			(hide yes)
 			(show_name no)
@@ -14225,6 +14665,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 105.41 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "d30c53f8-1add-444a-9c93-eb80ce1ea32d")
 		)
@@ -14453,6 +14904,28 @@
 			)
 		)
 		(property "Description" "Ultra low capacitance double rail-to-rail ESD protection diode, SOT-143"
+			(at 101.6 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C5158049"
+			(at 116.84 138.3598 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 101.6 144.78 0)
 			(hide yes)
 			(show_name no)
@@ -14838,6 +15311,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 96.52 100.33 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "bd9b5eb9-1421-4b07-a37b-d421e5da15b6")
 		)
@@ -14977,7 +15461,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 223.52 142.24 0)
 			(hide yes)
 			(show_name no)
@@ -15032,7 +15516,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 223.52 142.24 90)
 			(hide yes)
 			(show_name no)
@@ -15043,7 +15527,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 223.52 142.24 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 223.52 142.24 90)
 			(hide yes)
 			(show_name no)
@@ -15269,6 +15764,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 102.87 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "116da37f-b8cc-43fa-99e3-756ad1c1769e")
 		)
@@ -15396,6 +15902,17 @@
 			)
 		)
 		(property "LCSC" "C1525"
+			(at 50.8 71.12 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 50.8 71.12 90)
 			(hide yes)
 			(show_name no)
@@ -15621,6 +16138,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 97.79 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "6a978261-1489-4e46-962c-04c4c623e7f3")
 		)
@@ -15762,7 +16290,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 204.47 134.62 0)
 			(hide yes)
 			(show_name no)
@@ -15817,7 +16345,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 204.47 134.62 90)
 			(hide yes)
 			(show_name no)
@@ -15828,7 +16356,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 204.47 134.62 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 204.47 134.62 90)
 			(hide yes)
 			(show_name no)
@@ -16209,6 +16748,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 95.25 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "3f314aa3-b39d-41bd-aca1-541ee397848c")
 		)
@@ -16335,6 +16885,17 @@
 			)
 		)
 		(property "LCSC" "C1525"
+			(at 152.4 74.93 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 152.4 74.93 90)
 			(hide yes)
 			(show_name no)
@@ -16561,6 +17122,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 76.2 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "07352fff-51c3-4afd-ae22-85cec68e56e6")
 		)
@@ -16715,6 +17287,17 @@
 			)
 		)
 		(property "Price" "12.6013"
+			(at 86.36 87.63 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 86.36 87.63 0)
 			(hide yes)
 			(show_name no)
@@ -17127,6 +17710,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 228.6 78.74 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "c052c21c-a4d0-4d8f-a1b8-6e7a02fcb56a")
 		)
@@ -17266,7 +17860,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 204.47 142.24 0)
 			(hide yes)
 			(show_name no)
@@ -17321,7 +17915,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 204.47 142.24 90)
 			(hide yes)
 			(show_name no)
@@ -17332,7 +17926,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 204.47 142.24 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 204.47 142.24 90)
 			(hide yes)
 			(show_name no)
@@ -17546,6 +18151,17 @@
 			)
 		)
 		(property "LCSC" "C25117"
+			(at 194.31 68.58 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 194.31 68.58 90)
 			(hide yes)
 			(show_name no)
@@ -17771,7 +18387,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 204.47 132.08 0)
 			(hide yes)
 			(show_name no)
@@ -17826,7 +18442,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 204.47 132.08 90)
 			(hide yes)
 			(show_name no)
@@ -17837,7 +18453,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 204.47 132.08 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 204.47 132.08 90)
 			(hide yes)
 			(show_name no)
@@ -18061,6 +18688,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 81.28 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "6b7c7e05-622f-4ff1-9fe5-6e8dc2d65337")
 		)
@@ -18197,6 +18835,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 97.79 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "0bfa3fa6-d0fa-4f55-8afc-b092e2955be4")
 		)
@@ -18323,6 +18972,17 @@
 			)
 		)
 		(property "LCSC" "C25117"
+			(at 194.31 107.95 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 194.31 107.95 90)
 			(hide yes)
 			(show_name no)
@@ -18626,6 +19286,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 63.5 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "9cd19c9e-7ff6-49ca-b4aa-0bc1362303e3")
 		)
@@ -18841,6 +19512,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 113.03 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "29b4421d-222a-4248-ac7f-b7b77750685d")
 		)
@@ -18967,6 +19649,17 @@
 			)
 		)
 		(property "LCSC" "C25117"
+			(at 194.31 71.12 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 194.31 71.12 90)
 			(hide yes)
 			(show_name no)
@@ -19116,7 +19809,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 204.47 139.7 0)
 			(hide yes)
 			(show_name no)
@@ -19171,7 +19864,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 204.47 139.7 90)
 			(hide yes)
 			(show_name no)
@@ -19182,7 +19875,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 204.47 139.7 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 204.47 139.7 90)
 			(hide yes)
 			(show_name no)
@@ -19407,6 +20111,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 154.94 60.96 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "5b55059b-fdd7-4650-95b8-58d7611725be")
 		)
@@ -19469,7 +20184,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 223.52 134.62 0)
 			(hide yes)
 			(show_name no)
@@ -19524,7 +20239,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 223.52 134.62 90)
 			(hide yes)
 			(show_name no)
@@ -19535,7 +20250,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 223.52 134.62 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 223.52 134.62 90)
 			(hide yes)
 			(show_name no)
@@ -19842,6 +20568,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 125.73 105.41 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "4ba140ee-9f00-4bf1-b623-233ce197f16b")
 		)
@@ -19904,7 +20641,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 204.47 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -19959,7 +20696,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 204.47 149.86 90)
 			(hide yes)
 			(show_name no)
@@ -19970,7 +20707,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 204.47 149.86 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 204.47 149.86 90)
 			(hide yes)
 			(show_name no)
@@ -20196,6 +20944,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 102.87 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "859b6783-73bf-492b-9169-972092428f00")
 		)
@@ -20320,6 +21079,17 @@
 			)
 		)
 		(property "LCSC" "C22950"
+			(at 111.76 113.03 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 111.76 113.03 90)
 			(hide yes)
 			(show_name no)
@@ -20458,6 +21228,17 @@
 			)
 		)
 		(property "LCSC" "C23630"
+			(at 199.39 68.58 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 199.39 68.58 90)
 			(hide yes)
 			(show_name no)
@@ -20995,6 +21776,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 73.66 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "3a109d8e-9fdc-43dd-bcfc-bff3a5983741")
 		)
@@ -21056,7 +21848,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 223.52 132.08 0)
 			(hide yes)
 			(show_name no)
@@ -21111,7 +21903,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 223.52 132.08 90)
 			(hide yes)
 			(show_name no)
@@ -21122,7 +21914,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 223.52 132.08 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 223.52 132.08 90)
 			(hide yes)
 			(show_name no)
@@ -21195,7 +21998,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 223.52 137.16 0)
 			(hide yes)
 			(show_name no)
@@ -21250,7 +22053,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 223.52 137.16 90)
 			(hide yes)
 			(show_name no)
@@ -21261,7 +22064,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 223.52 137.16 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 223.52 137.16 90)
 			(hide yes)
 			(show_name no)
@@ -21334,7 +22148,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 223.52 147.32 0)
 			(hide yes)
 			(show_name no)
@@ -21389,7 +22203,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 223.52 147.32 90)
 			(hide yes)
 			(show_name no)
@@ -21400,7 +22214,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 223.52 147.32 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 223.52 147.32 90)
 			(hide yes)
 			(show_name no)
@@ -21514,6 +22339,17 @@
 			)
 		)
 		(property "Price" " 0.3817"
+			(at 212.09 71.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 212.09 71.12 0)
 			(hide yes)
 			(show_name no)
@@ -21810,6 +22646,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 78.74 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "695ddb91-00c8-4615-ae43-779a9e99c205")
 		)
@@ -21945,6 +22792,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 39.37 73.66 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "072c6c19-9b6f-4bac-aea7-0905d91dca4e")
 		)
@@ -22007,7 +22865,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 223.52 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -22062,7 +22920,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 223.52 149.86 90)
 			(hide yes)
 			(show_name no)
@@ -22073,7 +22931,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 223.52 149.86 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 223.52 149.86 90)
 			(hide yes)
 			(show_name no)
@@ -22299,6 +23168,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 95.25 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "e89b0229-2733-443a-ac4e-0539d518670a")
 		)
@@ -22369,6 +23249,28 @@
 			)
 		)
 		(property "Description" "Ultra low capacitance double rail-to-rail ESD protection diode, SOT-143"
+			(at 35.56 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C5158049"
+			(at 50.8 138.3598 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 35.56 144.78 0)
 			(hide yes)
 			(show_name no)
@@ -22523,6 +23425,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 199.39 110.49 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "3e2db916-aa92-4d1a-ad87-0f19ce9990c6")
 		)
@@ -22647,6 +23560,17 @@
 			)
 		)
 		(property "LCSC" "C23140"
+			(at 168.91 31.75 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 168.91 31.75 90)
 			(hide yes)
 			(show_name no)
@@ -22793,6 +23717,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 110.49 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "c0479d3a-6601-4fc6-8575-0175529e8697")
 		)
@@ -22896,6 +23831,17 @@
 			)
 		)
 		(property "Price" "0.0225"
+			(at 157.48 74.93 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 157.48 74.93 90)
 			(hide yes)
 			(show_name no)
@@ -23042,6 +23988,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 125.73 97.79 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "b24579d5-6565-4c69-bbe5-e7feea54dfd1")
 		)
@@ -23178,6 +24135,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 194.31 113.03 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "e902bc85-852f-499b-9c37-258634362c8a")
 		)
@@ -23240,7 +24208,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8579707269996871680"
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8717343294134292480"
 			(at 204.47 147.32 0)
 			(hide yes)
 			(show_name no)
@@ -23295,7 +24263,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "TCC0402COG101F500AT"
+		(property "Manufacturer_Part_Number" "CC0402FRNPO9BN101"
 			(at 204.47 147.32 90)
 			(hide yes)
 			(show_name no)
@@ -23306,7 +24274,18 @@
 				)
 			)
 		)
-		(property "LCSC" "C18164616"
+		(property "LCSC" "C327198"
+			(at 204.47 147.32 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 204.47 147.32 90)
 			(hide yes)
 			(show_name no)
@@ -23387,6 +24366,28 @@
 			)
 		)
 		(property "Description" "Ultra low capacitance double rail-to-rail ESD protection diode, SOT-143"
+			(at 118.11 176.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C5158049"
+			(at 133.35 170.1098 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 118.11 176.53 0)
 			(hide yes)
 			(show_name no)
@@ -23616,6 +24617,17 @@
 				)
 			)
 		)
+		(property "Field8" ""
+			(at 273.05 78.74 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "cb48ccfb-220d-45fa-9875-ebfbd5be1cde")
 		)
@@ -23686,6 +24698,28 @@
 			)
 		)
 		(property "Description" "Ultra low capacitance double rail-to-rail ESD protection diode, SOT-143"
+			(at 68.58 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C5158049"
+			(at 83.82 138.3598 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
 			(at 68.58 144.78 0)
 			(hide yes)
 			(show_name no)

@@ -13,7 +13,7 @@
 ######################################
 # target
 ######################################
-TARGET = ds10_beamforming
+TARGET = ds11_beamforming
 
 
 ######################################
@@ -22,7 +22,11 @@ TARGET = ds10_beamforming
 # debug build?
 DEBUG = 1
 # optimization
-OPT = -Og
+# -O2, no -Og. Medido 2026-08-13 sobre DS11: con -Og el modo 15 (8 fuentes ×
+# 32 salidas) perdía el 55% de los deadlines de fill y era inusable. Ver
+# docs/ds11_perf.md para el antes/después. Si alguna vez hay que depurar paso
+# a paso, volver a -Og temporalmente — pero NO dejarlo así.
+OPT = -O2
 
 
 #######################################

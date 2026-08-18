@@ -175,6 +175,110 @@ for (uint32_t i = 0; i < samples; i++) {
 }
 ```
 
+
+---
+
+## Hallazgos de la lectura completa del datasheet (2026-08-16)
+
+> Fuente: `datasheets/ak5538vn-en-datasheet.pdf` (015099878-E-02, 2022/02).
+> Lectura dirigida a **optimizar la DS11**, no a documentar el chip entero.
+
+### 🔴 1. El filtro de diezmado nos costaba 292 µs de latencia — gratis
+
+El AK5538 tiene **cuatro filtros de diezmado** seleccionables (datasheet §12, Tabla 20),
+y el **group delay cambia 4×** entre ellos. A fs = 48 kHz:
+
+| filtro | SD | SLOW | group delay | passband | stopband | ΔGD |
+|---|---|---|---|---|---|---|
+| **Sharp roll-off** ← *era el nuestro* | 0 | 0 | **19/fs = 396 µs** | 22 kHz | 85 dB | 0 |
+| Slow roll-off | 0 | 1 | 7/fs = 146 µs | 12,5 kHz | 85 dB | 0 |
+| **Short delay sharp** ← *el que conviene* | **1** | **0** | **5/fs = 104 µs** | **22 kHz** | **85 dB** | 2,8/fs |
+| Short delay slow | 1 | 1 | 5/fs = 104 µs | 12,5 kHz | 85 dB | 1,2/fs |
+
+**Short delay sharp tiene passband y atenuación IDÉNTICOS al sharp normal.** Lo único
+que se pierde es la fase lineal: la distorsión de group delay pasa de 0 a 2,8/fs (58 µs)
+como máximo en 0-20 kHz.
+
+**Por qué esa distorsión no afecta al beamforming**: el filtro es el mismo en los 8
+canales, así que su retardo es **común**. El patrón del haz lo fijan los delays
+**relativos** que aplica el STM32, que no se tocan. Sólo afecta marginalmente al timbre.
+Por el mismo argumento tampoco degrada al AUTOFOCUS: la distorsión está presente en
+todas las mediciones y se cancela en los delays relativos.
+
+**Aplicado**: `R04 = 0x02` en la secuencia de init, dentro de la ventana `RSTN=0`.
+
+⚠️ **El registro pisa al strapping.** La PCB tiene los pines **SD (IC3.48) y SLOW
+(IC3.47) atados a GND**, lo que sugeriría que el filtro no se puede cambiar. Pero el
+datasheet §"Operation Mode Control" es explícito:
+
+> *"In serial control mode, register settings are prioritized so that all pin settings
+> except the MSN pin setting are ignored."*
+
+y la placa está en modo **I²C** (`I2C`=H en IC3.54, `PSN`=L en IC3.53) según Tabla 22.
+El readback de `R04` en el log de boot lo confirma empíricamente: **si lee `0x02` el
+registro mandó; si lee `0x00`, hay que volver a contar los 396 µs.**
+
+### 2. El presupuesto de latencia real es mayor que el que reporta el firmware
+
+El heartbeat imprime `Total pipeline: buffer + fill`. **Eso subestima la latencia real**
+porque no cuenta los retardos de grupo de los conversores:
+
+| término | antes | con short delay |
+|---|---|---|
+| buffer (480 muestras) | 10000 µs | 10000 µs |
+| fill | 668 µs | 668 µs |
+| **group delay del ADC** | **396 µs** | **104 µs** |
+| group delay del PCM1690 | (sin medir) | (sin medir) |
+| **total (sin el DAC)** | **11064 µs** | **10772 µs** |
+
+**La palanca grande sigue siendo el buffer**: son el 93% de la latencia. Bajar de 480 a
+240 muestras ahorraría **5 ms** — diez veces más que el filtro. Antes no era viable con
+la CPU al 59%; **ahora que está en 26,6% sí lo es** (subiría a ~30% por el overhead extra
+de callbacks). Es la optimización a considerar si la latencia llega a importar.
+
+### 3. Suma de canales: +6 dB de rango dinámico para el mic de medición
+
+`R01` bits MONO2-1 configuran **channel summation** (§12, Tablas 17-19):
+
+| modo | rango dinámico |
+|---|---|
+| Sin suma (actual) | 111 dB |
+| 8-to-4 | 114 dB |
+| **8-to-2** | **117 dB** |
+| 8-to-1 | 120 dB |
+
+**No sirve para el modo 15** (la intervención necesita las 8 entradas independientes).
+**Sí sirve para AUTOFOCUS**: paralelando el mic de medición en 4 entradas y usando
+8-to-2 se ganan **6 dB de SNR** en la correlación del chirp, que es justo donde el
+ruido de fondo limita la medición. Requiere un cable en Y, nada de firmware más allá
+de escribir `R01`.
+
+### 4. Cosas verificadas que están BIEN (no tocar)
+
+- **LDOE (IC3.57) → +3V3** ✅. Con TVDD = 3,3 V el LDO interno **debe** estar ON
+  (Tabla 21). Si estuviera a GND, el core digital quedaría sin alimentación válida.
+- **DP (IC3.55) → GND** ✅ = modo PCM (no DSD).
+- **`I2C`=H, `PSN`=L** ✅ = modo I²C con registros prioritarios.
+- **HPF**: la frecuencia de corte está **fija en 1,0 Hz** a 48 kHz — no es configurable,
+  sólo on/off por `HPFE`. Ya está en ON.
+- **El orden de escritura del firmware es el correcto**: el datasheet exige que el ajuste
+  del HPF se cambie **con todos los canales en reset**, y la secuencia ya hace
+  `RSTN=0 → R02/R03/R04 → RSTN=1`.
+- **OVF tiene el mismo group delay que el ADC** — o sea que la bandera de saturación
+  llega retrasada lo mismo que el audio. No es un problema, pero explica por qué no
+  sirve para protección instantánea.
+
+### 5. Datos útiles para el bring-up
+
+- **Ciclo de inicialización**: 583/fs en slave (≈12 ms a 48 kHz), 578/fs en master.
+  Durante ese tiempo la salida digital es **0**, no ruido. Si al arrancar se ven ceros
+  en el ADC durante ~12 ms, es normal.
+- **PDN debe estar en L al menos 150 ns** después de que AVDD y TVDD estén arriba.
+- Tras salir de power-down, la salida tarda el **group delay** en asentarse.
+- **TDM512 sólo existe a fs = 48 kHz**; TDM256 admite 48 y 96 kHz. Estamos en TDM256 a
+  48 kHz, o sea con margen para subir a 96 kHz sin cambiar el formato si alguna vez hace
+  falta (costaría el doble de CPU en los fills).
+
 ---
 
 ## Comparación PCM1802 (DS9) vs AK5538VN (DS10)
@@ -191,5 +295,5 @@ for (uint32_t i = 0; i < samples; i++) {
 
 ---
 
-*AK5538VN Reference — DS10 — Abril 2026*
+*AK5538VN Reference — DS10/DS11 — Abril 2026, ampliado 2026-08-16 con la lectura del datasheet*
 *Ver [audio_architecture.md](audio_architecture.md) para integración completa*

@@ -25,7 +25,7 @@ una antena en c0 mostró tracking real de señal.
 
 **Regla permanente que dejó:** en modo I2C los pines de strap CKS/TDM/DIF del AK5538/AK5578
 se reusan para el bus y arrancan en 0 → clock mode, TDM y formato SIEMPRE se configuran por
-registro, en cada boot. (Documentado en [ds10_bringup_findings.md](ds10_bringup_findings.md)
+registro, en cada boot. (Documentado en [ds10_bringup_findings.md](historico/ds10_bringup_findings.md)
 y en [ak5538vn_ref.md](ak5538vn_ref.md).)
 
 De ahí salió el **modo monitor** (ADC→DAC en vivo, +30dB) para *escuchar* lo que captura el
@@ -47,7 +47,7 @@ al límite con 24V (mitigación: alimentar a 19-20V), y verificaciones positivas
 después: inofensivo en passthrough, letal para la coherencia de fase con delays reales) y el
 **heartbeat verboso bloqueante** (~15 underruns espurios por bloque). Ambos corregidos y
 validados en hardware el mismo día (soak test de 9.5+ min, Err=0, jitter ~0µs). Y el plan
-completo de fases hacia beamforming real: [beamforming_roadmap.md](beamforming_roadmap.md).
+completo de fases hacia beamforming real: `beamforming_roadmap.md` (eliminado — todas las fases implementadas, ver `ds11_perf.md`).
 
 ## 4. Las fases, todas en un día (2026-07-02, rama `feature/beamforming`)
 

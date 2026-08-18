@@ -81,9 +81,11 @@
 
 // ===== Channel walker (sequential per-channel test tone) =====
 #define WALKER_SECONDS_PER_CH 1
-// Only U2/DAC0 (ch0-7) is populated on this DS10 — walk 8 channels.
-// Set to 32 on DS11 to validate the full speaker map + JSPK wiring.
-#define WALKER_NUM_CH        8
+// DS11: los 4 PCM1690 poblados → 32 canales. El walker recorre el array
+// completo (32 s por vuelta) y valida el mapa canal→parlante + el cableado
+// JSPK, incluida la doble inversión deliberada de los canales impares
+// (ver docs/ds11_upgrades.md: al JST llega la polaridad correcta).
+#define WALKER_NUM_CH        32
 
 // ===== AUTOFOCUS: measured focal calibration with a microphone =====
 // Place a mic AT the desired focal point, feed it into ADC input 1 (ch0).
@@ -100,6 +102,8 @@
 #define CAL_MAX_LAG       (CAL_CAPTURE_LEN - CAL_CHIRP_LEN)
 #define CAL_SETTLE_HALVES 10                      // 100ms of silence between speakers
 #define CAL_CORR_CHUNK    128                     // lags per main-loop pass (~0.5ms)
+// DS11: 32 parlantes ≈ 8 s de scan (~250 ms por parlante: settle + captura +
+// correlación chunked). El mic no se mueve durante todo el barrido.
 #define CAL_NUM_CH        WALKER_NUM_CH           // scan the populated channels
 /* USER CODE END PD */
 
@@ -158,8 +162,13 @@ static int32_t audio_buffer_2b[AUDIO_BUFFER_SIZE * 2] __attribute__((section(".d
 static int32_t audio_buffer_3b_rx[ADC_BUFFER_SIZE * 2] __attribute__((section(".dma_buffer"), aligned(32)));
 
 // Circular delay lines for beamforming — 8 independent channels (AK5538VN 8ch)
-// delay_line[0] = ADC ch0 (main beam source); [1]-[7] stubs for future expansion
-static int32_t delay_line[8][DELAY_LINE_SIZE] __attribute__((section(".dma_buffer"), aligned(32)));
+// delay_line[0] = ADC ch0 (main beam source); [1]-[7] las 8 entradas del modo 15.
+// NO es memoria DMA: la escribe la CPU en Process_ADC_Half copiando desde
+// audio_buffer_3b_rx. Por eso vive en DTCMRAM (0 wait states, acoplada al core)
+// y no en RAM_D2 (vía AXI, que es donde la ponía .dma_buffer). Es la estructura
+// más leída del pipeline — el modo 15 hace 8 lecturas por muestra de salida y
+// por canal. 32 KB de los 128 KB de DTCM.
+static int32_t delay_line[8][DELAY_LINE_SIZE] __attribute__((aligned(32)));
 static uint32_t delay_write_pos = 0;
 
 // Active beamforming config (copied from ESP32 ds_config_t on update)
@@ -185,8 +194,8 @@ static uint32_t test_tone_phase = 0;
 
 /* ADC monitor mode: route the live digitized ADC straight to the DACs so you
  * can HEAR what the AK5538 is capturing. Each DAC channel plays its matching
- * ADC channel (ch0→ch0 …). Only DAC0/U2 (ch0-7) is populated on this board, so
- * you hear ADC ch0-7 on U2. The ADC signal is low-level (hum ~-55dBFS, noise
+ * ADC channel (ch0→ch0 …), repitiendo las 8 entradas en cada fila de 8
+ * parlantes (DS11: 4 filas). The ADC signal is low-level (hum ~-55dBFS, noise
  * floor ~-95dBFS), so it is boosted by (1<<adc_monitor_shift) before the DAC,
  * then clamped to 24-bit FS. Takes priority over test tone and beamform. */
 static volatile uint8_t adc_monitor_enabled = 1;   /* 1 = live ADC→DAC monitor */
@@ -234,15 +243,15 @@ static const ui_state_t ui_states[] = {
   { .name = "AUTOFOCUS scan (mic->ADC c0)",  .af = 1 },
   // Internal tone → beam_line → the TX steering path runs UNCHANGED (Q8
   // fractional delays, gains, signs): directionality validation with no mic
-  // on the board (docs/ds10_tone_beam_plan.md). fy=-240 puts the focus in
-  // the plane of row 1 — the only populated row; a linear array cannot
-  // discriminate Y anyway. 2kHz spot @1m: ±14cm; 1kHz: ±27cm (ratio ~2 is
-  // the self-validating test). APPEND ONLY: the ESP32/web/app mirror these
-  // indices.
+  // on the board (docs/historico (plan implementado: modos 12-13)). DS11: las 4 filas pobladas →
+  // fy=0 (centro del array); en DS10 iba a -240 para apuntar al plano de la
+  // única fila poblada. Ahora la apertura vertical (480mm) también enfoca.
+  // 2kHz spot @1m: ±14cm; 1kHz: ±27cm (ratio ~2 is the self-validating
+  // test). APPEND ONLY: the ESP32/web/app mirror these indices.
   { .name = "TX tone 2k focus @1m",         .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 2000, .fx_mm = 0, .fy_mm = -240, .fz_mm = 1000 },
+    .tone_hz = 2000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000 },
   { .name = "TX tone 1k focus @1m",         .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 1000, .fx_mm = 0, .fy_mm = -240, .fz_mm = 1000 },
+    .tone_hz = 1000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000 },
   // MULTIFOCUS: 4 tonos internos, cada uno enfocado en su propio punto —
   // caminando la sala, un analizador espectral "lee" la posición por cuál
   // frecuencia domina. Precuela de la intervención de 8 entradas analógicas
@@ -288,7 +297,7 @@ static volatile uint8_t beam_out_shift = 5;
 static volatile uint8_t  tone_enabled = 0;
 static volatile uint16_t tone_freq_hz = 2000;
 static uint32_t tone_phase_q16 = 0;
-/* Dither de frecuencia (Fase B, docs/ds10_tone_beam_plan.md): triángulo ±5%
+/* Dither de frecuencia (Fase B, docs/historico (plan implementado: modos 12-13)): triángulo ±5%
  * a ~3Hz alrededor de tone_base_hz. El haz es de retardos puros (banda ancha)
  * → no cambia; los modos de la sala se promedian y la medición se estabiliza.
  * El acumulador de fase de Tone_NextSample es continuo → sin clicks. La
@@ -407,6 +416,14 @@ static const uint8_t dac_addrs[4] = {
     PCM1690_ADDR_DAC0, PCM1690_ADDR_DAC1, PCM1690_ADDR_DAC2, PCM1690_ADDR_DAC3
 };
 
+/* Estado del banco de amplificadores (pin SD, PD3). ARRANCA EN 0: tras el
+ * incidente del 2026-08-04 (reinicio al primer tono del walker, con el buck
+ * al limite y 660uF de bulk en vez de 880) los amps ya NO se habilitan solos
+ * al bootear — se prenden por comando (POST /amps) una vez que la placa esta
+ * estable. Asi un problema de alimentacion no deja la placa en loop de
+ * reinicio imposible de diagnosticar. */
+static volatile uint8_t amps_enabled = 0;
+
 // EEPROM deferred save flag (set when config changes, save in low-priority window)
 static volatile uint8_t eeprom_save_pending = 0;
 // Config-save debounce: HAL_GetTick() deadline (0 = nothing pending). Any config
@@ -483,6 +500,17 @@ static volatile uint32_t jitter_max_cycles = 0;
 static volatile uint64_t jitter_sum_cycles = 0;
 static volatile uint32_t jitter_sample_count = 0;
 
+/* Costo TOTAL de los 4 bancos (DS11): el min/avg/max de abajo mide SOLO los
+ * fills de SAI1_A, así que con 32 canales subrepresenta ~4× el trabajo real.
+ * fill_all_cycles acumula TODOS los fills; el heartbeat lo derivada a %CPU.
+ * Presupuesto: 480M ciclos/s → cada 1% son 4.8M ciclos/s. */
+static volatile uint64_t fill_all_cycles = 0;
+/* Offset entre bancos: timestamp del último Half callback de cada master.
+ * SAI1_A y SAI2_A son masters asíncronos entre sí — si arrancan separados,
+ * ese desfase queda fijo para siempre. Se reporta en la línea SYNC. */
+static volatile uint32_t cb_a1_half_dwt = 0;
+static volatile uint32_t cb_2a_half_dwt = 0;
+
 // Processing latency: fill buffer + cache clean
 static volatile uint32_t fill_min_cycles = 0xFFFFFFFF;
 static volatile uint32_t fill_max_cycles = 0;
@@ -515,6 +543,7 @@ static void MX_TIM3_Init(void);
 static int32_t Read_CPU_Temperature(void);
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset);
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
+static void Service_Fills(void);
 static void UART_Print(const char *str);
 static void Print_DMA_Config(void);
 static void Beam_UpdateDelays(int16_t az_deg);
@@ -538,6 +567,136 @@ static void Cal_Process(void);
 /* USER CODE END 0 */
 
 /**
+ * @brief Servicia todos los fills pendientes (RX del ADC + los 4 bancos TX).
+ *
+ * Extraido del main loop para poder llamarlo TAMBIEN desde UART_Print mientras
+ * espera al UART. Un heartbeat de ~238 chars a 115200 bloquea ~20 ms, mas que el
+ * deadline de 10 ms del fill, y cada deadline perdido es un medio buffer repetido
+ * en los 32 canales a la vez = un pop audible una vez por segundo. Con esto el
+ * print deja de robarle tiempo al audio.
+ *
+ * El guard de reentrada es defensivo: hoy ningun fill imprime, pero si alguno lo
+ * hiciera en el futuro esto evita la recursion en vez de desbordar el stack.
+ */
+/* Overrides de los hooks __weak de eeprom_config.c y uart_protocol.c: durante
+ * los ~12 ms de un guardado en EEPROM y los ~5,2 ms de una trama de status,
+ * seguir sirviendo los fills en vez de dejar morir los deadlines. Los tres
+ * bloqueos largos del sistema (print, EEPROM, status) quedan así cooperativos. */
+void EEPROM_Yield(void)        { Service_Fills(); }
+void UART_Protocol_Yield(void) { Service_Fills(); }
+
+static void Service_Fills(void) {
+  static volatile uint8_t in_service = 0;
+  if (in_service) return;
+  in_service = 1;
+
+  // ===== Deferred buffer fill: beamform from delay line =====
+  // ISR sets flag, we process here in main context.
+  //
+  // SAI3_B RX must run BEFORE the 4 TX fills below: all 4 TX groups read
+  // delay_write_pos independently, so if RX advanced it between two TX
+  // fills within the same pass, those groups would read different time
+  // windows — a phase skew across DAC banks that's silent in passthrough
+  // (delay=0) but would break beamforming once real per-channel delays
+  // are in use. Processing RX first makes wp stable for the rest of
+  // this loop iteration, so all 4 TX fills see the same snapshot.
+  if (rx_3b_first_half_ready) {
+    rx_3b_first_half_ready = 0;
+    __DSB();
+    Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
+  }
+  if (rx_3b_second_half_ready) {
+    rx_3b_second_half_ready = 0;
+    __DSB();
+    Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
+  }
+
+  // SAI1_A: channels 0-7
+  if (need_fill_first_half) {
+    need_fill_first_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0);
+    __DSB();
+    uint32_t dt = DWT->CYCCNT - t0;
+    if (dt < fill_min_cycles) fill_min_cycles = dt;
+    if (dt > fill_max_cycles) fill_max_cycles = dt;
+    fill_sum_cycles += dt;
+    fill_all_cycles += dt;
+    fill_sample_count++;
+  }
+  if (need_fill_second_half) {
+    need_fill_second_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 0);
+    __DSB();
+    uint32_t dt = DWT->CYCCNT - t0;
+    if (dt < fill_min_cycles) fill_min_cycles = dt;
+    if (dt > fill_max_cycles) fill_max_cycles = dt;
+    fill_sum_cycles += dt;
+    fill_all_cycles += dt;
+    fill_sample_count++;
+  }
+
+  // SAI1_B: channels 8-15 (DAC1 U3)
+  if (need_fill_1b_first_half) {
+    need_fill_1b_first_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_1b[0], AUDIO_BUFFER_SAMPLES, 8);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+  if (need_fill_1b_second_half) {
+    need_fill_1b_second_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_1b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 8);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+
+  // SAI2_A: channels 16-23 (DAC2 U1)
+  if (need_fill_2a_first_half) {
+    need_fill_2a_first_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+  if (need_fill_2a_second_half) {
+    need_fill_2a_second_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+
+  // SAI2_B: channels 24-31 (DAC3 U4)
+  if (need_fill_2b_first_half) {
+    need_fill_2b_first_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+  if (need_fill_2b_second_half) {
+    need_fill_2b_second_half = 0;
+    __DSB();
+    uint32_t t0 = DWT->CYCCNT;
+    Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
+    __DSB();
+    fill_all_cycles += DWT->CYCCNT - t0;
+  }
+
+  in_service = 0;
+}
+
+/**
   * @brief  The application entry point.
   * @retval int
   */
@@ -545,7 +704,16 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  /* I-cache ON. El M7 corre a 480 MHz pero la flash tiene 4 wait states, así
+   * que sin caché de instrucciones cada vuelta del lazo de fill paga el fetch.
+   * Medido 2026-08-13 (modo 7): 716856 ciclos para 480 muestras × 8 canales =
+   * 186 ciclos por muestra de salida, para ~30 instrucciones de trabajo real.
+   * No hay problema de coherencia: el código no se automodifica.
+   *
+   * El D-cache sigue APAGADO a propósito: los buffers DMA en RAM_D2 exigirían
+   * mantenimiento de caché en cada callback, y el intento anterior
+   * (SCB_CleanDCache_by_Addr sin D-cache habilitado) terminó en HardFault. */
+  SCB_EnableICache();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -580,7 +748,38 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // Startup message
-  UART_Print("\r\n=== DS10 Beamforming Audio ===\r\n");
+  UART_Print("\r\n=== DS11 Beamforming Audio (32ch) ===\r\n");
+
+  /* Revisión de silicio — NO es cosmético.
+   *
+   * Errata ES0392 §2.2.21: "VOS0 voltage scaling level is not available on
+   * silicon revision Y and W devices. This limits the maximum CPU frequency to
+   * 400 MHz." Workaround: usar revisión V o X.
+   *
+   * Este firmware configura VOS0 + 480 MHz. Sobre un chip revisión Y o W eso
+   * queda FUERA DE ESPECIFICACIÓN: la escritura de VOS0 no toma efecto y el
+   * core termina corriendo a 480 MHz con el voltaje de VOS1. La placa de banco
+   * aguantó 19,6 h con Err=0, lo que indica que su silicio es V o X — pero eso
+   * NO está garantizado para las demás placas de la tirada ni para tiradas
+   * futuras: JLCPCB puede entregar otro date code sin avisar.
+   *
+   * Por eso se imprime en cada arranque. Si alguna vez sale Y o W, hay que
+   * bajar a 400 MHz (PLL1 P=2 con N=160) antes de confiar en nada más. */
+  {
+    uint32_t rev = (DBGMCU->IDCODE >> 16) & 0xFFFFu;
+    const char *name, *verdict;
+    switch (rev) {
+      case 0x1001: name = "Z"; verdict = "!! SIN VOS0 — 480MHz FUERA DE SPEC"; break;
+      case 0x1003: name = "Y"; verdict = "!! SIN VOS0 — 480MHz FUERA DE SPEC"; break;
+      case 0x2001: name = "X"; verdict = "OK (VOS0 disponible)";               break;
+      case 0x2003: name = "V"; verdict = "OK (VOS0 disponible)";               break;
+      default:     name = "?"; verdict = "DESCONOCIDA — verificar ES0392";     break;
+    }
+    sprintf(uart_buf, "Silicio: rev %s (REV_ID=0x%04lX) — %s\r\n",
+            name, (unsigned long)rev, verdict);
+    UART_Print(uart_buf);
+  }
+
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("PLL3: 24.576MHz MCLK (512xfS) — MckOverSampling=ENABLE\r\n");
   UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");
@@ -645,24 +844,36 @@ int main(void)
   memset(audio_buffer_2b, 0, sizeof(audio_buffer_2b));
   __DSB();
 
-  // Slaves must start before masters (SAI sync requirement)
-  HAL_StatusTypeDef status;
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
-  sprintf(uart_buf, "SAI1_B DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
-  UART_Print(uart_buf);
-
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockB2, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
-  sprintf(uart_buf, "SAI2_B DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
-  UART_Print(uart_buf);
-
+  /* Arranque de los 4 bloques SIN NADA EN EL MEDIO — crítico en DS11.
+   *
+   * SAI1_A y SAI2_A son dos masters ASÍNCRONOS entre sí: cada uno arranca su
+   * propio stream cuando se le pone SAIEN, y ese offset inicial no se corrige
+   * nunca (comparten PLL3 → misma frecuencia, pero no fase). Antes había un
+   * UART_Print de ~41 chars (≈3.6 ms a 115200, bloqueante) entre los dos
+   * arranques: los bancos ch0-15 y ch16-31 quedaban con sus ciclos de DMA
+   * desfasados milisegundos.
+   *
+   * Eso rompe el invariante del fix de 2026-07-02 (procesar RX antes de los 4
+   * fills para que todos compartan el mismo delay_write_pos): con los bancos
+   * desfasados, sus callbacks caen en pasadas distintas del main loop y toman
+   * valores de wp que difieren hasta en 480 muestras → offset acústico de
+   * hasta ~10 ms (3.4 m de camino) entre las filas 0-1 y las filas 2-3.
+   * En DS10 era invisible: sólo U2 estaba poblado.
+   *
+   * Los prints van DESPUÉS de los cuatro arranques. El delta real entre
+   * bancos se mide en el heartbeat (línea SYNC) — no lo supongas, miralo. */
+  HAL_StatusTypeDef st_b1, st_b2, st_a1, st_a2;
+  st_b1 = HAL_SAI_Transmit_DMA(&hsai_BlockB1, (uint8_t*)audio_buffer_1b, AUDIO_BUFFER_SIZE * 2);
+  st_b2 = HAL_SAI_Transmit_DMA(&hsai_BlockB2, (uint8_t*)audio_buffer_2b, AUDIO_BUFFER_SIZE * 2);
   // Masters — SAI1_A generates MCLK (PE2) which PCM1690 needs for POR
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_buffer, AUDIO_BUFFER_SIZE * 2);
-  sprintf(uart_buf, "SAI1_A DMA: %s (MCLK 24.576MHz running)\r\n", status == HAL_OK ? "OK" : "FAIL");
-  UART_Print(uart_buf);
+  st_a1 = HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*)audio_buffer, AUDIO_BUFFER_SIZE * 2);
+  st_a2 = HAL_SAI_Transmit_DMA(&hsai_BlockA2, (uint8_t*)audio_buffer_2a, AUDIO_BUFFER_SIZE * 2);
 
-  status = HAL_SAI_Transmit_DMA(&hsai_BlockA2, (uint8_t*)audio_buffer_2a, AUDIO_BUFFER_SIZE * 2);
-  sprintf(uart_buf, "SAI2_A DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
+  sprintf(uart_buf, "SAI DMA: 1B=%s 2B=%s 1A=%s 2A=%s (MCLK 24.576MHz running)\r\n",
+          st_b1 == HAL_OK ? "OK" : "FAIL", st_b2 == HAL_OK ? "OK" : "FAIL",
+          st_a1 == HAL_OK ? "OK" : "FAIL", st_a2 == HAL_OK ? "OK" : "FAIL");
   UART_Print(uart_buf);
+  HAL_StatusTypeDef status = st_a1;   // el resto del boot mira este
 
   // === STEP 2: AK5538VN — configure SAI3_B and release power-down ===
   UART_Print("AK5538VN: starting SAI3_B RX DMA...\r\n");
@@ -747,18 +958,45 @@ int main(void)
     HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
     v = 0x40;  // Control2: TDM[1:0]=10 → TDM256
     HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+    /* Control3 (0x04): [DP][0][0][0][0][0][SD][SLOW]
+     * SD=1 → SHORT DELAY, SLOW=0 → sharp roll-off  →  R04 = 0x02.
+     *
+     * Baja el group delay del filtro de diezmado de 19/fs a 5/fs = de 396 µs a
+     * 104 µs a 48 kHz (datasheet §9, fs=48k). **Los 292 µs son gratis**: el
+     * passband (22 kHz) y la atenuación de stopband (85 dB) son IDÉNTICOS entre
+     * SHARP y SHORT DELAY SHARP; lo único que cambia es que el filtro deja de
+     * ser de fase lineal (ΔGD pasa de 0 a 2.8/fs máx.).
+     *
+     * Por qué esa distorsión de fase NO afecta al beamforming: el filtro es el
+     * mismo en los 8 canales, así que es un retardo COMÚN. El patrón del haz lo
+     * fijan los delays RELATIVOS que aplica el STM32, que no se tocan. Sólo
+     * afecta marginalmente al timbre.
+     *
+     * El registro manda sobre el strapping: la placa tiene los pines SD y SLOW a
+     * GND (IC3.48, IC3.47), pero el datasheet §"Operation Mode Control" dice que
+     * "in serial control mode, register settings are prioritized so that all pin
+     * settings except the MSN pin setting are ignored", y estamos en modo I2C
+     * (I2C=H en IC3.54, PSN=L en IC3.53). El readback de abajo lo verifica. */
+    v = 0x02;
+    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x04, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
     v = 0x01;  // RSTN=1 — release (stable MCLK/BICK/LRCK already running)
     HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
     HAL_Delay(5);
 
     // Readback verify R01-R03
-    uint8_t r1 = 0xEE, r2 = 0xEE, r3 = 0xEE;
+    uint8_t r1 = 0xEE, r2 = 0xEE, r3 = 0xEE, r4 = 0xEE;
     HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &r1, 1, 50);
     HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &r2, 1, 50);
     HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &r3, 1, 50);
-    sprintf(uart_buf, "  readback R01=0x%02X R02=0x%02X R03=0x%02X (want R02=0x31 R03=0x40)\r\n",
-            r1, r2, r3);
+    HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x04, I2C_MEMADD_SIZE_8BIT, &r4, 1, 50);
+    sprintf(uart_buf,
+            "  readback R01=0x%02X R02=0x%02X R03=0x%02X R04=0x%02X"
+            " (want R02=0x31 R03=0x40 R04=0x02)\r\n", r1, r2, r3, r4);
     UART_Print(uart_buf);
+    /* R04=0x02 confirma que el registro pisó al strapping de los pines SD/SLOW
+     * → group delay del ADC = 5/fs = 104 µs en vez de 19/fs = 396 µs.
+     * Si lee 0x00, el chip está ignorando el registro: revisar que I2C=H y
+     * PSN=L, y volver a contar los 396 µs en el presupuesto de latencia. */
   }
 
   // === STEP 3: PCM1690 init (shared RST/MUTE bus, DS10 style) ===
@@ -828,9 +1066,10 @@ int main(void)
     }
   }
 
-  // === STEP 5: Enable amplifier bank ===
-  HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_SET);
-  UART_Print("PAM8302A: SD HIGH — 32 amplifiers enabled\r\n");
+  // === STEP 5: amplificadores APAGADOS al boot (ver amps_enabled) ===
+  HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
+  amps_enabled = 0;
+  UART_Print("PAM8302A: SD LOW — 32 amps APAGADOS. Habilitar con POST /amps {\"on\":true}\r\n");
 
   // === ESP32 UART protocol init ===
   UART_Protocol_Init(&huart4, &huart7);
@@ -903,94 +1142,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-    // ===== Deferred buffer fill: beamform from delay line =====
-    // ISR sets flag, we process here in main context.
-    //
-    // SAI3_B RX must run BEFORE the 4 TX fills below: all 4 TX groups read
-    // delay_write_pos independently, so if RX advanced it between two TX
-    // fills within the same pass, those groups would read different time
-    // windows — a phase skew across DAC banks that's silent in passthrough
-    // (delay=0) but would break beamforming once real per-channel delays
-    // are in use. Processing RX first makes wp stable for the rest of
-    // this loop iteration, so all 4 TX fills see the same snapshot.
-    if (rx_3b_first_half_ready) {
-      rx_3b_first_half_ready = 0;
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
-    }
-    if (rx_3b_second_half_ready) {
-      rx_3b_second_half_ready = 0;
-      __DSB();
-      Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
-    }
-
-    // SAI1_A: channels 0-7
-    if (need_fill_first_half) {
-      need_fill_first_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0);
-      __DSB();
-      uint32_t dt = DWT->CYCCNT - t0;
-      if (dt < fill_min_cycles) fill_min_cycles = dt;
-      if (dt > fill_max_cycles) fill_max_cycles = dt;
-      fill_sum_cycles += dt;
-      fill_sample_count++;
-    }
-    if (need_fill_second_half) {
-      need_fill_second_half = 0;
-      __DSB();
-      uint32_t t0 = DWT->CYCCNT;
-      Fill_Audio_Beamform(&audio_buffer[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 0);
-      __DSB();
-      uint32_t dt = DWT->CYCCNT - t0;
-      if (dt < fill_min_cycles) fill_min_cycles = dt;
-      if (dt > fill_max_cycles) fill_max_cycles = dt;
-      fill_sum_cycles += dt;
-      fill_sample_count++;
-    }
-
-    // SAI1_B: channels 8-15 (DAC1 U3)
-    if (need_fill_1b_first_half) {
-      need_fill_1b_first_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_1b[0], AUDIO_BUFFER_SAMPLES, 8);
-      __DSB();
-    }
-    if (need_fill_1b_second_half) {
-      need_fill_1b_second_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_1b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 8);
-      __DSB();
-    }
-
-    // SAI2_A: channels 16-23 (DAC2 U1)
-    if (need_fill_2a_first_half) {
-      need_fill_2a_first_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
-      __DSB();
-    }
-    if (need_fill_2a_second_half) {
-      need_fill_2a_second_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
-      __DSB();
-    }
-
-    // SAI2_B: channels 24-31 (DAC3 U4)
-    if (need_fill_2b_first_half) {
-      need_fill_2b_first_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
-      __DSB();
-    }
-    if (need_fill_2b_second_half) {
-      need_fill_2b_second_half = 0;
-      __DSB();
-      Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
-      __DSB();
-    }
+    Service_Fills();
 
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
     if (autofocus_enabled) Cal_Process();
@@ -1044,6 +1196,39 @@ int main(void)
         snprintf(uart_buf, sizeof(uart_buf),
                  "VOLUME: %d dB → ATDA=0x%02X (save diferido)\r\n",
                  (int)vol_db, atten);
+        UART_Print(uart_buf);
+      }
+
+      /* Enable del banco de amplificadores por comando. Herramienta de
+       * diagnostico: con los amps apagados corre TODO el pipeline (SAI, DMA,
+       * beamforming) en silencio, asi se aisla si un reinicio viene de la
+       * demanda de los 32 PAM8302A sobre el buck (que quedo con menos bulk
+       * tras remover C290 — ver docs/ds11_errata.md). */
+      uint8_t amps_on;
+      if (UART_Protocol_GetAmpsRequest(&amps_on)) {
+        if (amps_on) {
+          /* "on" SIEMPRE pasa por off primero — no es redundante.
+           *
+           * El PAM8302A tiene un UVLO ENCLAVADO: del datasheet, "when the supply
+           * voltage drops to 2.1 V or below, the PAM8302A goes into a state of
+           * shutdown, and the device comes out of its shutdown state by reset the
+           * power supply or SD pin". O sea que tras cualquier hundimiento del
+           * +5VA, los amps que hayan cruzado 2,1 V quedan MUDOS aunque SD siga
+           * alto — y como SD ya está en 1, un "amps on" no los recuperaría.
+           *
+           * El síntoma sería "se me murieron algunos canales" sin causa visible,
+           * que es exactamente el tipo de cosa que hace perder una tarde. Con el
+           * pulso, cualquier "amps on" sirve además como comando de recuperación.
+           *
+           * 2 ms alcanzan de sobra: el SD del PAM8302A responde en microsegundos. */
+          HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
+          HAL_Delay(2);
+        }
+        HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN,
+                          amps_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        amps_enabled = amps_on;
+        snprintf(uart_buf, sizeof(uart_buf), "AMPS: %s\r\n",
+                 amps_on ? "ON (32 PAM8302A habilitados)" : "OFF (silencio)");
         UART_Print(uart_buf);
       }
 
@@ -1158,6 +1343,42 @@ int main(void)
               esp_ip[0] ? esp_ip : "--");
       UART_Print(uart_buf);
 
+      /* SYNC + CPU — las dos métricas nuevas de DS11, una línea por segundo.
+       *
+       * SYNC = desfase entre los ciclos de DMA de los dos masters (SAI1_A =
+       * filas 0-1, SAI2_A = filas 2-3). Se toma la diferencia de timestamps
+       * de sus Half callbacks módulo el ciclo completo (20 ms), con signo en
+       * ±10 ms. DEBE dar unos pocos µs: si da milisegundos, los dos bancos
+       * están tocando ventanas de tiempo distintas y el beamforming vertical
+       * no es coherente (ver comentario del arranque de los SAI).
+       *
+       * CPU = fracción del presupuesto gastada en los 4 fills. 480M ciclos/s
+       * = 100%. Es el número real del modo 15 con 32 canales; el Fill de más
+       * abajo mide sólo SAI1_A. */
+      {
+        /* Diferencia CON SIGNO: la resta unsigned y el cast a int32 dan el
+         * delta correcto aunque DWT->CYCCNT haya dado la vuelta (vale para
+         * |delta| < 2^31 ciclos ≈ 4.5 s; acá los callbacks son cada 20 ms).
+         * NO usar % sobre el unsigned: 2^32 no es múltiplo del ciclo, así
+         * que el módulo se corrompe justo en el wrap. */
+        const int32_t CYC_PER_BUFCYCLE = 9600000;      // 20 ms @480MHz
+        int32_t skew = (int32_t)(cb_2a_half_dwt - cb_a1_half_dwt);
+        while (skew >  CYC_PER_BUFCYCLE / 2) skew -= CYC_PER_BUFCYCLE;
+        while (skew < -CYC_PER_BUFCYCLE / 2) skew += CYC_PER_BUFCYCLE;
+        int32_t skew_us = skew / (int32_t)CPU_FREQ_MHZ;
+
+        static uint64_t last_fill_all = 0;
+        uint64_t now_fill = fill_all_cycles;
+        uint32_t cpu_x10 = (uint32_t)(((now_fill - last_fill_all) * 1000ULL) / 480000000ULL);
+        last_fill_all = now_fill;
+
+        snprintf(uart_buf, sizeof(uart_buf),
+                 "     SYNC bancos: %ld us (%ld cyc) | CPU fills: %lu.%lu%%\r\n",
+                 (long)skew_us, (long)skew,
+                 (unsigned long)(cpu_x10 / 10), (unsigned long)(cpu_x10 % 10));
+        UART_Print(uart_buf);
+      }
+
       // 8-channel ADC peak meter — printed EVERY second (one line) so an
       // injected tone is visible live on whatever input pair it lands on.
       // Peak = max(|min|,|max|) over the first half-buffer, shown 24-bit.
@@ -1231,7 +1452,20 @@ int main(void)
         int32_t temp = Read_CPU_Temperature();
         if (temp != -999) {
           int32_t t_abs = temp >= 0 ? temp : -temp;
-          sprintf(uart_buf, "     Temp: %ld.%ld C\r\n", temp / 10, t_abs % 10);
+          /* Aviso térmico. A VOS0 (480 MHz) la T_J máxima es 105 °C, NO 125 —
+           * Table 113 del datasheet. Correr a 480 MHz cuesta 20 °C de margen, y
+           * estamos además en el máximo simultáneo de fCPU, HCLK y PCLK.
+           *
+           * El soak al aire libre dio 38-40 °C, o sea 65 °C de sobra. Pero esto
+           * va a terminar en una caja con 32 amplificadores adentro, y AN5036 §4.4
+           * advierte que la disipación CRECE con la temperatura de juntura: el
+           * calentamiento no es lineal, se realimenta. Por eso el aviso avisa
+           * temprano (85 °C) en vez de justo antes del límite. */
+          const char *warn = "";
+          if (temp >= 1000)     warn = "  <<< CRITICO: limite VOS0 = 105 C";
+          else if (temp >= 850) warn = "  <<< ALTO (limite VOS0 = 105 C)";
+          sprintf(uart_buf, "     Temp: %ld.%ld C%s\r\n",
+                  temp / 10, t_abs % 10, warn);
           UART_Print(uart_buf);
         }
 
@@ -2061,7 +2295,24 @@ static void MX_GPIO_Init(void)
  *        UART4 (PA0/PA1) stays reserved for the ESP32 binary protocol.
  */
 static void UART_Print(const char *str) {
-  HAL_UART_Transmit(&huart7, (uint8_t*)str, strlen(str), 100);
+  /* TX byte a byte, atendiendo los fills pendientes mientras se espera el TXE.
+   *
+   * Antes esto era un HAL_UART_Transmit bloqueante. A 115200 cada carácter son
+   * ~87 µs, así que el heartbeat (~238 chars) bloqueaba el main loop ~20 ms —
+   * el DOBLE del deadline de 10 ms del fill. Cada deadline perdido hace que el
+   * DMA reemita medio buffer viejo en los 32 canales a la vez: un salto de fase
+   * audible como un "pop", una vez por segundo, y más fuerte cada 10 s cuando
+   * sale el bloque verbose. Medido en el modo 12 (tono enfocado) el 2026-08-14.
+   *
+   * Ahora el tiempo muerto entre carácter y carácter se usa para servir los
+   * fills. La consola se ve igual: que la UART quede idle unos µs de más entre
+   * bytes no corrompe nada, sólo espacia los caracteres. */
+  while (*str) {
+    while (!(huart7.Instance->ISR & USART_ISR_TXE_TXFNF)) {
+      Service_Fills();
+    }
+    huart7.Instance->TDR = (uint8_t)*str++;
+  }
 }
 
 /**
@@ -2322,16 +2573,16 @@ static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
 /** @brief Reset the MULTIFOCUS sources to the 4 default tones/foci. */
 static void MFocus_ApplyDefaults(void) {
   for (uint8_t s = 0; s < MF_NUM_SRC; s++)
-    Beam_UpdateMFocus(s, mf_def_freq[s], mf_def_fx[s], -240, 1000);
+    Beam_UpdateMFocus(s, mf_def_freq[s], mf_def_fx[s], 0, 1000);
 }
 
 /** @brief Defaults del modo 15: las 8 entradas repartidas en X, −700..+700mm
- *         paso 200, plano de la fila 1, a 1m. (La frecuencia por fila queda
- *         seteada pero el modo de entradas no la usa.) */
+ *         paso 200, a la altura del centro del array (DS11: 4 filas), a 1m.
+ *         (La frecuencia queda seteada pero el modo de entradas no la usa.) */
 static void MFocusIn_ApplyDefaults(void) {
   for (uint8_t s = 0; s < MF_IN_NUM_SRC; s++)
     Beam_UpdateMFocus(s, mf_def_freq[s % MF_NUM_SRC],
-                      (int16_t)(-700 + 200 * (int16_t)s), -240, 1000);
+                      (int16_t)(-700 + 200 * (int16_t)s), 0, 1000);
 }
 
 /* Master volume via PCM1690 attenuation. ATDAx = 255 + dB×2 (0.5 dB/step);
@@ -2346,9 +2597,21 @@ static uint8_t Apply_Master_Volume(int8_t db) {
     int16_t a = (db > 0) ? 0 : db;          // clamp positives to 0 dB
     atten = (uint8_t)(255 + a * 2);
   }
+  /* 32 escrituras I2C (4 DACs × 8 canales) a 100 kHz ≈ 300 µs cada una =
+   * **~9,6 ms de bloqueo**, justo en el borde del deadline de fill de 10 ms del
+   * buffer de 480 muestras. Con el de 240 (deadline 5 ms) se perderían dos
+   * deadlines seguros. Por eso se sirve el pipeline entre transacción y
+   * transacción: el I2C en sí dura ~300 µs, que entra en cualquier caso.
+   *
+   * Sin esto, cada cambio de volumen mete un pop en los 32 canales — el mismo
+   * mecanismo que los prints y la EEPROM antes del arreglo del 2026-08-14.
+   * Es seguro llamar Service_Fills() acá porque esta función corre sólo desde
+   * el main loop (ver el comentario de arriba), nunca desde una ISR. */
   for (uint32_t d = 0; d < 4; d++)
-    for (uint8_t ch = 1; ch <= 8; ch++)
+    for (uint8_t ch = 1; ch <= 8; ch++) {
       PCM1690_SetAttenuation(&hi2c1, dac_addrs[d], ch, atten);
+      Service_Fills();
+    }
   return atten;
 }
 
@@ -2398,7 +2661,7 @@ static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
   if (req->type == 1) {
     /* El tono interno se PRESERVA a propósito: steerear el foco del tono
      * (modos 12/13 + POST /beam type=tx) es el protocolo de medición
-     * mic-fijo/foco-móvil (docs/ds10_next_steps.md §A). */
+     * mic-fijo/foco-móvil (docs/protocolo_medicion.md §A). */
     tx_steer_enabled = 1;
     Beam_UpdateDelays(0);                 // RX source: broadside
     Beam_UpdateTxFocus(req->fx_mm, req->fy_mm, req->fz_mm);
@@ -2818,15 +3081,27 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
   if (mfocus_in_enabled) {
     uint32_t wp = delay_write_pos;
     uint8_t unmuted = !beam_config.mute_global;
+    /* DS11: 8 fuentes × 32 salidas es el fill más caro del firmware. El
+     * delay entero y su fracción son constantes en toda la ventana, así que
+     * se calculan una vez por fill (64 entradas) en vez de 8 veces por
+     * muestra — saca las lecturas de tabla del lazo interno. */
+    uint32_t d_int[AUDIO_CHANNELS][MF_IN_NUM_SRC];
+    int32_t  d_fr[AUDIO_CHANNELS][MF_IN_NUM_SRC];
+    for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+      for (uint32_t src = 0; src < MF_IN_NUM_SRC; src++) {
+        uint32_t dq = mf_delay_q8[src][ch_offset + ch];
+        d_int[ch][src] = dq >> 8;
+        d_fr[ch][src]  = (int32_t)(dq & 0xFF);
+      }
+    }
     for (uint32_t i = 0; i < samples; i++) {
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
         uint32_t gch = ch_offset + ch;
         int32_t acc = 0;
         if (unmuted && !((beam_config.mutes >> gch) & 1)) {
           for (uint32_t src = 0; src < MF_IN_NUM_SRC; src++) {
-            uint32_t dq = mf_delay_q8[src][gch];
-            uint32_t base = wp - (dq >> 8) - samples + i;
-            int32_t fr = (int32_t)(dq & 0xFF);
+            uint32_t base = wp - d_int[ch][src] - samples + i;
+            int32_t fr = d_fr[ch][src];
             int32_t s0 = delay_line[src][base & DELAY_LINE_MASK] >> 8;
             int32_t s1 = delay_line[src][(base - 1) & DELAY_LINE_MASK] >> 8;
             // (s1−s0) 25 bits × fr 8 bits → intermedio de 64 bits
@@ -2908,8 +3183,10 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
     for (uint32_t i = 0; i < samples; i++) {
       uint32_t read_pos = (wp - samples + i) & DELAY_LINE_MASK;
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
-        uint32_t src = ch_offset + ch;
-        if (src > 7) src = 0;                       // only ADC ch0-7 exist
+        // DS11: 8 entradas ADC → 32 salidas. Cada banco de 8 parlantes
+        // (= una fila) espeja las 8 entradas, así se escucha la entrada N
+        // en la columna N de las 4 filas (antes ch8-31 repetían la 0).
+        uint32_t src = (ch_offset + ch) & 7u;
         int32_t s = delay_line[src][read_pos] >> 8; // 32-bit ADC → 24-bit
         s <<= adc_monitor_shift;                    // gain boost
         if (s > 8388607) s = 8388607;               // clamp to +FS
@@ -3011,6 +3288,7 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
     }
 
     cb_a1_count++;
+    cb_a1_half_dwt = now;          // referencia de fase del banco ch0-15
     need_fill_first_half = 1;
     __DSB();
   }
@@ -3023,6 +3301,7 @@ void HAL_SAI_TxHalfCpltCallback(SAI_HandleTypeDef *hsai) {
   else if (hsai->Instance == SAI2_Block_A) {
     if (need_fill_2a_first_half) underrun_count++;
     cb_2a_count++;
+    cb_2a_half_dwt = DWT->CYCCNT;  // referencia de fase del banco ch16-31
     need_fill_2a_first_half = 1;
     __DSB();
   }

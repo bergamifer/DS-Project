@@ -31,6 +31,10 @@
 #define CMD_SET_VOLUME      0x09    /* payload: int8 dB (0..-63, ≤-64 = mute). Control
                                      * maestro sobre la atenuación del PCM1690 — afecta
                                      * TODOS los modos por igual (walker incluido). */
+#define CMD_SET_AMPS        0x0A    /* payload: uint8 (1=on, 0=off). Enable del banco
+                                     * de 32 PAM8302A (pin SD, PD3). Permite correr
+                                     * todo el pipeline en silencio para aislar si un
+                                     * reinicio es por demanda de los amplificadores. */
 #define CMD_ACK             0x06
 #define CMD_NACK            0x15
 
@@ -143,7 +147,21 @@ uint8_t UART_Protocol_GetBeamRequest(ds_beam_req_t *req);
 uint8_t UART_Protocol_StatusRequested(void);
 
 /**
- * @brief Send a CMD_STATUS frame to the ESP32 (blocking, ~5ms @115200).
+ * @brief Hook llamado mientras SendStatus espera al UART.
+ *
+ * Por defecto no hace nada (definición __weak). main.c la redefine para servir
+ * los fills de audio pendientes. Sin eso, los ~5,2 ms que tarda la trama de
+ * status bloquean el main loop — tolerable con el buffer de 480 muestras
+ * (deadline 10 ms), inadmisible si se baja a 240 (deadline 5 ms).
+ */
+void UART_Protocol_Yield(void);
+
+/**
+ * @brief Send a CMD_STATUS frame to the ESP32.
+ *
+ * ~5,2 ms a 115200, pero NO bloquea el pipeline de audio: sirve los fills
+ * pendientes entre byte y byte vía UART_Protocol_Yield(). Llamar SOLO desde el
+ * main loop — nunca desde una ISR.
  */
 void UART_Protocol_SendStatus(const ds_status_t *st);
 
@@ -159,5 +177,12 @@ const char* UART_Protocol_GetEspIp(void);
  * @return 1 y llena *db una vez por request, 0 si no hay ninguno pendiente.
  */
 uint8_t UART_Protocol_GetVolumeRequest(int8_t *db);
+
+/**
+ * @brief Poll for a CMD_SET_AMPS request.
+ * @param on  destino: 1 = habilitar los 32 amps, 0 = apagarlos.
+ * @return 1 y llena *on una vez por request, 0 si no hay ninguno pendiente.
+ */
+uint8_t UART_Protocol_GetAmpsRequest(uint8_t *on);
 
 #endif /* UART_PROTOCOL_H */

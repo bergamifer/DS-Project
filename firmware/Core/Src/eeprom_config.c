@@ -20,6 +20,9 @@
 #include "pin_definitions.h"
 #include <string.h>
 
+/* Default no-op; main.c la redefine para servir los fills de audio. */
+__weak void EEPROM_Yield(void) { }
+
 /* CAT24C256 page size */
 #define EEPROM_PAGE_SIZE    64
 #define EEPROM_I2C_TIMEOUT  100  /* ms */
@@ -114,8 +117,18 @@ static HAL_StatusTypeDef eeprom_write_page(uint16_t mem_addr, const uint8_t *dat
 
     wp_enable();
 
-    /* Wait for write cycle to complete (5ms max for CAT24C256) */
-    if (status == HAL_OK) HAL_Delay(6);
+    /* Wait for write cycle to complete (5ms max for CAT24C256).
+     *
+     * NO usar HAL_Delay acá: el guardado son 2 páginas = ~12 ms de bloqueo, más
+     * que el deadline de 10 ms del fill de audio, y cada deadline perdido es un
+     * medio buffer repetido en los 32 canales = un "pop" audible. Era el pop más
+     * fuerte de los tres (se oía al cambiar de modo, 3 s después por el
+     * debounce). EEPROM_Yield() deja que el main loop sirva los fills mientras
+     * el chip termina su ciclo de escritura. */
+    if (status == HAL_OK) {
+        uint32_t until = HAL_GetTick() + 6;
+        while ((int32_t)(HAL_GetTick() - until) < 0) EEPROM_Yield();
+    }
 
     return status;
 }

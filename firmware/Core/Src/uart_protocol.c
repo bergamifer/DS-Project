@@ -57,6 +57,10 @@ static char esp_ip[ESP_IP_MAXLEN + 1] = {0};
 static volatile int8_t  vol_req_db = 0;
 static volatile uint8_t vol_req_flag = 0;
 
+/* CMD_SET_AMPS: el ISR setea flag+valor, el main loop toca el GPIO. */
+static volatile uint8_t amps_req_on = 0;
+static volatile uint8_t amps_req_flag = 0;
+
 /* Pre-formatted print buffer for non-blocking IT transmission */
 #define PRINT_BUF_SIZE 1200
 static char print_buf[PRINT_BUF_SIZE];
@@ -239,6 +243,11 @@ static void process_byte(uint8_t byte)
             memcpy(esp_ip, rx_payload, rx_payload_len);
             esp_ip[rx_payload_len] = '\0';   /* NUL último: nunca se lee a medias */
             rx_frame_count++;
+        } else if (rx_command == CMD_SET_AMPS && rx_payload_len == 1) {
+            amps_req_on = rx_payload[0] ? 1 : 0;
+            amps_req_flag = 1;
+            rx_frame_count++;
+            send_ack();
         } else if (rx_command == CMD_SET_VOLUME && rx_payload_len == 1) {
             vol_req_db = (int8_t)rx_payload[0];   /* dB, negativo = atenúa */
             vol_req_flag = 1;
@@ -255,6 +264,10 @@ static void process_byte(uint8_t byte)
 /* ============================================================
  * ACK / NACK responses
  * ============================================================ */
+
+/* Default no-op; main.c la redefine para servir los fills de audio mientras
+ * SendStatus espera al UART. Ver el comentario en UART_Protocol_SendStatus. */
+__weak void UART_Protocol_Yield(void) { }
 
 static void send_ack(void)
 {
@@ -283,6 +296,14 @@ uint8_t UART_Protocol_GetVolumeRequest(int8_t *db)
     if (!vol_req_flag) return 0;
     vol_req_flag = 0;
     *db = vol_req_db;
+    return 1;
+}
+
+uint8_t UART_Protocol_GetAmpsRequest(uint8_t *on)
+{
+    if (!amps_req_flag) return 0;
+    amps_req_flag = 0;
+    *on = amps_req_on;
     return 1;
 }
 
@@ -376,5 +397,24 @@ void UART_Protocol_SendStatus(const ds_status_t *st)
     frame[fi++] = x;
     frame[fi++] = PROTO_FOOTER_1;
     frame[fi++] = PROTO_FOOTER_2;
-    HAL_UART_Transmit(huart_esp, frame, fi, 50);
+
+    /* TX byte a byte atendiendo los fills de audio entre carácter y carácter.
+     *
+     * La trama de status son ~60 bytes = ~5,2 ms bloqueado a 115200. Eso entra
+     * bajo el deadline de fill de 10 ms del buffer de 480 muestras, pero **no
+     * entraría bajo uno de 5 ms** si se baja el buffer a 240 — cada GET /status
+     * produciría un pop, igual que los prints antes del arreglo del 2026-08-14.
+     * Con esto el cambio de buffer deja de estar bloqueado por acá.
+     *
+     * Sólo se puede hacer porque SendStatus se llama desde el MAIN LOOP
+     * (main.c, tras UART_Protocol_StatusRequested). Los ACK/NACK se mandan desde
+     * el parser, que corre dentro de HAL_UART_RxCpltCallback — contexto de ISR —
+     * y ahí NO se puede servir el pipeline: hay que dejarlos bloqueantes. Son 5
+     * bytes = 434 µs, que entra de sobra en cualquiera de los dos deadlines. */
+    for (uint16_t i = 0; i < fi; i++) {
+        while (!(huart_esp->Instance->ISR & USART_ISR_TXE_TXFNF)) {
+            UART_Protocol_Yield();
+        }
+        huart_esp->Instance->TDR = frame[i];
+    }
 }

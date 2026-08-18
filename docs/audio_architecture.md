@@ -1,7 +1,7 @@
 # DS Beamforming — Arquitectura de Audio v4.0
 
-**Placa:** DS10 (STM32H743VIT6 + AK5538VN + 4×PCM1690 + 32×PAM8302A)
-**Estado:** DS10 firmware listo — pendiente de hardware
+**Placa:** DS11 (STM32H743VIT6 + AK5538VN + 4×PCM1690 + 32×PAM8302A) — arquitectura idéntica a DS10
+**Estado:** validado en hardware DS11 (agosto 2026) — ver `reporte_2026-08.md`
 **Última revisión:** Abril 2026 — actualizado desde DS10_DESIGN_REVIEW.md netlist 2026-04-02
 
 ---
@@ -274,7 +274,7 @@ Variable global `test_tone_enabled` (toggle via ESP32 o debug). Cuando activo, `
 
 ## 12. Referencias
 
-- [ds10_pin_map.md](ds10_pin_map.md) — Mapa completo de pines DS10
+- [pin_map.md](pin_map.md) — Mapa completo de pines (DS10/DS11 — idéntico)
 - [pcm1690_ref.md](pcm1690_ref.md) — Referencia DAC PCM1690
 - [ak5538vn_ref.md](ak5538vn_ref.md) — Referencia ADC AK5538VN
 - [ds9_pin_audit.md](historico/ds9_pin_audit.md) — Errores PCB DS9 (histórico)

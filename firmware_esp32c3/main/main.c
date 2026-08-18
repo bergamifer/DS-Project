@@ -1,14 +1,14 @@
-/* ESP32-C3-MINI-1 — DS9 Beamforming Bridge
+/* ESP32-C3-MINI-1 — DS11 Beamforming Bridge
  *
  * Canal de monitoreo unificado via USB Serial/JTAG:
  *   [ESP32] mensajes propios del ESP32
  *   [STM32] debug output del STM32H743 (forwardeado desde UART1 RX)
  *
- * Hardware DS9:
+ * Hardware DS11:
  *   UART1 TX → GPIO 0 → PA1 → STM32 UART4 RX   tramas binarias
  *   UART1 RX ← GPIO 1 ← PA0 ← STM32 UART4 TX   texto debug ASCII
  *
- *   NOTA DS9 PCB: las trazas GPIO0/GPIO1 van a PA1/PA0 respectivamente
+ *   NOTA PCB (DS9/DS10/DS11, sin cambios): las trazas GPIO0/GPIO1 van a PA1/PA0 respectivamente
  *   (cruzadas respecto al numero de pin). GPIO0→PA1 y GPIO1→PA0.
  *
  * USB Serial/JTAG (GPIO 18/19) → PC: terminal de monitoreo
@@ -32,7 +32,7 @@
 
 // ============== Configuracion hardware ==============
 
-#define BLINK_GPIO       GPIO_NUM_10   // LED en GPIO10 (DS9 board)
+#define BLINK_GPIO       GPIO_NUM_10   // LED en GPIO10
 #define BLINK_PERIOD_MS  500           // 500ms ON / 500ms OFF = 1Hz
 
 // WiFi credentials live in secrets.h (gitignored). Copy secrets.h.example to
@@ -40,7 +40,7 @@
 #include "secrets.h"
 #define DEVICE_ID        "DS_01"
 
-// UART0: link con STM32. DS9 PCB: GPIO0→PA1(STM32 RX), GPIO1→PA0(STM32 TX)
+// UART0: link con STM32. PCB: GPIO0→PA1(STM32 RX), GPIO1→PA0(STM32 TX)
 #define STM32_UART_NUM   UART_NUM_0
 #define STM32_UART_TX    GPIO_NUM_0   // ESP32 TX → GPIO0 → PA1 → STM32 UART4 RX
 #define STM32_UART_RX    GPIO_NUM_1   // ESP32 RX ← GPIO1 ← PA0 ← STM32 UART4 TX
@@ -66,6 +66,7 @@
                                 // a un comando HTTP concurrente. Ver uart_protocol.h
 #define CMD_SET_VOLUME   0x09   // payload: int8 dB (0..-63, <=-64 = mute). Volumen
                                 // maestro via atenuacion del PCM1690 (todos los modos).
+#define CMD_SET_AMPS     0x0A   // payload: uint8 (1=on, 0=off) — enable de los 32 PAM8302A
 #define CMD_ACK          0x06
 #define CMD_NACK         0x15
 #define NUM_CHANNELS     16
@@ -686,6 +687,39 @@ static esp_err_t beam_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /amps {"on":true|false} — enable del banco de 32 amplificadores.
+// Los amps arrancan APAGADOS (ver docs/ds11_errata.md): con ellos off corre
+// todo el pipeline en silencio, lo que aisla si un reinicio viene de la
+// demanda de los PAM8302A sobre el buck.
+static esp_err_t amps_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"bad json\"}");
+        return ESP_OK;
+    }
+    cJSON *jon = cJSON_GetObjectItem(root, "on");
+    uint8_t on = (jon && (cJSON_IsTrue(jon) || jon->valueint)) ? 1 : 0;
+    cJSON_Delete(root);
+
+    int ack = uart_send_and_wait_ack(CMD_SET_AMPS, &on, 1, 300);
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"%s\",\"amps\":%s}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"), on ? "true" : "false");
+    printf("[ESP32] POST /amps %s -> %s\n", on ? "ON" : "OFF",
+           ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 // POST /volume {"db":-20} — volumen maestro via atenuacion del PCM1690.
 // Afecta TODOS los modos (walker incluido), a diferencia de master_gain.
 static esp_err_t volume_handler(httpd_req_t *req)
@@ -746,6 +780,10 @@ static const char INDEX_HTML[] =
 "<span class=val id=volv>0 dB</span></div>"
 "<div class=row style='margin-top:6px'><button onclick=setVol(-64)>Mute</button>"
 "<button onclick=setVol(+vol.value)>Aplicar</button></div></div>"
+"<div class=card><h2>Amplificadores</h2>"
+"<div class=row><button onclick=setAmps(1)>Encender amps</button>"
+"<button onclick=setAmps(0)>Apagar amps</button>"
+"<span class=val id=ampsv>arrancan apagados</span></div></div>"
 "<div class=card><h2>Modo</h2><div class=grid id=modes></div></div>"
 "<div class=card><h2>RX beam (az&deg;)</h2>"
 "<div class=row><input type=range id=az min=-90 max=90 value=0 step=5>"
@@ -770,6 +808,8 @@ static const char INDEX_HTML[] =
 "['az','fx','fy','fz'].forEach(id=>{const e=document.getElementById(id);"
 "e.oninput=()=>document.getElementById(id+'v').textContent=e.value+(id=='az'?'\\u00b0':'');});"
 "function setVol(d){fetch('/volume',{method:'POST',body:JSON.stringify({db:d})});}"
+"function setAmps(o){fetch('/amps',{method:'POST',body:JSON.stringify({on:!!o})})"
+".then(r=>r.json()).then(s=>{ampsv.textContent=s.status=='ok'?(o?'ON':'OFF'):s.status;});}"
 "let volT=0,volTouch=0;"
 "vol.oninput=()=>{volv.textContent=vol.value+' dB';volTouch=Date.now();"
 "if(Date.now()-volT>200){volT=Date.now();setVol(+vol.value);}};"
@@ -819,6 +859,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/mode",    .method = HTTP_POST, .handler = mode_handler    },
             { .uri = "/beam",    .method = HTTP_POST, .handler = beam_handler    },
             { .uri = "/volume",  .method = HTTP_POST, .handler = volume_handler  },
+            { .uri = "/amps",    .method = HTTP_POST, .handler = amps_handler    },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
             { .uri = "/ping",    .method = HTTP_GET,  .handler = ping_handler    },
         };
@@ -830,6 +871,7 @@ static httpd_handle_t start_webserver(void)
         printf("[ESP32]   POST /command  — config JSON → STM32\n");
         printf("[ESP32]   POST /mode     — {\"mode\":0-%d}\n", (int)NUM_MODES - 1);
         printf("[ESP32]   POST /beam     — {\"type\":\"rx\",\"az\":30} | {\"type\":\"tx\",\"fx\":0,\"fy\":0,\"fz\":1000}\n");
+        printf("[ESP32]   POST /amps     — {\"on\":true|false} enable de los 32 amps\n");
         printf("[ESP32]   GET  /status   — telemetria real del STM32\n");
         printf("[ESP32]   GET  /ping     — health check\n");
         return server;
@@ -948,7 +990,7 @@ void app_main(void)
 
     printf("\n");
     printf("[ESP32] ============================================\n");
-    printf("[ESP32]  ESP32-C3-MINI-1 — DS9 Beamforming Bridge  \n");
+    printf("[ESP32]  ESP32-C3-MINI-1 — DS11 Beamforming Bridge  \n");
     printf("[ESP32] ============================================\n");
     printf("[ESP32] UART1 RX=GPIO%d ← STM32 PA1 | TX=GPIO%d → STM32 PA0\n",
            STM32_UART_RX, STM32_UART_TX);
