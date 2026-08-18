@@ -66,6 +66,9 @@ static volatile uint8_t ingain_req_flag = 0;
 /* CMD_SET_AMPS: el ISR setea flag+valor, el main loop toca el GPIO. */
 static volatile uint8_t amps_req_on = 0;
 static volatile uint8_t amps_req_flag = 0;
+/* CMD_FACTORY_RESET: sin payload. El trabajo (I2C del volumen, EEPROM) es del
+ * main loop; el ISR sólo levanta la bandera. */
+static volatile uint8_t factory_reset_flag = 0;
 
 /* Pre-formatted print buffer for non-blocking IT transmission */
 #define PRINT_BUF_SIZE 1200
@@ -254,6 +257,10 @@ static void process_byte(uint8_t byte)
             ingain_req_flag = 1;
             rx_frame_count++;
             send_ack();
+        } else if (rx_command == CMD_FACTORY_RESET && rx_payload_len == 0) {
+            factory_reset_flag = 1;               /* el main loop hace el trabajo */
+            rx_frame_count++;
+            send_ack();
         } else if (rx_command == CMD_SET_AMPS && rx_payload_len == 1) {
             amps_req_on = rx_payload[0] ? 1 : 0;
             amps_req_flag = 1;
@@ -323,6 +330,13 @@ uint8_t UART_Protocol_GetAmpsRequest(uint8_t *on)
     if (!amps_req_flag) return 0;
     amps_req_flag = 0;
     *on = amps_req_on;
+    return 1;
+}
+
+uint8_t UART_Protocol_GetFactoryResetRequest(void)
+{
+    if (!factory_reset_flag) return 0;
+    factory_reset_flag = 0;
     return 1;
 }
 

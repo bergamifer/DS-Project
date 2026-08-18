@@ -68,6 +68,7 @@
 #define CMD_SET_VOLUME   0x09   // payload: int8 dB (0..-63, <=-64 = mute). Volumen
                                 // maestro via atenuacion del PCM1690 (todos los modos).
 #define CMD_SET_AMPS     0x0A   // payload: uint8 (1=on, 0=off) — enable de los 32 PAM8302A
+#define CMD_FACTORY_RESET 0x0C  // sin payload — todo a valores de fabrica, y persiste
 #define CMD_SET_INGAIN   0x0B   // payload: uint8 dB (0..36) — ganancia de ENTRADA
 #define CMD_ACK          0x06
 #define CMD_NACK         0x15
@@ -728,6 +729,27 @@ static esp_err_t amps_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /reset — reset de fabrica. Sin payload: no hay nada que elegir.
+//
+// El instrumento tiene muchos parametros que se pisan en vivo (foco por fuente,
+// azimut, mutes, ganancias, volumen, ganancia de entrada) y varios se guardan
+// solos en la EEPROM. Sin una vuelta a cero se puede quedar en un estado raro
+// sin forma evidente de salir — y quien lo opera no necesariamente sabe que
+// parametro toco. Deja volumen -24 dB, ganancia 0 dB, modo 0 y los focos por
+// defecto. NO toca el enable de los amplificadores: apagarlos de sorpresa (o
+// encenderlos) es justo lo que no se quiere de un boton de panico.
+static esp_err_t reset_handler(httpd_req_t *req)
+{
+    int ack = uart_send_and_wait_ack(CMD_FACTORY_RESET, NULL, 0, 600);
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"%s\"}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"));
+    printf("[ESP32] POST /reset -> %s\n", ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 // POST /ingain {"db":0} — ganancia de la etapa de ENTRADA, 0..36 dB.
 //
 // NO confundir con /volume: aquel es el atenuador del PCM1690, o sea la SALIDA.
@@ -844,7 +866,10 @@ static const char INDEX_HTML[] =
 "<div class=card><h2>Modo</h2><div class=grid id=modes></div></div>"
 "<div class=card><h2>RX beam (az&deg;)</h2>"
 "<div class=row><input type=range id=az min=-90 max=90 value=0 step=5>"
-"<span class=val id=azv>0&deg;</span><button onclick=setRx()>Aplicar</button></div></div>"
+"<span class=val id=azv>0&deg;</span><button onclick=setRx()>Aplicar</button></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Aplicar deja el equipo "
+"escuchando los micr&oacute;fonos y <b>apaga el tono interno</b>, aunque arriba "
+"siga marcado otro modo. Para volver, eleg&iacute; el modo de nuevo.</div></div>"
 "<div class=card><h2>TX focus (mm rel centro)</h2>"
 "<label>X (izq&minus;/der+): <span class=val id=fxv>0</span></label>"
 "<input type=range id=fx min=-1500 max=1500 value=0 step=50>"
@@ -874,6 +899,11 @@ static const char INDEX_HTML[] =
 "Aplica al modo MULTIFOCUS activo (14 tonos / 15 entradas).</div></div>"
 "<div class=card><h2>Entradas ADC (peak)</h2><div class=meter id=meter></div>"
 "<div id=st>esperando estado...</div></div>"
+"<div class=card><h2>Volver a cero</h2>"
+"<div class=row><button onclick=doReset()>Reset de f&aacute;brica</button>"
+"<span class=val id=rstv></span></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Volumen &minus;24 dB, "
+"ganancia 0 dB, modo 0 y focos por defecto. No toca los amplificadores.</div></div>"
 "<script>"
 "const N=16,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither','MULTIFOCUS 4t','MULTIFOCUS 8in'];"
 "const md=document.getElementById('modes');"
@@ -900,7 +930,7 @@ static const char INDEX_HTML[] =
  * MFocusIn_ApplyDefaults() del STM32: X de -700 a +700 cada 200, y=0, z=1000. */
 "const SX=1500,SZ=3000,pad=document.getElementById('pad');"
 "const src=[];for(let i=0;i<8;i++)src.push({x:-700+200*i,y:0,z:1000});"
-"let sel=0,drag=-1,padT=0;"
+"let sel=0,drag=-1,padT=0,curMode=-1;"
 "const MX=x=>150+x*140/SX,MZ=z=>203-z*191/SZ;"
 "const IX=p=>Math.max(-SX,Math.min(SX,Math.round((p-150)*SX/140)));"
 "const IZ=p=>Math.max(100,Math.min(SZ,Math.round((203-p)*SZ/191)));"
@@ -919,7 +949,16 @@ static const char INDEX_HTML[] =
 "dots[i].c.setAttribute('cx',X);dots[i].c.setAttribute('cy',Z);"
 "dots[i].t.setAttribute('x',X);dots[i].t.setAttribute('y',Z);"
 "dots[i].c.setAttribute('fill',i==sel?'#fd7':'#9cf');}}"
-"function sendSrc(i){fetch('/beam',{method:'POST',body:JSON.stringify("
+/* El pad manda POST /beam type=mf, y ese comando APAGA el tono y enciende
+ * MULTIFOCUS en el STM32 sin tocar el indice de modo. O sea que tocarlo estando
+ * en el 12 o el 13 dejaba la placa sonando otra cosa mientras la pagina seguia
+ * mostrando el modo viejo — parecia que "el modo 13 se rompio". Si no estamos
+ * ya en un modo MULTIFOCUS, entramos al 14 EXPLICITAMENTE: la placa y lo que se
+ * ve en pantalla dicen lo mismo. */
+"function sendSrc(i){"
+"if(curMode!=14&&curMode!=15){curMode=14;"
+"fetch('/mode',{method:'POST',body:JSON.stringify({mode:14})}).then(poll);}"
+"fetch('/beam',{method:'POST',body:JSON.stringify("
 "{type:'mf',src:i,fx:src[i].x,fy:src[i].y,fz:src[i].z})});}"
 "pad.onpointermove=e=>{if(drag<0)return;const r=pad.getBoundingClientRect();"
 "const px=(e.clientX-r.left)*300/r.width,py=(e.clientY-r.top)*215/r.height;"
@@ -932,11 +971,21 @@ static const char INDEX_HTML[] =
 "fyv2.oninput=()=>{src[sel].y=+fyv2.value;fyvv.textContent=fyv2.value;};"
 "fyv2.onchange=()=>sendSrc(sel);"
 "drawDots();"
+/* Confirmacion antes de resetear: es destructivo (pisa focos y ajustes) y el
+ * boton esta a un toque de distancia en un telefono. */
+"function doReset(){if(!confirm('Volver todo a valores de fabrica?'))return;"
+"rstv.textContent='...';fetch('/reset',{method:'POST'}).then(r=>r.json()).then(s=>{"
+"rstv.textContent=s.status=='ok'?'listo':s.status;"
+/* Los sliders quedaron mostrando lo viejo: reponer desde el estado real. */
+"for(let i=0;i<8;i++){src[i]={x:-700+200*i,y:0,z:1000};}sel=0;drawDots();"
+"fyv2.value=0;fyvv.textContent=0;igTouch=0;volTouch=0;poll();"
+"setTimeout(()=>rstv.textContent='',3000);});}"
 "function setRx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'rx',az:+az.value})});}"
 "function setTx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'tx',fx:+fx.value,fy:+fy.value,fz:+fz.value})});}"
 "function poll(){fetch('/status').then(r=>r.json()).then(s=>{"
 "document.getElementById('link').textContent=s.stm32=='ok'?'\\u25cf online':'\\u25cb '+s.stm32;"
 "if(s.stm32!='ok')return;"
+"curMode=s.mode;"
 "for(let i=0;i<N;i++)document.getElementById('m'+i).className=(i==s.mode)?'on':'';"
 "if(s.vol_db!=null&&s.vol_db>-64&&Date.now()-volTouch>3000){vol.value=s.vol_db;volv.textContent=s.vol_db+' dB';}"
 "if(s.ingain_db!=null&&Date.now()-igTouch>3000){ig.value=s.ingain_db;igv.textContent=s.ingain_db+' dB';}"
@@ -975,6 +1024,12 @@ static httpd_handle_t start_webserver(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;
+    /* HTTPD_DEFAULT_CONFIG deja max_uri_handlers en 8 y el registro que se pasa
+     * FALLA EN SILENCIO: el endpoint simplemente no existe y el server contesta
+     * "Nothing matches the given URI". Con 9 endpoints /ping ya estaba caido sin
+     * que nadie lo notara, y agregar /reset tiro /status — o sea la telemetria
+     * entera— sin un solo mensaje de error. Margen de sobra y chequeo abajo. */
+    config.max_uri_handlers = 16;
 
     printf("[ESP32] Iniciando HTTP server en puerto %d...\n", config.server_port);
 
@@ -986,12 +1041,17 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/beam",    .method = HTTP_POST, .handler = beam_handler    },
             { .uri = "/volume",  .method = HTTP_POST, .handler = volume_handler  },
             { .uri = "/amps",    .method = HTTP_POST, .handler = amps_handler    },
+            { .uri = "/reset",   .method = HTTP_POST, .handler = reset_handler   },
             { .uri = "/ingain",  .method = HTTP_POST, .handler = ingain_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
             { .uri = "/ping",    .method = HTTP_GET,  .handler = ping_handler    },
         };
-        for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++)
-            httpd_register_uri_handler(server, &uris[i]);
+        for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
+            esp_err_t e = httpd_register_uri_handler(server, &uris[i]);
+            if (e != ESP_OK)
+                printf("[ESP32] !! NO se pudo registrar %s: %s — ese endpoint NO existe\n",
+                       uris[i].uri, esp_err_to_name(e));
+        }
 
         printf("[ESP32] HTTP server listo\n");
         printf("[ESP32]   GET  /         — UI web (control de modos + beam)\n");

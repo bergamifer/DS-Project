@@ -424,14 +424,19 @@ static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
  * fill no multiplica en 64 bits por muestra. La fase de cada ventana se
  * deriva de mf_frame.
  *
- * ⚠️ mf_frame lo avanza el ÚLTIMO banco (ch_offset 24), no el primero. Antes lo
- * avanzaba SAI1_A y los otros tres lo veían ya adelantado un buffer entero: eso
- * sólo era inocuo si f×buffer/48000 daba entero, o sea con buffer de 480 y
- * frecuencias múltiplo de 100 Hz. Al bajar el buffer a 240 la condición pasó a
- * ser múltiplo de **200**, y 1300/1900/2100 dejaron de cumplirla → las filas
- * 2-3 quedaban en CONTRAFASE con las 0-1 para 3 de los 4 tonos, o sea el foco
- * de esos tonos se cancelaba en vez de sumarse. Avanzando al final, los 4
- * bancos leen el mismo valor y la restricción de frecuencia desaparece. */
+ * ⚠️ mf_frame lo avanza **Process_ADC_Half**, junto a delay_write_pos, y NINGÚN
+ * fill lo toca. Antes lo avanzaba el fill de SAI1_A y los otros tres bancos lo
+ * leían ya adelantado un buffer entero: eso sólo era inocuo si f×buffer/48000
+ * daba entero, o sea con buffer de 480 y frecuencias múltiplo de 100 Hz. Al
+ * bajar el buffer a 240 la condición pasó a ser múltiplo de **200**, y
+ * 1300/1900/2100 dejaron de cumplirla → las filas 2-3 quedaban en CONTRAFASE
+ * con las 0-1 para 3 de los 4 tonos: el foco no salía débil, salía cancelado.
+ *
+ * Moverlo a otro banco sólo cambiaba de banco privilegiado y dejaba en pie el
+ * segundo problema: si ESE banco no se llenaba en una pasada, la fase no
+ * avanzaba y el tono repetía la misma ventana. El reloj del pipeline es el RX
+ * —Service_Fills lo procesa antes que los 4 TX para que todos vean el mismo
+ * snapshot de wp—, así que mf_frame va ahí y el problema desaparece de raíz. */
 #define MF_MAX_SRC   8              // techo: las 8 entradas de la intervención
 #define MF_NUM_SRC   4              // fuentes activas hoy (4 tonos)
 #define MF_SRC_SHIFT 2              // c/fuente a -6dBFS/4 → suma ≤ -6dBFS
@@ -633,6 +638,8 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void Service_Fills(void);
 static void Set_In_Gain(uint8_t db);
 static void Set_Amps(uint8_t on);
+static void Config_LoadDefaults(void);
+static void Config_FactoryReset(void);
 static void UART_Print(const char *str);
 static void Print_DMA_Config(void);
 static void Beam_UpdateDelays(int16_t az_deg);
@@ -885,15 +892,7 @@ int main(void)
   memset(delay_line, 0, sizeof(delay_line));
   delay_write_pos = 0;
 
-  // Default beam config: all gains max, no delays, unmuted
-  beam_config.master_gain = 255;
-  beam_config.mute_global = 0;
-  memset(beam_config.delays, 0, sizeof(beam_config.delays));
-  memset(beam_config.gains, 255, sizeof(beam_config.gains));  // 0xFF = unity gain
-  beam_config.mutes = 0;
-  beam_config.master_vol_db = -24;   // matches PCM1690 init default → first boot unchanged
-  beam_config.last_mode = 0;         // monitor
-  beam_config.in_gain_db = IN_GAIN_DB_LINE;  // las entradas de la DS11 son de línea
+  Config_LoadDefaults();
   Beam_InitTxGeometry();
   Cal_Init();                       // AUTOFOCUS chirp reference
   MFocusIn_ApplyDefaults();         // MULTIFOCUS: filas 0-7 válidas (modo 15)
@@ -1342,6 +1341,8 @@ int main(void)
       }
 
       if (UART_Protocol_GetAmpsRequest(&amps_on)) Set_Amps(amps_on);
+
+      if (UART_Protocol_GetFactoryResetRequest()) Config_FactoryReset();
 
       if (UART_Protocol_StatusRequested()) {
         ds_status_t st;
@@ -2953,6 +2954,41 @@ static void Cal_Process(void) {
   cal_state = CAL_DONE;
 }
 
+/** @brief Deja beam_config en valores de fábrica (sin tocar la EEPROM).
+ *
+ * Una sola definición de "default", usada tanto en el boot como en el reset de
+ * fábrica: si estuvieran duplicadas, el reset y el primer arranque terminarían
+ * dando estados distintos con el tiempo.
+ */
+static void Config_LoadDefaults(void) {
+  beam_config.master_gain = 255;
+  beam_config.mute_global = 0;
+  memset(beam_config.delays, 0, sizeof(beam_config.delays));
+  memset(beam_config.gains, 255, sizeof(beam_config.gains));  // 0xFF = unity gain
+  beam_config.mutes = 0;
+  beam_config.master_vol_db = -24;   // igual al default del init del PCM1690
+  beam_config.last_mode = 0;         // monitor
+  beam_config.in_gain_db = IN_GAIN_DB_LINE;  // las entradas de la DS11 son de línea
+}
+
+/** @brief Reset de fábrica: defaults + focos + volumen + modo, y persiste.
+ *
+ * Existe porque el instrumento tiene muchos parámetros que se pisan en vivo
+ * (foco por fuente, azimut, mutes, ganancias, volumen) y algunos se guardan
+ * solos: sin una vuelta a cero se puede quedar en un estado raro sin forma
+ * evidente de salir. Corre desde el main loop — hace I2C y HAL_Delay.
+ */
+static void Config_FactoryReset(void) {
+  Config_LoadDefaults();
+  MFocusIn_ApplyDefaults();          // focos de las 8 entradas (modo 15)
+  MFocus_ApplyDefaults();            // focos de los 4 tonos (modo 14)
+  Set_In_Gain(beam_config.in_gain_db);
+  Apply_Master_Volume(beam_config.master_vol_db);
+  UI_ApplyState(0);                  // monitor
+  if (EEPROM_IsAvailable()) eeprom_save_pending = 1;   // persistir ya, sin debounce
+  UART_Print("RESET DE FABRICA: volumen -24 dB, ganancia 0 dB, modo 0, focos por defecto\r\n");
+}
+
 /** @brief Habilita o apaga el banco de 32 PAM8302A (pin SD, PD3).
  *
  * Llamar SOLO desde el main loop: hace HAL_Delay. Con los amps apagados corre
@@ -3140,7 +3176,18 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
     }
   }
 
+  /* Los DOS relojes del pipeline avanzan juntos, acá y en ningún otro lado.
+   * delay_write_pos marca la ventana; mf_frame marca la fase de los tonos del
+   * MULTIFOCUS. Van juntos porque son lo mismo: el tiempo.
+   *
+   * mf_frame vivía en el fill de un banco, y eso arrastraba dos problemas: los
+   * otros tres bancos leían un valor distinto (contrafase entre filas), y si
+   * ese banco puntual no se llenaba en una pasada la fase no avanzaba. Acá no
+   * hay elección de banco que hacer: Service_Fills procesa el RX ANTES que los
+   * 4 TX justamente para que todos vean el mismo snapshot de wp — que mf_frame
+   * viaje con wp es la misma garantía, gratis. */
   delay_write_pos = (wp + samples) & DELAY_LINE_MASK;
+  mf_frame += samples;
 }
 
 /**
@@ -3273,9 +3320,8 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
         if (ph[s] >= TONE_PERIOD_Q16) ph[s] -= TONE_PERIOD_Q16;
       }
     }
-    /* Avanza el ÚLTIMO banco (ver la nota de mf_frame): así los 4 rinden la
-     * misma ventana con la misma fase, sin depender de la frecuencia. */
-    if (ch_offset == AUDIO_CHANNELS * 3) mf_frame += samples;
+    /* mf_frame NO se avanza acá — lo hace Process_ADC_Half, que es el reloj
+     * común del pipeline (ver la nota en la declaración). */
     return;
   }
 

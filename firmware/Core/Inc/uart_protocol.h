@@ -42,6 +42,14 @@
                                      * micrófonos. Ver el comentario de in_gain_q8
                                      * en main.c: amplificar +30 y atenuar −40
                                      * después hacía recortar el clamp digital. */
+#define CMD_FACTORY_RESET   0x0C    /* payload: none. Vuelve TODO a fábrica —
+                                     * volumen, ganancia de entrada, modo,
+                                     * gains/mutes/delays y los focos de ambos
+                                     * MULTIFOCUS— y lo persiste. Salida de
+                                     * emergencia cuando el instrumento quedó
+                                     * en un estado raro a fuerza de ajustes
+                                     * en vivo, varios de los cuales se
+                                     * guardan solos. */
 #define CMD_ACK             0x06
 #define CMD_NACK            0x15
 
@@ -207,5 +215,11 @@ uint8_t UART_Protocol_GetInGainRequest(uint8_t *db);
  * @return 1 y llena *on una vez por request, 0 si no hay ninguno pendiente.
  */
 uint8_t UART_Protocol_GetAmpsRequest(uint8_t *on);
+
+/**
+ * @brief Poll for a CMD_FACTORY_RESET request.
+ * @return 1 una vez por request, 0 si no hay ninguno pendiente.
+ */
+uint8_t UART_Protocol_GetFactoryResetRequest(void);
 
 #endif /* UART_PROTOCOL_H */
