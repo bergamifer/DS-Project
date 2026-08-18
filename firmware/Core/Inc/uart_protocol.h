@@ -63,9 +63,10 @@
  * de las filas 3 y 4 no se podían tocar desde el ESP32. */
 #define CFG_PAYLOAD_SIZE    102
 #define CFG_NUM_CHANNELS    32
-#define PROTO_VERSION       4   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION       5   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
-                                 * state_flags, y ds_config_t pasa a 32 canales */
+                                 * state_flags, y ds_config_t pasa a 32 canales;
+                                 * v5: + uptime_ms DEL STM32 */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -125,7 +126,8 @@ typedef struct __attribute__((packed)) {
     uint32_t adc_ovf_count;  /* v3: medios buffers con OVF alto, MONOTÓNICO */
     uint32_t out_clip_count; /* v3: muestras de salida recortadas, MONOTÓNICO */
     uint8_t  state_flags;    /* v4: ver STATE_F_* */
-} ds_status_t;               /* 54 + 1 + 4 + 4 + 1 = 64 bytes */
+    uint32_t uptime_ms;      /* v5: uptime del STM32 (HAL_GetTick) */
+} ds_status_t;               /* 64 + 4 = 68 bytes */
 
 /* Estado REAL, no el nominal.
  *
@@ -142,7 +144,11 @@ typedef struct __attribute__((packed)) {
 #define STATE_F_AMPS    0x01    /* banco de 32 PAM8302A habilitado */
 #define STATE_F_CUSTOM  0x02    /* beam custom: mode_idx NO describe lo que suena */
 
-_Static_assert(sizeof(ds_status_t) == 64, "ds_status_t must be 64 bytes");
+/* El `uptime_ms` que publicaba /status era el del ESP32, no el del STM32: un
+ * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18
+ * midiendo underruns, cuando el contador BAJÓ de 6 a 0 — un contador monótono
+ * que retrocede es un reboot, y no había con qué confirmarlo. */
+_Static_assert(sizeof(ds_status_t) == 68, "ds_status_t must be 68 bytes");
 /* ⚠️ Un payload por encima de PROTO_MAX_PAYLOAD hace que el ESP32 descarte la
  * trama por larga y el endpoint quede mudo SIN dar error — de ahí los asserts. */
 _Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,

@@ -574,8 +574,18 @@ static volatile uint8_t need_fill_2b_second_half = 0;
 static volatile uint8_t rx_3b_first_half_ready = 0;
 static volatile uint8_t rx_3b_second_half_ready = 0;
 
-// Underrun detection: flag set but not serviced before next ISR
+/* Underrun = bandera puesta y no servida antes de la próxima ISR, o sea un
+ * deadline de fill perdido = medio buffer repetido = un pop.
+ *
+ * Hay DOS contadores a propósito. `underrun_count` se pone en cero cada 60 s,
+ * porque el resumen periódico informa "por ciclo". `underrun_total` NO se
+ * resetea nunca y es el que va a la telemetría: sin él, `/status` parecía
+ * acumulativo pero retrocedía sola cada minuto, y cualquier medición por
+ * diferencia daba números imposibles (negativos incluidos). Lo mismo para los
+ * errores del SAI. */
 static volatile uint32_t underrun_count = 0;
+static volatile uint32_t underrun_total = 0;
+static volatile uint32_t sai_error_total = 0;
 
 // Callback counters for debug
 static volatile uint32_t half_complete_count = 0;
@@ -654,7 +664,7 @@ static void Set_Amps(uint8_t on);
 static void Config_LoadDefaults(void);
 static void Config_FactoryReset(void);
 static void UART_Print(const char *str);
-static void Print_DMA_Config(void);
+static void Check_Memory_Placement(void);
 static void Beam_UpdateDelays(int16_t az_deg);
 static void Beam_InitTxGeometry(void);
 static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
@@ -889,6 +899,7 @@ int main(void)
     UART_Print(uart_buf);
   }
 
+  Check_Memory_Placement();
   UART_Print("CPU: 480MHz (VOS0), HCLK: 240MHz, APB: 120MHz\r\n");
   UART_Print("PLL3: 24.576MHz MCLK (512xfS) — MckOverSampling=ENABLE\r\n");
   UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");
@@ -1366,8 +1377,8 @@ int main(void)
         st.fx_mm = tx_focus_x_mm;
         st.fy_mm = tx_focus_y_mm;
         st.fz_mm = tx_focus_z_mm;
-        st.underruns = underrun_count;
-        st.sai_errors = error_count;
+        st.underruns  = underrun_total + underrun_count;   // acumulado real
+        st.sai_errors = sai_error_total + error_count;
         st.ovf = (uint8_t)HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN);
         st.cal_state = (uint8_t)cal_state;
         st.master_vol_db = beam_config.master_vol_db;
@@ -1376,6 +1387,7 @@ int main(void)
         st.out_clip_count = out_clip_count;
         st.state_flags = (amps_enabled ? STATE_F_AMPS : 0)
                        | (custom_beam_active ? STATE_F_CUSTOM : 0);
+        st.uptime_ms = HAL_GetTick();
         for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
           int32_t pk = 0;
           for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
@@ -1727,19 +1739,25 @@ int main(void)
         }
         UART_Print("==============================================\r\n\r\n");
 
-        // Reset counters + flags + latency stats for next cycle
-        // Atomic reset: disable IRQ so ISR can't write between our resets
+        /* Reset de estadísticas para el próximo ciclo. IRQ apagada para que el
+         * ISR no escriba entre medio.
+         *
+         * ⚠️ Acá ADEMÁS se ponían en cero las diez banderas need_fill_* /
+         * rx_3b_*_ready, y eso NO es resetear una estadística: es TIRAR TRABAJO
+         * PENDIENTE. Una bandera puesta significa "este medio buffer todavía no
+         * se llenó"; borrarla sin llenarlo deja que el DMA reproduzca el
+         * contenido anterior — medio buffer repetido en los 32 canales, o sea
+         * un pop, UNA VEZ POR MINUTO. Encaja con el "pedito cuando imprime el
+         * serial" que se venía reportando: los prints ya se hicieron
+         * cooperativos, pero esto seguía descartando fills.
+         *
+         * Dejarlas puestas es estrictamente mejor: el fill se sirve tarde (dato
+         * correcto, posición corrida) en vez de no servirse (dato viejo
+         * garantizado). Y si alguna quedara realmente trabada, ahora se ve en
+         * el contador acumulado en vez de barrerse bajo la alfombra. */
         __disable_irq();
-        need_fill_first_half = 0;
-        need_fill_second_half = 0;
-        need_fill_1b_first_half = 0;
-        need_fill_1b_second_half = 0;
-        need_fill_2a_first_half = 0;
-        need_fill_2a_second_half = 0;
-        need_fill_2b_first_half = 0;
-        need_fill_2b_second_half = 0;
-        rx_3b_first_half_ready = 0;
-        rx_3b_second_half_ready = 0;
+        underrun_total  += underrun_count;   // el acumulado sobrevive al reset
+        sai_error_total += error_count;
         half_complete_count = 0;
         full_complete_count = 0;
         error_count = 0;
@@ -2467,114 +2485,50 @@ static void UART_Print(const char *str) {
 }
 
 /**
- * @brief Print DMA configuration details for verification
+ * @brief Verifica que cada estructura crítica esté en la memoria que le toca.
+ *
+ * Silencioso cuando está bien; grita cuando no. Las dos clases de bug que más
+ * caro salieron en este proyecto son de UBICACIÓN, no de lógica:
+ *   - un buffer de DMA en DTCM → el DMA no lo alcanza y no sale audio;
+ *   - una tabla leída en el lazo de fill en FLASH → con el D-cache apagado se
+ *     pagan wait states por muestra (el modo 14 perdía el 15% de los deadlines
+ *     por esto, ver docs/ds11_perf.md §7).
+ * Ninguna de las dos da error de compilación y ninguna se ve leyendo el código.
+ *
+ * Reemplaza al viejo Print_DMA_Config(), que volcaba 100 líneas de registros en
+ * cada arranque y hacía años que nadie llamaba.
  */
-static void Print_DMA_Config(void) {
-  char buf[128];
+#define IN_RAM_D2(p) ((uint32_t)(p) >= 0x30000000u && (uint32_t)(p) < 0x30048000u)
+#define IN_DTCM(p)   ((uint32_t)(p) >= 0x20000000u && (uint32_t)(p) < 0x20020000u)
 
-  UART_Print("\r\n--- DMA1 Stream 0 Configuration ---\r\n");
-
-  // Get DMA1_Stream0 CR register
-  uint32_t cr = DMA1_Stream0->CR;
-
-  // Direction: Bits 7:6 (00=P2M, 01=M2P, 10=M2M)
-  uint32_t dir = (cr >> 6) & 0x03;
-  sprintf(buf, "Direction: %s (0x%02lX)\r\n",
-          dir == 0x01 ? "Memory-to-Peripheral [OK]" :
-          dir == 0x00 ? "Peripheral-to-Memory" : "Memory-to-Memory",
-          dir);
-  UART_Print(buf);
-
-  // Circular mode: Bit 8
-  uint32_t circ = (cr >> 8) & 0x01;
-  sprintf(buf, "Circular Mode: %s\r\n", circ ? "ENABLED [OK]" : "DISABLED");
-  UART_Print(buf);
-
-  // Memory increment: Bit 10
-  uint32_t minc = (cr >> 10) & 0x01;
-  sprintf(buf, "Memory Increment: %s\r\n", minc ? "ENABLED [OK]" : "DISABLED");
-  UART_Print(buf);
-
-  // Peripheral increment: Bit 9
-  uint32_t pinc = (cr >> 9) & 0x01;
-  sprintf(buf, "Periph Increment: %s\r\n", pinc ? "ENABLED" : "DISABLED [OK]");
-  UART_Print(buf);
-
-  // Memory data size: Bits 14:13 (00=Byte, 01=HalfWord, 10=Word)
-  uint32_t msize = (cr >> 13) & 0x03;
-  sprintf(buf, "Memory Data Size: %s (0x%02lX)\r\n",
-          msize == 0x02 ? "32-bit Word [OK]" :
-          msize == 0x01 ? "16-bit HalfWord" : "8-bit Byte",
-          msize);
-  UART_Print(buf);
-
-  // Peripheral data size: Bits 12:11
-  uint32_t psize = (cr >> 11) & 0x03;
-  sprintf(buf, "Periph Data Size: %s (0x%02lX)\r\n",
-          psize == 0x02 ? "32-bit Word [OK]" :
-          psize == 0x01 ? "16-bit HalfWord" : "8-bit Byte",
-          psize);
-  UART_Print(buf);
-
-  // Priority: Bits 17:16 (00=Low, 01=Medium, 10=High, 11=VeryHigh)
-  uint32_t pl = (cr >> 16) & 0x03;
-  const char* prio_str[] = {"Low", "Medium", "High", "Very High"};
-  sprintf(buf, "Priority: %s\r\n", prio_str[pl]);
-  UART_Print(buf);
-
-  // Interrupts: TCIE (bit 4), HTIE (bit 3), TEIE (bit 2), DMEIE (bit 1)
-  uint32_t tcie = (cr >> 4) & 0x01;
-  uint32_t htie = (cr >> 3) & 0x01;
-  sprintf(buf, "Interrupts: TCIE=%s, HTIE=%s\r\n",
-          tcie ? "ON [OK]" : "OFF", htie ? "ON [OK]" : "OFF");
-  UART_Print(buf);
-
-  // DMAMUX Configuration
-  UART_Print("\r\n--- DMAMUX1 Channel 0 ---\r\n");
-  uint32_t dmamux_ccr = DMAMUX1_Channel0->CCR;
-  uint32_t req_id = dmamux_ccr & 0xFF;  // Request ID in bits 7:0
-  sprintf(buf, "Request ID: %lu (expected 87 for SAI1_A) %s\r\n",
-          req_id, req_id == 87 ? "[OK]" : "[MISMATCH!]");
-  UART_Print(buf);
-
-  // Buffer address verification
-  UART_Print("\r\n--- Memory Addresses ---\r\n");
-  uint32_t buf_addr = (uint32_t)audio_buffer;
-  sprintf(buf, "Audio Buffer: 0x%08lX ", buf_addr);
-  UART_Print(buf);
-
-  // Check if in RAM_D2 (0x30000000 - 0x30047FFF)
-  if (buf_addr >= 0x30000000 && buf_addr < 0x30048000) {
-    UART_Print("(RAM_D2) [OK - DMA accessible]\r\n");
-  } else if (buf_addr >= 0x20000000 && buf_addr < 0x20020000) {
-    UART_Print("(DTCMRAM) [ERROR - NOT DMA accessible!]\r\n");
-  } else if (buf_addr >= 0x24000000 && buf_addr < 0x24080000) {
-    UART_Print("(AXI SRAM) [WARNING - Use MDMA only]\r\n");
-  } else {
-    UART_Print("(Unknown region)\r\n");
+static void Check_Memory_Placement(void) {
+  struct { const void *addr; const char *name; uint8_t want_dma; } chk[] = {
+    { audio_buffer,        "audio_buffer(SAI1_A)", 1 },
+    { audio_buffer_1b,     "audio_buffer_1b",      1 },
+    { audio_buffer_2a,     "audio_buffer_2a",      1 },
+    { audio_buffer_2b,     "audio_buffer_2b",      1 },
+    { audio_buffer_3b_rx,  "audio_buffer_3b_rx",   1 },
+    { delay_line,          "delay_line",           0 },
+    { beam_line,           "beam_line",            0 },
+    { sine_table_1khz,     "sine_table_1khz",      0 },
+    { mf_phoff_q16,        "mf_phoff_q16",         0 },
+  };
+  uint32_t bad = 0;
+  for (uint32_t i = 0; i < sizeof(chk) / sizeof(chk[0]); i++) {
+    uint8_t ok = chk[i].want_dma ? IN_RAM_D2(chk[i].addr) : IN_DTCM(chk[i].addr);
+    if (!ok) {
+      bad++;
+      sprintf(uart_buf, "  !! %s @ 0x%08lX — deberia estar en %s\r\n",
+              chk[i].name, (unsigned long)(uint32_t)chk[i].addr,
+              chk[i].want_dma ? "RAM_D2 (accesible por DMA)" : "DTCM (0 wait states)");
+      UART_Print(uart_buf);
+    }
   }
-
-  // DMA peripheral address (SAI1 data register)
-  uint32_t par = DMA1_Stream0->PAR;
-  sprintf(buf, "SAI1_A DR: 0x%08lX\r\n", par);
-  UART_Print(buf);
-
-  // DMA memory address
-  uint32_t m0ar = DMA1_Stream0->M0AR;
-  sprintf(buf, "DMA M0AR: 0x%08lX\r\n", m0ar);
-  UART_Print(buf);
-
-  // Number of data items
-  uint32_t ndtr = DMA1_Stream0->NDTR;
-  sprintf(buf, "NDTR (items): %lu\r\n", ndtr);
-  UART_Print(buf);
-
-  // Stream enabled?
-  uint32_t en = cr & 0x01;
-  sprintf(buf, "Stream Enabled: %s\r\n", en ? "YES" : "NO");
-  UART_Print(buf);
-
-  UART_Print("------------------------------------\r\n\r\n");
+  if (bad) {
+    UART_Print("  !! REVISAR EL LINKER SCRIPT / LOS ATRIBUTOS DE SECCION !!\r\n");
+  } else {
+    UART_Print("Memoria: buffers DMA en RAM_D2, tablas calientes en DTCM — OK\r\n");
+  }
 }
 
 /**

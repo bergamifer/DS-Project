@@ -552,3 +552,68 @@ Validar un cambio de buffer **en el modo más barato no valida nada**. La regla 
 la próxima vez que se toque `AUDIO_BUFFER_SAMPLES`: recorrer los modos 0, 12, 14 y
 15 midiendo el delta de `underruns` en una ventana fija, y revisar a mano todo
 invariante que mencione el tamaño del buffer (`grep -n "480\|buffer" main.c`).
+
+---
+
+## 8. El resumen de 60 s tiraba fills pendientes (2026-08-18)
+
+Encontrado probando por telemetría, sin escuchar. El bloque que imprime el
+resumen cada 60 s hacía, además de resetear estadísticas:
+
+```c
+__disable_irq();
+need_fill_first_half = 0;
+need_fill_second_half = 0;
+...                          // las 8 banderas de TX
+rx_3b_first_half_ready = 0;  // y las 2 del RX
+rx_3b_second_half_ready = 0;
+```
+
+**Eso no es resetear una estadística: es tirar trabajo pendiente.** Una bandera
+puesta significa "este medio buffer todavía no se llenó". Borrarla sin llenarlo
+deja que el DMA reproduzca el contenido anterior — **medio buffer repetido en los
+32 canales, o sea un pop, una vez por minuto**.
+
+Encaja con el *"pedito cada vez que se imprime el serial"* que se venía
+reportando. Los prints ya se habían hecho cooperativos en agosto y el síntoma
+mejoró, pero **esto seguía descartando fills** y nadie lo miró: estaba en el
+bloque de reseteo, donde uno espera ver estadísticas, no estado del pipeline.
+
+Dejar las banderas puestas es estrictamente mejor: el fill se sirve **tarde**
+(dato correcto, posición corrida) en vez de **no servirse** (dato viejo
+garantizado).
+
+### El contador de underruns mentía sobre su propia naturaleza
+
+El mismo bloque hacía `underrun_count = 0`, así que `/status` publicaba un número
+que **parecía acumulativo y retrocedía solo cada minuto**. Medir por diferencia
+daba resultados imposibles —incluidos negativos— y llegó a parecer que la placa
+se reiniciaba.
+
+Ahora hay dos contadores: `underrun_count` por ciclo (lo que informa el resumen)
+y `underrun_total`, que no se resetea nunca y es el que va a la telemetría. Ídem
+`sai_errors`.
+
+> **`uptime_ms` era el del ESP32, no el del STM32.** Un reinicio del STM32 era
+> **invisible desde la red**: la única pista habría sido justamente el contador
+> retrocediendo, que resultó ser otra cosa. Desde proto v5, `/status` publica
+> `stm32_uptime_ms` (del STM32) junto a `uptime_ms` (del ESP32). Sin ese campo no
+> se podía distinguir "reinicio" de "contador reseteado", y se perdió un rato
+> largo en esa ambigüedad.
+
+### Barrido completo de los 16 modos
+
+Con todo lo anterior aplicado, con los amps apagados y sin señal de entrada:
+
+| | resultado |
+|---|---|
+| Modos 0–15, ventana de 8 s cada uno | **0 underruns, 0 errores SAI, 0 clip** en los 16 |
+| Barrido de volumen (10 cambios × 32 escrituras I2C) | **0 underruns** |
+| Ganancia de entrada + `/status` concurrente | **0 underruns** |
+| Ráfaga de beam custom (8 fuentes) | **0 underruns** |
+| Cambios de modo rápidos (18 en 7 s) | 6 underruns — ver abajo |
+
+Los 6 de la ráfaga de modos aparecen **una sola vez** y no se repiten en las
+vueltas siguientes; con el arreglo del descarte de fills hay que volver a
+medirlos. Falta la validación auditiva, que es la única que ve los artefactos
+que no cuentan como deadline perdido.

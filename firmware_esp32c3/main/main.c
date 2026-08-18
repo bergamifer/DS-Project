@@ -108,8 +108,9 @@ typedef struct __attribute__((packed)) {
     uint32_t adc_ovf_count;   // v3: MONOTONICO — satura el ADC (bajar la fuente)
     uint32_t out_clip_count;  // v3: MONOTONICO — satura la salida (bajar ingain)
     uint8_t  state_flags;     // v4: bit0 amps encendidos, bit1 beam custom activo
+    uint32_t uptime_ms;       // v5: uptime DEL STM32 (el otro uptime es de este chip)
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 64, "ds_status_t debe ser 64 bytes");
+_Static_assert(sizeof(ds_status_t) == 68, "ds_status_t debe ser 68 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 
@@ -583,7 +584,13 @@ static esp_err_t status_handler(httpd_req_t *req)
     uart_send_frame(CMD_GET_STATUS, NULL, 0);
 
     char buf[640];
-    if (xSemaphoreTake(status_sem, 400 / portTICK_PERIOD_MS) == pdTRUE) {
+    /* 800 ms, no 400. El STM32 manda el status byte a byte sirviendo los fills
+     * de audio entre medio (para no meter un pop de 6 ms), asi que en el modo
+     * mas pesado —el 15, 8 fuentes x 32 salidas— la trama entera puede tardar
+     * varios cientos de ms. Con 400 ms se veian timeouts esporadicos JUSTO en
+     * el modo que mas interesa monitorear. El audio siempre gana; la telemetria
+     * espera. Sigue entrando en el poll de 1 s de la pagina. */
+    if (xSemaphoreTake(status_sem, 800 / portTICK_PERIOD_MS) == pdTRUE) {
         const ds_status_t *s = &last_status;
         const char *mname = (s->mode_idx < NUM_MODES)
                           ? MODE_NAMES[s->mode_idx] : "?";
@@ -595,7 +602,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"vol_db\":%d,\"ingain_db\":%u,\"amps\":%s,\"custom\":%s,"
             "\"adc_ovf\":%lu,\"out_clip\":%lu,"
             "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
-            "\"uptime_ms\":%lu}",
+            "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
             (unsigned long)s->underruns, (unsigned long)s->sai_errors,
@@ -607,8 +614,14 @@ static esp_err_t status_handler(httpd_req_t *req)
             (long)s->adc_pk[0], (long)s->adc_pk[1], (long)s->adc_pk[2],
             (long)s->adc_pk[3], (long)s->adc_pk[4], (long)s->adc_pk[5],
             (long)s->adc_pk[6], (long)s->adc_pk[7],
+            /* Los DOS uptimes, separados a proposito: uptime_ms era el de este
+             * chip y se leia como si fuera el de la placa, asi que un reinicio
+             * del STM32 resultaba INVISIBLE desde la red. */
+            (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
     } else {
+        /* Sin respuesta del STM32 no hay uptime suyo que informar; el que va
+         * es el de este chip, y por eso lleva su nombre. */
         snprintf(buf, sizeof(buf),
             "{\"stm32\":\"timeout\",\"device_id\":\"" DEVICE_ID "\","
             "\"uptime_ms\":%lu}",

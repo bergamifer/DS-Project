@@ -401,6 +401,12 @@ lugares distintos, simultáneamente.
 > `amps` también es estado real, leído del firmware: antes la web sólo recordaba
 > el último botón apretado, y eso se vuelve falso con un reboot o con el K2 largo.
 
+> **`underruns` y `sai_errors` también son acumulativos desde proto v5.** Antes
+> el resumen de 60 s los ponía en cero, así que el número de `/status` parecía
+> acumulativo y retrocedía solo cada minuto — medir por diferencia daba
+> resultados imposibles. Y `uptime_ms` era el del **ESP32**: un reinicio del
+> STM32 no se veía desde la red. Ahora `/status` trae `stm32_uptime_ms` aparte.
+>
 > **Los contadores de saturación son MONOTÓNICOS**: lo que importa es que *crezcan*
 > entre dos lecturas — eso es "está saturando ahora", no "saturó alguna vez". Antes
 > se ponían en cero al imprimirse en el heartbeat, y así no se podían exponer por
