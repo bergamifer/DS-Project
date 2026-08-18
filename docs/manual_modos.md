@@ -77,26 +77,73 @@ la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
 
 ---
 
-## ⚠️ El modo 0 satura con fuentes de línea, y no es culpa del ADC
+## Las DOS ganancias, y por qué saturaba
 
-Observado el 2026-08-18 con una Mac conectada: por encima del ~20% de volumen de la
-fuente, "satura". **El ADC no tiene nada que ver.**
+**Hay dos controles de nivel y hacen cosas distintas.** Confundirlos fue el origen
+del único problema serio de nivel que tuvo la DS11.
 
-Medido en ese momento: picos de **46778 sobre 8388607** = **−45 dBFS**, con `OVF=0`
-sostenido. **Al ADC le sobraban 45 dB de headroom.**
+| | comando | qué es | dónde actúa |
+|---|---|---|---|
+| **Ganancia de entrada** | `POST /ingain {"db":N}` | cuánto se amplifica lo que ENTRA | **antes** del clamp digital |
+| **Volumen maestro** | `POST /volume {"db":-N}` | atenuador del PCM1690 | **después**, a la salida |
 
-Lo que clipea es el **boost de +30 dB del propio modo 0** (`adc_monitor_shift = 5`,
-×32), que existe para poder escuchar un micrófono, no una salida de línea. Con la
-fuente al 20% ya estás a −15 dBFS *después* del boost.
+### El síntoma y el diagnóstico
 
-**Conclusión práctica: no hace falta atenuador ni resistencias de entrada.** Para
-fuentes de línea usá el **modo 15**, que aplica `mf_in_shift = 2` (×4, +12 dB) — ahí
-podés subir bastante más la fuente. El modo 0 es una herramienta de diagnóstico de
-micrófonos, no un monitor de nivel.
+Con una Mac conectada, por encima del **~30 %** de volumen de la fuente el audio se
+rompía. Sonaba a parlante exigido, pero no era eso: los PAM8302A son de 8 W y no se
+los estaba exigiendo ni de cerca.
 
-> 💡 **Cómo verificar el nivel de verdad**: mirá `OVF` en `/status`. Mientras esté en
-> **0**, el ADC no satura, sin importar lo que escuches. Si pasa a 1, ahí sí hay que
-> bajar la fuente.
+La medición **sticky** (pico sostenido entre impresiones, no una muestra al azar del
+1 % del tiempo) resolvió la ambigüedad de una:
+
+```
+>>> SATURACION: ADC(OVF)=0  SALIDA(clip)=3152  <<<
+```
+
+**El ADC no clipeaba nunca. Clipeaba la salida digital, 3152 veces por segundo.**
+
+> ⚠️ Ojo con medir el nivel muestreando: la línea `ADCpk` del heartbeat mira una
+> ventana de 5 ms una vez por segundo — el 0,5 % del tiempo. Con eso llegué a
+> escribir acá que "al ADC le sobraban 45 dB de headroom", y era falso: el pico real
+> era −25 dBFS, no −45. Cualquier afirmación sobre niveles necesita pico sostenido.
+
+### La causa: la cadena estaba al revés
+
+```
+ADC −25 dBFS ──[ +30 dB ]──► +4,6 dBFS ──[ CLAMP ]──► recorta ──[ −40 dB ]──► parlantes
+                  ▲                          ▲                       ▲
+            boost para mic             el techo real          atenuador del DAC
+```
+
+Se amplificaba **+30 dB para tirar −40 dB después**, con el recorte justo en el
+medio. Por eso rompía a un nivel de fuente tan bajo: el techo no estaba donde
+parecía. El +30 dB existía para poder escuchar un micrófono; con línea es
+exactamente lo contrario de lo que hace falta.
+
+### Cómo queda
+
+La ganancia de entrada es **un parámetro global y persistente** (EEPROM, igual que el
+volumen), no un default por modo: depende de **qué está enchufado**, no del modo de
+beamforming activo. Escala toda la cadena alimentada por el ADC — monitor, RX beam y
+MULTIFOCUS de entradas — con la única excepción de los modos de tono, cuya fuente
+interna ya está a −6 dBFS.
+
+- **Default de fábrica: 0 dB (línea).** Las entradas de la DS11 son de línea: J9 no
+  lleva bias de micrófono, así que un electret necesita preamp externo igual.
+- **+30 dB** es el preset "micrófono", para cuando lo que entra es de verdad débil.
+- Se configura **una vez** y sobrevive al reboot.
+
+```bash
+curl -X POST http://$IP/ingain -d '{"db":0}'      # línea (default)
+curl -X POST http://$IP/volume -d '{"db":-15}'    # subí acá, no allá
+```
+
+Con `/ingain 0` la fuente puede ir **al 100 %** sin recortar. Verificado en hardware
+el 2026-08-18.
+
+> 💡 **Cómo verificar el nivel de verdad**: la línea `SATURACION` del heartbeat solo
+> aparece cuando hay algo que reportar, y distingue las dos causas. `ADC(OVF)>0` =
+> bajá la fuente. `SALIDA(clip)>0` = bajá `/ingain` y compensá con `/volume`.
 
 ### Observación pendiente: diafonía entre canales del mismo cable
 
@@ -110,13 +157,13 @@ desbalanceadas— la **impedancia común del retorno de masa**, que con una fich
 stereo comparte el cuerpo entre los dos canales. Vale la pena separarlo antes de
 atribuirlo al cable.
 
-## Modo 0 — ADC monitor (+30 dB)
+## Modo 0 — ADC monitor
 
 Ruta directa ADC→DAC para *escuchar* lo que captura el AK5538. Cada canal de
 salida reproduce su canal ADC homólogo (DAC ch0 ← ADC ch0, etc.). En DS11 las
 8 entradas se **repiten en cada fila** de 8 parlantes: la entrada N suena en la
-columna N de las 4 filas. La señal del ADC es débil (hum ~−55 dBFS),
-así que se aplica `adc_monitor_shift = 5` (×32 ≈ +30 dB) y clamp a ±FS 24-bit.
+columna N de las 4 filas. Se escala por la **ganancia de entrada** global (ver
+arriba) y se clampea a ±FS 24-bit.
 
 - **Uso**: verificar cadena de entrada, mapear entrada física → slot TDM
   (junto con la línea `ADCpk` del heartbeat).
@@ -146,8 +193,9 @@ mínimo 0, redondeados a muestras @48 kHz (tope `MAX_DELAY_SAMPLES = 64`).
 - La suma de los 8 canales se escala (`>>8` por término y `>>3` al total) para
   que señal coherente idéntica en los 8 mics salga ~unity, y se escribe en
   `beam_line[]`.
-- Salida: el beam mono en **todos** los canales de salida, con boost ×32
-  (`beam_out_shift = 5`) — la fuente ADC es débil.
+- Salida: el beam mono en **todos** los canales de salida, escalado por la
+  **ganancia de entrada** global (`beam_out_q8 = in_gain_q8`) — misma cadena de
+  ganancia que el monitor, así `/ingain` gobierna estos modos también.
 - Azimut: 0 = broadside; positivo hacia índices de mic más altos.
 - El heartbeat agrega la línea `BEAM az=<az> pk=<pico>`: con la misma señal
   inyectada en todos los mics, steering "hacia la fuente" ≈ ADCpk de un canal;
@@ -235,8 +283,9 @@ los modos 12-13 de `manual_modos.md`.
   ~3 Hz alrededor de la base (2 kHz → 1900↔2100). El haz es de retardos puros
   (banda ancha) → no cambia; los modos de la sala se promedian y la medición
   se estabiliza aunque la sala sea mala. Sin clicks (fase continua).
-- `beam_out_shift = 0` en estos modos (el ×32 de los modos ADC clipearía
-  brutalmente contra los PAM: el tono ya es −6 dBFS).
+- `beam_out_q8 = 256` (unidad) en estos modos: la ganancia de entrada NO se
+  aplica acá — el tono ya es −6 dBFS y un ×32 clipearía brutalmente contra los
+  PAM. La fuente es interna y de nivel conocido, no necesita ajuste.
 - Foco (0, **0**, 1000) mm: con las 4 filas pobladas en DS11 el foco va al
   centro del array y la apertura vertical (480 mm) también enfoca. En DS10
   iba a fy = −240 para apuntar al plano de la única fila poblada.
@@ -297,9 +346,11 @@ lugares distintos, simultáneamente.
 - **Mover una entrada de lugar** (en vivo):
   `POST /beam {"type":"mf","src":5,"fx":200,"fy":0,"fz":800}` — en este
   modo `src` va de 0 a 7 y re-apunta esa entrada sin tocar las demás.
-- **Niveles**: boost de entrada +12 dB (`mf_in_shift = 2`, nivel de línea).
-  Si distorsiona, **bajar el volumen de la fuente** (hay clamp, pero suena
-  mal). Entradas sin nada conectado solo aportan piso de ruido, inaudible.
+- **Niveles**: usa la **ganancia de entrada** global (`/ingain`, default 0 dB =
+  línea). Si distorsiona, bajala y compensá con `/volume` — hay clamp, pero
+  suena mal. Ojo que acá se suman 8 fuentes: si las 8 tienen señal fuerte, el
+  acumulado puede recortar aunque cada una sola no lo hiciera. Entradas sin nada
+  conectado solo aportan piso de ruido, inaudible.
 - Con 1–2 fuentes conectadas ya funciona (las entradas libres no molestan) —
   no hace falta esperar a tener las 8 señales.
 - `gains[ch]`, mutes y `speaker_sign` se aplican igual que en los modos TX.
@@ -312,6 +363,7 @@ lugares distintos, simultáneamente.
 |---------|-----|--------|
 | **Amplificadores** | `POST /amps {"on":true}` → `CMD_SET_AMPS` (0x0A) | Enable del banco de 32 PAM8302A (pin SD, PD3). **Arranca en 0** — sin esto no suena nada. No se persiste: cada boot arranca apagado. |
 | **Volumen maestro** | `POST /volume {"db":-20}` → `CMD_SET_VOLUME` | **Único maestro**: atenuación del PCM1690 (0…−63 dB, ≤−64 = mute), 0.5 dB/paso. Se persiste en EEPROM (debounce 3 s). Default −24 dB. |
+| **Ganancia de entrada** | `POST /ingain {"db":0}` → `CMD_SET_INGAIN` | Ganancia de la etapa de ENTRADA, 0…36 dB en pasos de 1 dB (multiplicador Q8). Global, **no** por modo. Se persiste en EEPROM (debounce 3 s). Default 0 dB = línea; 30 dB = preset micrófono. Ver "Las DOS ganancias" arriba. |
 | **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (52 bytes) | mute_global, gains/delays/mutes de los primeros 16 canales. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
 | **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32; `type:"mf"` con `src` 0-7 — re-apunta el foco de UNA fuente MULTIFOCUS (tonos del 14 o entradas del 15, según el modo activo). No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
 | **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2). |

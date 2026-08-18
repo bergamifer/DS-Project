@@ -266,6 +266,33 @@ curl -X POST http://LA_IP/volume -d '{"db":-40}'
 El número va de **0** (máximo) a **−63** (casi mudo). **−40 es un buen punto de
 partida**; de ahí se sube de a poco. Si suena distorsionado, bajar.
 
+### Si suena "roto" y bajar el volumen no lo arregla
+
+Hay un **segundo** control de nivel, y es el que importa cuando el problema no se
+va bajando el volumen. La diferencia:
+
+- **`volume`** = cuán fuerte suena **lo que sale** hacia los parlantes.
+- **`ingain`** = cuánto se amplifica **lo que entra** por los cables de audio.
+
+Si `ingain` está muy alto, la señal se **rompe adentro del equipo**, antes de llegar
+al control de volumen — y entonces bajar el volumen te da lo mismo roto, pero más
+bajito. Es exactamente lo que pasaba en agosto de 2026 con una computadora
+conectada: rompía al 30 % del volumen de la Mac.
+
+```bash
+curl -X POST http://LA_IP/ingain -d '{"db":0}'
+```
+
+**Con `0` funcionan bien todas las fuentes normales**: computadora, celular, mesa de
+sonido, reproductor. Es el valor de fábrica y **queda guardado** — se pone una sola
+vez, no hace falta repetirlo en cada encendido.
+
+El valor **`30`** es para micrófonos, que dan una señal muchísimo más débil. Si lo
+dejás en 30 con una computadora enchufada, **rompe**. Ante la duda: `0`.
+
+> **La regla**: si distorsiona, primero probá `ingain 0`. Si con eso suena limpio
+> pero bajo, subí el `volume`. Nunca al revés.
+
 ### Cambiar de modo
 
 El equipo tiene **16 modos** de funcionamiento (tonos de prueba, recorridos,
@@ -369,6 +396,7 @@ el ESP32 — pedírselo a Fernando.
 | No aparece en la red | El ESP32 no conectó | Reiniciar; si sigue, la red no está cargada |
 | El programador se apaga al enchufarlo | Pin 1 del cable sin cortar | Usar el cable preparado |
 | Suena distorsionado y fuerte | Está saturando | Bajar el volumen |
+| Distorsiona y bajar el volumen NO lo arregla | La ganancia de entrada está alta | `ingain 0`, ver §6 |
 | Zumbido de fondo | Entradas de audio al aire | Desconectar lo que no se use, o silenciar |
 
 ### Reglas de oro

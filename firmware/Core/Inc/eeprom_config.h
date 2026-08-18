@@ -13,7 +13,12 @@
 #include <stdint.h>
 
 #define EEPROM_CFG_MAGIC       0xD509BEEF
-#define EEPROM_CFG_VERSION     3   /* v2: += master_vol_db; v3: += last_mode */
+#define EEPROM_CFG_VERSION     4   /* v2: += master_vol_db; v3: += last_mode;
+                                    * v4: += in_gain_db (ganancia de entrada).
+                                    * Un bump descarta lo guardado y vuelve a
+                                    * los defaults — es una vez y a propósito:
+                                    * leer bytes viejos con layout nuevo daría
+                                    * un volumen o un modo arbitrarios. */
 #define EEPROM_CFG_BASE_ADDR   0x0000   /* Start of EEPROM */
 
 /* Result codes */

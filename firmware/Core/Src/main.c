@@ -134,6 +134,7 @@ typedef struct {
     uint32_t mutes;                         // bitfield: bit N = channel N muted
     int8_t   master_vol_db;                 // PCM1690 attenuation, dB (0..-63, ≤-64 mute)
     uint8_t  last_mode;                     // ui_states index restored at boot
+    uint8_t  in_gain_db;                    // ganancia de ENTRADA, dB (0..36)
 } beam_config_t;
 
 /* Private variables ---------------------------------------------------------*/
@@ -208,13 +209,11 @@ static uint32_t test_tone_phase = 0;
 /* ADC monitor mode: route the live digitized ADC straight to the DACs so you
  * can HEAR what the AK5538 is capturing. Each DAC channel plays its matching
  * ADC channel (ch0→ch0 …), repitiendo las 8 entradas en cada fila de 8
- * parlantes (DS11: 4 filas). The ADC signal is low-level (hum ~-55dBFS, noise
- * floor ~-95dBFS), so it is boosted by (1<<adc_monitor_shift) before the DAC,
- * then clamped to 24-bit FS. Takes priority over test tone and beamform. */
+ * parlantes (DS11: 4 filas). Escalado por la ganancia de entrada (ver abajo)
+ * y clampeado a FS de 24 bits. Takes priority over test tone and beamform. */
 static volatile uint8_t adc_monitor_enabled = 1;   /* 1 = live ADC→DAC monitor */
-static volatile uint8_t adc_monitor_shift = 5;     /* gain boost: 5 = ×32 ≈ +30dB */
 
-/* ===== Ganancia de ENTRADA, ajustable en runtime =====
+/* ===== Ganancia de ENTRADA — ajustable en runtime y PERSISTENTE =====
  *
  * La estructura de ganancia estaba al revés y ese era el cuello de botella real:
  * el modo 0 amplificaba +30 dB (para poder oír un micrófono) y después el
@@ -223,23 +222,27 @@ static volatile uint8_t adc_monitor_shift = 5;     /* gain boost: 5 = ×32 ≈ +
  * nada — medido 2026-08-18: ADCpk 448804 (−25 dBFS) × 32 = +4,6 dBFS, con
  * SALIDA(clip) = 3152 recortes/s y el ADC ni enterado (OVF = 0).
  *
- * Ahora la ganancia de entrada es un parámetro: 0 dB para fuentes de línea,
- * +30 dB para micrófonos. Al entrar a un modo se carga su default (así el
- * comportamiento histórico no cambia) y se puede pisar por comando.
+ * Es un ajuste GLOBAL, no por modo: la ganancia que hace falta depende de QUÉ
+ * ESTÁ ENCHUFADO, no del modo de beamforming activo. Por eso se guarda en la
+ * EEPROM junto al volumen — se configura una vez por instalación y sobrevive
+ * al reboot (antes había que mandar el comando después de cada arranque).
  *
- * Se usa un multiplicador Q8 en vez de un shift para tener pasos de 1 dB en
- * lugar de 6. El multiply extra por muestra es despreciable: el fill del modo
- * monitor va al 4,3% de CPU. */
+ * El default es 0 dB = LÍNEA, porque las entradas de la DS11 son de línea:
+ * J9 no lleva bias de micrófono (ver ds11-netlist-hallazgos), así que un
+ * electret necesita preamp externo igual. El +30 dB es el caso excepcional.
+ *
+ * Multiplicador Q8 en vez de shift, para pasos de 1 dB en lugar de 6. El
+ * multiply extra por muestra es despreciable: el monitor va al 4,3% de CPU. */
 static const uint16_t gain_q8_tbl[37] = {
     256,   287,   322,   362,   406,   455,   511,   573,   643,   722,
     810,   908,  1019,  1144,  1283,  1440,  1615,  1812,  2033,  2282,
    2560,  2872,  3223,  3616,  4057,  4552,  5108,  5731,  6430,  7215,
    8095,  9083, 10192, 11435, 12830, 14396, 16153 };
 #define IN_GAIN_DB_MAX  36
-#define IN_GAIN_DB_MIC  30      /* default histórico del monitor (×32) */
-#define IN_GAIN_DB_LINE 12      /* default histórico del modo 15 (×4)  */
-static volatile uint8_t  in_gain_db  = IN_GAIN_DB_MIC;
-static volatile uint16_t in_gain_q8  = 8095;      /* = tabla[30] */
+#define IN_GAIN_DB_MIC  30      /* preset "micrófono" (×32) — con preamp externo */
+#define IN_GAIN_DB_LINE 0       /* preset "línea" (×1) — el default de fábrica  */
+static volatile uint8_t  in_gain_db  = IN_GAIN_DB_LINE;
+static volatile uint16_t in_gain_q8  = 256;       /* = tabla[0] */
 
 static inline int32_t Apply_In_Gain(int32_t s) {
   return (int32_t)(((int64_t)s * (int32_t)in_gain_q8) >> 8);
@@ -337,10 +340,12 @@ static volatile uint8_t beam_enabled = 0;
 static int32_t beam_line[DELAY_LINE_SIZE] __attribute__((aligned(32)));
 static uint16_t rx_delay[MIC_COUNT] = {0};        // per-mic delay in samples
 static volatile int16_t beam_az_deg = 0;
-/* Output boost for the ADC-fed beam (weak). MUST be 0 in tone modes: the
- * internal tone is already -6dBFS and ×32 would clip hard into the PAMs —
- * UI_ApplyState() sets this per mode. */
-static volatile uint8_t beam_out_shift = 5;
+/* Ganancia de salida del beam. Cuando la fuente es el ADC sigue a in_gain_q8
+ * (misma cadena de ganancia que el monitor: los modos 2-6 recortaban igual que
+ * el 0 cuando la entrada era de línea). MUST be unity (256) en modos de tono:
+ * el tono interno ya está a -6dBFS y ×32 satura contra los PAM —
+ * UI_ApplyState() la fija por modo. */
+static volatile uint16_t beam_out_q8 = 256;
 
 /* ===== Internal tone source (TX directionality without a mic) =====
  * Writes beam_line[] at the same positions/cadence as the RX beam, so the
@@ -423,11 +428,10 @@ static uint32_t mf_frame = 0;       // avanzado SOLO por el fill de SAI1_A
  * el TX steering sobre beam_line) — vale para señal arbitraria. */
 #define MF_IN_NUM_SRC MF_MAX_SRC    // las 8 entradas del AK5538
 static volatile uint8_t mfocus_in_enabled = 0;
-/* Boost de entrada: las entradas son nivel de línea (bias 1.25V). +12dB
- * default; si distorsiona, bajar el volumen de la FUENTE (el clamp protege
- * pero suena mal). Mantener ≤4: 8 fuentes × FS × 2^5 desbordaría el int32
- * del acumulador. El monitor usa ×32 porque escucha ruido; acá hay señal. */
-static volatile uint8_t mf_in_shift = 2;
+/* La ganancia de entrada de este modo es la global (in_gain_q8): ver el
+ * comentario de Apply_In_Gain. Ojo con subirla acá: son 8 fuentes sumadas,
+ * y 8 × FS × ×32 desbordaría el int32 del acumulador — por eso el clamp
+ * del lazo va ANTES del gain por canal. */
 
 /* ===== AUTOFOCUS scan state =====
  * Sequence per speaker: SETTLE (silence, room decay) → ARM (next fill of the
@@ -859,6 +863,7 @@ int main(void)
   beam_config.mutes = 0;
   beam_config.master_vol_db = -24;   // matches PCM1690 init default → first boot unchanged
   beam_config.last_mode = 0;         // monitor
+  beam_config.in_gain_db = IN_GAIN_DB_LINE;  // las entradas de la DS11 son de línea
   Beam_InitTxGeometry();
   Cal_Init();                       // AUTOFOCUS chirp reference
   MFocusIn_ApplyDefaults();         // MULTIFOCUS: filas 0-7 válidas (modo 15)
@@ -1179,6 +1184,13 @@ int main(void)
   // monitor (and, since 0 != last_mode there, that write-back deliberately
   // forgets AUTOFOCUS). The normal case restores idx == last_mode, so
   // UI_ApplyState leaves the save disarmed.
+  // La ganancia de entrada se restaura ANTES del modo: UI_ApplyState deriva de
+  // ella la ganancia del beam, así que tiene que estar puesta primero.
+  Set_In_Gain(beam_config.in_gain_db);
+  snprintf(uart_buf, sizeof(uart_buf),
+           "INGAIN: +%u dB al boot (%s)\r\n", (unsigned)in_gain_db,
+           in_gain_db ? "guardado en EEPROM" : "linea");
+  UART_Print(uart_buf);
   {
     uint8_t bm = beam_config.last_mode;
     if (bm >= UI_NUM_STATES || ui_states[bm].af) bm = 0;
@@ -1264,6 +1276,8 @@ int main(void)
         uint8_t ig_db;
         if (UART_Protocol_GetInGainRequest(&ig_db)) {
           Set_In_Gain(ig_db);
+          beam_config.in_gain_db = in_gain_db;   // el valor CLAMPEADO, no el pedido
+          Arm_Config_Save();                     // sobrevive al reboot
           snprintf(uart_buf, sizeof(uart_buf),
                    "INGAIN: +%u dB (ganancia de ENTRADA; el volumen es la salida)\r\n",
                    (unsigned)in_gain_db);
@@ -2747,11 +2761,11 @@ static void UI_ApplyCustomBeam(const ds_beam_req_t *req) {
     Beam_UpdateTxFocus(req->fx_mm, req->fy_mm, req->fz_mm);
     UART_Print("MODE: TX focus custom (via ESP32)\r\n");
   } else {
-    /* RX custom escucha los mics: el tono interno pisaría beam_line, y el
-     * shift de tono (0) dejaría la salida 30dB abajo. */
+    /* RX custom escucha los mics: el tono interno pisaría beam_line, y la
+     * ganancia unitaria del modo de tono dejaría la salida muy abajo. */
     tx_steer_enabled = 0;
     tone_enabled = 0;
-    beam_out_shift = 5;
+    beam_out_q8 = in_gain_q8;
     Beam_UpdateDelays(req->az_deg);
     UART_Print("MODE: RX beam custom (via ESP32)\r\n");
   }
@@ -2899,11 +2913,17 @@ static void Cal_Process(void) {
   cal_state = CAL_DONE;
 }
 
-/** @brief Fija la ganancia de entrada en dB (0..36), con clamp. */
+/** @brief Fija la ganancia de entrada en dB (0..36), con clamp.
+ *
+ * Escala TODA la cadena alimentada por el ADC: monitor, MULTIFOCUS de entradas
+ * y beam. La única excepción es el beam en modos de tono, cuya fuente interna
+ * ya está a un nivel conocido (-6 dBFS) — ahí queda en unidad. No persiste por
+ * sí sola: el que la persiste es el handler del comando. */
 static void Set_In_Gain(uint8_t db) {
   if (db > IN_GAIN_DB_MAX) db = IN_GAIN_DB_MAX;
   in_gain_db = db;
   in_gain_q8 = gain_q8_tbl[db];
+  if (!tone_enabled) beam_out_q8 = in_gain_q8;
 }
 
 /**
@@ -2932,9 +2952,10 @@ static void UI_ApplyState(uint8_t idx) {
   }
   mfocus_in_enabled = st->mfin;
   if (st->mfin) MFocusIn_ApplyDefaults();
-  /* Tone source is -6dBFS: the +30dB boost that lifts the weak ADC beam
-   * would clip ×32 into the PAMs (plan §3.1). */
-  beam_out_shift = st->tone ? 0 : 5;
+  /* Tone source is -6dBFS: el boost que levanta el beam débil del ADC lo
+   * saturaría contra los PAM (plan §3.1). Con fuente de ADC, el beam usa la
+   * MISMA ganancia de entrada que el resto — un ajuste, una cadena. */
+  beam_out_q8 = st->tone ? 256 : in_gain_q8;
   if (!st->af) {                     // leaving AUTOFOCUS aborts any scan
     cal_state = CAL_IDLE;
     cal_capturing = 0;
@@ -2948,11 +2969,9 @@ static void UI_ApplyState(uint8_t idx) {
     beam_config.last_mode = idx;
     Arm_Config_Save();
   }
-  /* Default de ganancia de entrada por modo: el monitor asume micrófono
-   * (+30 dB), el MULTIFOCUS de entradas asume línea (+12 dB). Se puede pisar
-   * después con CMD_SET_INGAIN sin cambiar de modo. */
-  Set_In_Gain(st->monitor ? IN_GAIN_DB_MIC : IN_GAIN_DB_LINE);
-
+  /* La ganancia de entrada NO se toca al cambiar de modo: es propiedad de la
+   * fuente conectada, no del modo, y vive en la EEPROM. Se imprime para que
+   * quede en el log de qué nivel se partía. */
   sprintf(uart_buf, "MODE [%u/%u]: %s (ganancia entrada +%u dB)\r\n",
           (unsigned)(idx + 1), (unsigned)UI_NUM_STATES, st->name,
           (unsigned)in_gain_db);
@@ -3263,9 +3282,9 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
             s = s0 + (int32_t)(((int64_t)(s1 - s0) * frac) >> 8);
             s = (s * (int32_t)beam_config.gains[gch]) >> 8;  // 24-bit×255 < 2³¹
             if (speaker_sign[gch] < 0) s = -s;
-            s <<= beam_out_shift;
-            if (s > 8388607) s = 8388607;
-            else if (s < -8388608) s = -8388608;
+            s = (int32_t)(((int64_t)s * (int32_t)beam_out_q8) >> 8);
+            if (s > 8388607)       { s = 8388607;  out_clip_count++; }
+            else if (s < -8388608) { s = -8388608; out_clip_count++; }
           }
           buffer[i * AUDIO_CHANNELS + ch] = s;
         }
@@ -3277,9 +3296,9 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
      * like the ADC monitor. */
     for (uint32_t i = 0; i < samples; i++) {
       int32_t s = beam_line[(wp - samples + i) & DELAY_LINE_MASK];
-      s <<= beam_out_shift;
-      if (s > 8388607) s = 8388607;
-      else if (s < -8388608) s = -8388608;
+      s = (int32_t)(((int64_t)s * (int32_t)beam_out_q8) >> 8);
+      if (s > 8388607)       { s = 8388607;  out_clip_count++; }
+      else if (s < -8388608) { s = -8388608; out_clip_count++; }
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
         buffer[i * AUDIO_CHANNELS + ch] = s;
       }
