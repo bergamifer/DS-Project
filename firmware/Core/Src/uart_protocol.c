@@ -57,6 +57,12 @@ static char esp_ip[ESP_IP_MAXLEN + 1] = {0};
 static volatile int8_t  vol_req_db = 0;
 static volatile uint8_t vol_req_flag = 0;
 
+/* CMD_SET_INGAIN: ganancia de la etapa de ENTRADA (distinta del volumen, que es
+ * el atenuador del DAC a la SALIDA). El ISR setea flag+valor; el main loop la
+ * aplica. Ver in_gain_q8 en main.c. */
+static volatile uint8_t ingain_req_db = 0;
+static volatile uint8_t ingain_req_flag = 0;
+
 /* CMD_SET_AMPS: el ISR setea flag+valor, el main loop toca el GPIO. */
 static volatile uint8_t amps_req_on = 0;
 static volatile uint8_t amps_req_flag = 0;
@@ -243,6 +249,11 @@ static void process_byte(uint8_t byte)
             memcpy(esp_ip, rx_payload, rx_payload_len);
             esp_ip[rx_payload_len] = '\0';   /* NUL último: nunca se lee a medias */
             rx_frame_count++;
+        } else if (rx_command == CMD_SET_INGAIN && rx_payload_len == 1) {
+            ingain_req_db = rx_payload[0];        /* dB, 0..36 (clamp en main) */
+            ingain_req_flag = 1;
+            rx_frame_count++;
+            send_ack();
         } else if (rx_command == CMD_SET_AMPS && rx_payload_len == 1) {
             amps_req_on = rx_payload[0] ? 1 : 0;
             amps_req_flag = 1;
@@ -296,6 +307,14 @@ uint8_t UART_Protocol_GetVolumeRequest(int8_t *db)
     if (!vol_req_flag) return 0;
     vol_req_flag = 0;
     *db = vol_req_db;
+    return 1;
+}
+
+uint8_t UART_Protocol_GetInGainRequest(uint8_t *db)
+{
+    if (!ingain_req_flag) return 0;
+    ingain_req_flag = 0;
+    *db = ingain_req_db;
     return 1;
 }
 

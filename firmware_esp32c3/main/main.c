@@ -67,6 +67,7 @@
 #define CMD_SET_VOLUME   0x09   // payload: int8 dB (0..-63, <=-64 = mute). Volumen
                                 // maestro via atenuacion del PCM1690 (todos los modos).
 #define CMD_SET_AMPS     0x0A   // payload: uint8 (1=on, 0=off) — enable de los 32 PAM8302A
+#define CMD_SET_INGAIN   0x0B   // payload: uint8 dB (0..36) — ganancia de ENTRADA
 #define CMD_ACK          0x06
 #define CMD_NACK         0x15
 #define NUM_CHANNELS     16
@@ -720,6 +721,47 @@ static esp_err_t amps_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /ingain {"db":0} — ganancia de la etapa de ENTRADA, 0..36 dB.
+//
+// NO confundir con /volume: aquel es el atenuador del PCM1690, o sea la SALIDA.
+// Este es cuanto se amplifica la senal DESPUES del ADC y ANTES del clamp digital.
+//
+// Por que existe: el modo 0 aplicaba +30 dB fijos (para poder oir un microfono) y
+// el volumen tiraba -40 dB despues. Con una fuente de linea eso hacia recortar el
+// clamp digital mucho antes de que a los parlantes les llegara nada — medido el
+// 2026-08-18: 3152 recortes/s con el ADC ni enterado. Para fuentes de linea va en
+// 0-12 dB; +30 es para microfonos.
+static esp_err_t ingain_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"bad json\"}");
+        return ESP_OK;
+    }
+    cJSON *jdb = cJSON_GetObjectItem(root, "db");
+    int db = (jdb && cJSON_IsNumber(jdb)) ? jdb->valueint : 0;
+    cJSON_Delete(root);
+    if (db < 0)  db = 0;
+    if (db > 36) db = 36;
+
+    uint8_t p = (uint8_t)db;
+    int ack = uart_send_and_wait_ack(CMD_SET_INGAIN, &p, 1, 300);
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"%s\",\"ingain_db\":%d}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"), db);
+    printf("[ESP32] POST /ingain %d dB -> %s\n", db, ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 // POST /volume {"db":-20} — volumen maestro via atenuacion del PCM1690.
 // Afecta TODOS los modos (walker incluido), a diferencia de master_gain.
 static esp_err_t volume_handler(httpd_req_t *req)
@@ -860,6 +902,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/beam",    .method = HTTP_POST, .handler = beam_handler    },
             { .uri = "/volume",  .method = HTTP_POST, .handler = volume_handler  },
             { .uri = "/amps",    .method = HTTP_POST, .handler = amps_handler    },
+            { .uri = "/ingain",  .method = HTTP_POST, .handler = ingain_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
             { .uri = "/ping",    .method = HTTP_GET,  .handler = ping_handler    },
         };

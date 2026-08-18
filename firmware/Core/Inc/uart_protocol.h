@@ -35,6 +35,13 @@
                                      * de 32 PAM8302A (pin SD, PD3). Permite correr
                                      * todo el pipeline en silencio para aislar si un
                                      * reinicio es por demanda de los amplificadores. */
+#define CMD_SET_INGAIN      0x0B    /* payload: uint8 dB (0..36). Ganancia de la
+                                     * ETAPA DE ENTRADA, distinta del volumen (que
+                                     * es el atenuador del DAC, a la salida). Con
+                                     * fuentes de línea va en 0-12; +30 es para
+                                     * micrófonos. Ver el comentario de in_gain_q8
+                                     * en main.c: amplificar +30 y atenuar −40
+                                     * después hacía recortar el clamp digital. */
 #define CMD_ACK             0x06
 #define CMD_NACK            0x15
 
@@ -177,6 +184,13 @@ const char* UART_Protocol_GetEspIp(void);
  * @return 1 y llena *db una vez por request, 0 si no hay ninguno pendiente.
  */
 uint8_t UART_Protocol_GetVolumeRequest(int8_t *db);
+
+/**
+ * @brief Poll for a CMD_SET_INGAIN request.
+ * @param db  destino: ganancia de entrada pedida en dB (0..36).
+ * @return 1 y llena *db una vez por request, 0 si no hay ninguno pendiente.
+ */
+uint8_t UART_Protocol_GetInGainRequest(uint8_t *db);
 
 /**
  * @brief Poll for a CMD_SET_AMPS request.

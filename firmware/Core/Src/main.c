@@ -214,6 +214,37 @@ static uint32_t test_tone_phase = 0;
 static volatile uint8_t adc_monitor_enabled = 1;   /* 1 = live ADC→DAC monitor */
 static volatile uint8_t adc_monitor_shift = 5;     /* gain boost: 5 = ×32 ≈ +30dB */
 
+/* ===== Ganancia de ENTRADA, ajustable en runtime =====
+ *
+ * La estructura de ganancia estaba al revés y ese era el cuello de botella real:
+ * el modo 0 amplificaba +30 dB (para poder oír un micrófono) y después el
+ * atenuador del PCM1690 tiraba −40 dB. Con una fuente de LÍNEA el resultado es
+ * que el clamp digital recorta mucho antes de que a los parlantes les llegue
+ * nada — medido 2026-08-18: ADCpk 448804 (−25 dBFS) × 32 = +4,6 dBFS, con
+ * SALIDA(clip) = 3152 recortes/s y el ADC ni enterado (OVF = 0).
+ *
+ * Ahora la ganancia de entrada es un parámetro: 0 dB para fuentes de línea,
+ * +30 dB para micrófonos. Al entrar a un modo se carga su default (así el
+ * comportamiento histórico no cambia) y se puede pisar por comando.
+ *
+ * Se usa un multiplicador Q8 en vez de un shift para tener pasos de 1 dB en
+ * lugar de 6. El multiply extra por muestra es despreciable: el fill del modo
+ * monitor va al 4,3% de CPU. */
+static const uint16_t gain_q8_tbl[37] = {
+    256,   287,   322,   362,   406,   455,   511,   573,   643,   722,
+    810,   908,  1019,  1144,  1283,  1440,  1615,  1812,  2033,  2282,
+   2560,  2872,  3223,  3616,  4057,  4552,  5108,  5731,  6430,  7215,
+   8095,  9083, 10192, 11435, 12830, 14396, 16153 };
+#define IN_GAIN_DB_MAX  36
+#define IN_GAIN_DB_MIC  30      /* default histórico del monitor (×32) */
+#define IN_GAIN_DB_LINE 12      /* default histórico del modo 15 (×4)  */
+static volatile uint8_t  in_gain_db  = IN_GAIN_DB_MIC;
+static volatile uint16_t in_gain_q8  = 8095;      /* = tabla[30] */
+
+static inline int32_t Apply_In_Gain(int32_t s) {
+  return (int32_t)(((int64_t)s * (int32_t)in_gain_q8) >> 8);
+}
+
 /* Medición de nivel STICKY — ver el comentario en Process_ADC_Half.
  * adc_peak_hold: pico por canal sobre TODAS las muestras (escala 24-bit).
  * adc_ovf_latch: cuántos medios buffers vieron el pin OVF alto (ADC saturando).
@@ -567,6 +598,7 @@ static int32_t Read_CPU_Temperature(void);
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset);
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void Service_Fills(void);
+static void Set_In_Gain(uint8_t db);
 static void UART_Print(const char *str);
 static void Print_DMA_Config(void);
 static void Beam_UpdateDelays(int16_t az_deg);
@@ -1228,6 +1260,17 @@ int main(void)
        * demanda de los 32 PAM8302A sobre el buck (que quedo con menos bulk
        * tras remover C290 — ver docs/ds11_errata.md). */
       uint8_t amps_on;
+      {
+        uint8_t ig_db;
+        if (UART_Protocol_GetInGainRequest(&ig_db)) {
+          Set_In_Gain(ig_db);
+          snprintf(uart_buf, sizeof(uart_buf),
+                   "INGAIN: +%u dB (ganancia de ENTRADA; el volumen es la salida)\r\n",
+                   (unsigned)in_gain_db);
+          UART_Print(uart_buf);
+        }
+      }
+
       if (UART_Protocol_GetAmpsRequest(&amps_on)) {
         if (amps_on) {
           /* "on" SIEMPRE pasa por off primero — no es redundante.
@@ -2856,6 +2899,13 @@ static void Cal_Process(void) {
   cal_state = CAL_DONE;
 }
 
+/** @brief Fija la ganancia de entrada en dB (0..36), con clamp. */
+static void Set_In_Gain(uint8_t db) {
+  if (db > IN_GAIN_DB_MAX) db = IN_GAIN_DB_MAX;
+  in_gain_db = db;
+  in_gain_q8 = gain_q8_tbl[db];
+}
+
 /**
  * @brief Switch operating state (K2 button): sets exactly one mode flag.
  */
@@ -2898,8 +2948,14 @@ static void UI_ApplyState(uint8_t idx) {
     beam_config.last_mode = idx;
     Arm_Config_Save();
   }
-  sprintf(uart_buf, "MODE [%u/%u]: %s\r\n", (unsigned)(idx + 1),
-          (unsigned)UI_NUM_STATES, st->name);
+  /* Default de ganancia de entrada por modo: el monitor asume micrófono
+   * (+30 dB), el MULTIFOCUS de entradas asume línea (+12 dB). Se puede pisar
+   * después con CMD_SET_INGAIN sin cambiar de modo. */
+  Set_In_Gain(st->monitor ? IN_GAIN_DB_MIC : IN_GAIN_DB_LINE);
+
+  sprintf(uart_buf, "MODE [%u/%u]: %s (ganancia entrada +%u dB)\r\n",
+          (unsigned)(idx + 1), (unsigned)UI_NUM_STATES, st->name,
+          (unsigned)in_gain_db);
   UART_Print(uart_buf);
   if (st->af) Cal_StartScan();
 }
@@ -3161,7 +3217,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
             int32_t s0 = delay_line[src][base & DELAY_LINE_MASK] >> 8;
             int32_t s1 = delay_line[src][(base - 1) & DELAY_LINE_MASK] >> 8;
             // (s1−s0) 25 bits × fr 8 bits → intermedio de 64 bits
-            acc += (s0 + (int32_t)(((int64_t)(s1 - s0) * fr) >> 8)) << mf_in_shift;
+            acc += Apply_In_Gain(s0 + (int32_t)(((int64_t)(s1 - s0) * fr) >> 8));
           }
           // Clamp ANTES del gain: 8 fuentes × boost pueden exceder ±FS,
           // y FS×255 es el máximo que el multiply soporta en int32.
@@ -3244,7 +3300,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
         // en la columna N de las 4 filas (antes ch8-31 repetían la 0).
         uint32_t src = (ch_offset + ch) & 7u;
         int32_t s = delay_line[src][read_pos] >> 8; // 32-bit ADC → 24-bit
-        s <<= adc_monitor_shift;                    // gain boost
+        s = Apply_In_Gain(s);                       // ganancia de entrada ajustable
         /* Contar los recortes: es lo que distingue "satura el ADC" (que se
          * arregla bajando la fuente o con atenuador) de "satura el boost de
          * +30 dB de este modo" (que se arregla usando otro modo). Suenan
