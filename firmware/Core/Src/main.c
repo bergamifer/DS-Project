@@ -38,7 +38,20 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define AUDIO_SAMPLE_RATE    48000
-#define AUDIO_BUFFER_SAMPLES 480      // 10ms @ 48kHz
+/* 240 muestras = 5 ms por medio buffer @48kHz.
+ *
+ * Era 480 (10 ms). El buffer domina la latencia total: de los 11,4 ms del
+ * pipeline, 10 eran esto. Bajarlo a la mitad deja el total en ~6,4 ms (−44%).
+ *
+ * El precio es que el deadline de fill pasa de 10 ms a 5 ms. Eso obligó a hacer
+ * cooperativas las cuatro operaciones que bloqueaban más que eso —los prints del
+ * heartbeat, el guardado en EEPROM, SendStatus y el cambio de volumen— porque
+ * cualquiera de ellas habría producido pops. Ese trabajo ya está hecho y
+ * verificado con 0 underruns; ver docs/ds11_perf.md.
+ *
+ * ADC_BUFFER_SAMPLES lo sigue automáticamente, así que el pipeline entero queda
+ * consistente. */
+#define AUDIO_BUFFER_SAMPLES 240      // 5ms @ 48kHz (era 480 = 10ms)
 #define AUDIO_CHANNELS       8        // TDM8 (8 channels per PCM1690)
 #define AUDIO_BUFFER_SIZE    (AUDIO_BUFFER_SAMPLES * AUDIO_CHANNELS)
 
