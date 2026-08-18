@@ -297,25 +297,35 @@ typedef struct {
   uint8_t mfin;                   // 1 = MULTIFOCUS de ENTRADAS (8 ADC → 8 focos)
 } ui_state_t;
 static const ui_state_t ui_states[] = {
-  { .name = "ADC monitor (+30dB)",          .monitor = 1 },
+  { .name = "ADC monitor",                  .monitor = 1 },
   { .name = "Channel walker (1s/ch)",       .walker = 1 },
   { .name = "RX beam az=0 (broadside)",     .beam = 1, .az_deg =   0 },
   { .name = "RX beam az=+30",               .beam = 1, .az_deg =  30 },
   { .name = "RX beam az=-30",               .beam = 1, .az_deg = -30 },
   { .name = "RX beam az=+60",               .beam = 1, .az_deg =  60 },
   { .name = "RX beam az=-60",               .beam = 1, .az_deg = -60 },
-  // TX steering presets (Phase 2). Source = RX beam at broadside (az=0);
-  // each output channel gets its near-field focal delay. X in the frame of
-  // a LISTENER FACING THE CONES (if L/R turn out mirrored on the real box,
-  // flip the sign of SPK coords — one line). Y toward row 4.
-  { .name = "TX focus center @1m",          .beam = 1, .tx = 1,
-    .fx_mm =    0, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX focus left 0.5m @1m",       .beam = 1, .tx = 1,
-    .fx_mm = -500, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX focus right 0.5m @1m",      .beam = 1, .tx = 1,
-    .fx_mm =  500, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX focus center NEAR 0.3m",    .beam = 1, .tx = 1,
-    .fx_mm =    0, .fy_mm = 0, .fz_mm =  300 },
+  // TX steering presets (Phase 2): tono interno de 1 kHz enfocado en 4 puntos
+  // distintos. Caminando la sala se oye el spot moverse — el modo se valida
+  // solo, sin instrumental y sin nada conectado a la entrada.
+  //
+  // La fuente era el RX beam (los micrófonos) hasta 2026-08-18. El diseño
+  // asumía micrófonos en la placa, y la DS11 no los tiene: J9 son entradas de
+  // LÍNEA sin bias, así que estos modos reproducían lo que hubiera enchufado
+  // en el ADC y no se distinguían del modo 0 salvo por el retardo. Escuchar la
+  // entrada ya lo hacen los modos 2-6 (beam RX) y, mucho mejor, el 15
+  // (cada entrada en su propio punto). Lo que faltaba era demostrar el
+  // steering, y para eso la fuente tiene que ser interna.
+  //
+  // X en el marco del OYENTE MIRANDO LOS CONOS (si L/R salen espejados en la
+  // caja real, invertir el signo de las coords SPK — una línea). Y hacia fila 4.
+  { .name = "TX tono 1k centro @1m",        .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 1000, .fx_mm =    0, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX tono 1k izq 0.5m @1m",      .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 1000, .fx_mm = -500, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX tono 1k der 0.5m @1m",      .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 1000, .fx_mm =  500, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX tono 1k CERCA 0.3m",        .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 1000, .fx_mm =    0, .fy_mm = 0, .fz_mm =  300 },
   // Measured focal calibration: mic at the target point → ADC input 1 (c0),
   // chirp scan of every speaker → TOF-derived delays + polarity, then a
   // steered tone focused at the mic. Re-enter the mode to re-scan.

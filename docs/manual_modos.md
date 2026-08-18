@@ -62,20 +62,20 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 
 | # | Nombre (UART) | Fuente | Salida | Notas |
 |---|---------------|--------|--------|-------|
-| 0 | `ADC monitor (+30dB)` | ADC ch0–7 en vivo | Las 8 entradas repetidas en cada fila | Boost ×32, modo por defecto. ⚠️ **No sirve para juzgar niveles de línea** — ver abajo |
+| 0 | `ADC monitor` | ADC ch0–7 en vivo | Las 8 entradas repetidas en cada fila | Escala por la ganancia de entrada, modo por defecto |
 | 1 | `Channel walker (1s/ch)` | Tono 1 kHz interno | Un canal por vez, 1 s cada uno | **32 canales** = 32 s por vuelta |
-| 2 | `RX beam az=0 (broadside)` | Beam delay-and-sum de los 8 ADC | Beam mono en todos los canales | Boost ×32 |
+| 2 | `RX beam az=0 (broadside)` | Beam delay-and-sum de los 8 ADC | Beam mono en todos los canales | Escala por la ganancia de entrada |
 | 3 | `RX beam az=+30` | ídem, steering +30° | ídem | |
 | 4 | `RX beam az=-30` | ídem, −30° | ídem | |
 | 5 | `RX beam az=+60` | ídem, +60° | ídem | |
 | 6 | `RX beam az=-60` | ídem, −60° | ídem | |
-| 7 | `TX focus center @1m` | RX beam broadside | 32 canales con delays focales | Foco (0, 0, 1000) mm |
-| 8 | `TX focus left 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
-| 9 | `TX focus right 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
-| 10 | `TX focus center NEAR 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
+| 7 | `TX tono 1k centro @1m` | Tono interno 1 kHz | 32 canales con delays focales | Foco (0, 0, 1000) mm |
+| 8 | `TX tono 1k izq 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
+| 9 | `TX tono 1k der 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
+| 10 | `TX tono 1k CERCA 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
 | 11 | `AUTOFOCUS scan (mic->ADC c0)` | Chirp por parlante + mic | Scan → tono enfocado medido | Requiere mic en ADC c0 |
-| 12 | `TX tone 2k focus @1m` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
-| 13 | `TX tone 1k focus @1m` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
+| 12 | `TX tono 2k dither foco @1m` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
+| 13 | `TX tono 1k dither foco @1m` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
 | 14 | `MULTIFOCUS 4 tonos @1m` | 4 tonos internos (1.3/1.6/1.9/2.1 kHz) | Cada tono enfocado en su propio punto | Precuela de la intervención 8-in |
 | 15 | `MULTIFOCUS 8 entradas @1m` | Las 8 entradas analógicas | Cada entrada enfocada en su propio punto | **La intervención**: 8 señales, 8 lugares |
 
@@ -213,9 +213,19 @@ mínimo 0, redondeados a muestras @48 kHz (tope `MAX_DELAY_SAMPLES = 64`).
 
 ## Modos 7–10 — TX focus (steering de transmisión, presets)
 
-Beamforming **de transmisión** near-field: la fuente es el RX beam a broadside
-(az = 0), y cada canal de salida la reproduce retrasada para que los frentes de
-onda converjan en el punto focal.
+Beamforming **de transmisión** near-field: un **tono interno de 1 kHz** que cada
+canal de salida reproduce retrasado para que los frentes de onda converjan en el
+punto focal. Caminando la sala se oye el spot moverse — el modo se valida solo,
+sin instrumental y sin nada conectado a la entrada.
+
+> **Cambio 2026-08-18: la fuente era el RX beam (los micrófonos).** El diseño
+> original asumía micrófonos en la placa y la DS11 no los tiene: J9 son entradas
+> de **línea sin bias**, así que estos modos reproducían lo que hubiera enchufado
+> en el ADC y no se distinguían del modo 0 salvo por el retardo — que fue
+> exactamente el reporte ("los modos TX suenan como RX"). Escuchar la entrada ya
+> lo hacen los modos 2-6, y mucho mejor el 15. Lo que faltaba era **demostrar el
+> steering**, y para eso la fuente tiene que ser interna. El modo 7 queda
+> equivalente al 13; los que agregan valor son el 8, 9 y 10.
 
 - `Beam_UpdateTxFocus()`: d_k = |foco − parlante_k|/c; delay_k = max(d) − d_k
   (el parlante más lejano dispara primero). Delays en **Q8** (1 LSB = 1/256 de
@@ -229,7 +239,8 @@ onda converjan en el punto focal.
   relativas al centro del array.
 - Se aplican por canal: gain (`beam_config.gains`), mute, master gain/mute
   global y `speaker_sign` (polaridad, +1 por defecto; el AUTOFOCUS la mide).
-- Boost ×32 igual que los modos RX (fuente ADC débil).
+- Ganancia unitaria: el tono ya está a −6 dBFS (la ganancia de entrada NO se
+  aplica acá — la fuente es interna y de nivel conocido).
 - `tx_delay_q8[]` es deliberadamente **independiente** de
   `beam_config.delays[]`: un config del ESP32 no pisa el foco.
 

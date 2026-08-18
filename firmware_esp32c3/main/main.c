@@ -113,10 +113,10 @@ static const char *MODE_NAMES[] = {
     "RX beam az=-30",
     "RX beam az=+60",
     "RX beam az=-60",
-    "TX focus centro @1m",
-    "TX focus izq 0.5m @1m",
-    "TX focus der 0.5m @1m",
-    "TX focus centro CERCA 0.3m",
+    "TX tono 1k centro @1m",
+    "TX tono 1k izq 0.5m @1m",
+    "TX tono 1k der 0.5m @1m",
+    "TX tono 1k CERCA 0.3m",
     "AUTOFOCUS scan (mic->c0)",
     "TX tono 2k dither foco @1m",
     "TX tono 1k dither foco @1m",
@@ -905,9 +905,12 @@ static const char INDEX_HTML[] =
 "<div style='font-size:.75em;color:#888;margin-top:6px'>Volumen &minus;24 dB, "
 "ganancia 0 dB, modo 0 y focos por defecto. No toca los amplificadores.</div></div>"
 "<script>"
-"const N=16,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither','MULTIFOCUS 4t','MULTIFOCUS 8in'];"
+"const N=16,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 1k centro @1m','TX 1k izq @1m','TX 1k der @1m','TX 1k cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither','MULTIFOCUS 4t','MULTIFOCUS 8in'];"
 "const md=document.getElementById('modes');"
-"for(let i=0;i<N;i++){const b=document.createElement('button');b.textContent=names[i];b.id='m'+i;"
+/* El numero adelante: es lo que se usa para referenciar el modo en los comandos
+ * (POST /mode {"mode":N}), en los logs y al hablar del equipo. */
+"for(let i=0;i<N;i++){const b=document.createElement('button');"
+"b.innerHTML='<b style=opacity:.55>'+i+'</b> '+names[i];b.id='m'+i;"
 "b.onclick=()=>fetch('/mode',{method:'POST',body:JSON.stringify({mode:i})}).then(poll);md.appendChild(b);}"
 "const mt=document.getElementById('meter');"
 "for(let i=0;i<8;i++){const d=document.createElement('div');d.className='bar';d.id='b'+i;mt.appendChild(d);}"

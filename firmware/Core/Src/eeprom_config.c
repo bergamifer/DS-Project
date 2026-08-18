@@ -25,6 +25,17 @@ __weak void EEPROM_Yield(void) { }
 
 /* CAT24C256 page size */
 #define EEPROM_PAGE_SIZE    64
+/* Máximo de bytes por transacción I2C. El chip acepta los 64 de una página,
+ * pero HAL_I2C_Mem_Write BLOQUEA mientras transfiere y a 100 kHz una página
+ * entera son (1 dir + 2 mem + 64 datos) × 9 bits ≈ **6 ms** — por encima del
+ * deadline de 5 ms del fill de audio. Resultado: exactamente un medio buffer
+ * repetido en los 32 canales por página, o sea el pop que quedaba al guardar.
+ *
+ * Con 32 bytes la transferencia baja a ~3,2 ms y entra con margen. El costo son
+ * más ciclos de escritura del chip, pero esos SÍ están yieldeados (el bucle de
+ * espera de abajo sirve los fills), así que no se oyen. Escribir de a media
+ * página es legal: el CAT24C256 sólo prohíbe cruzar el límite de página. */
+#define EEPROM_WRITE_CHUNK  32
 #define EEPROM_I2C_TIMEOUT  100  /* ms */
 
 /* I2C4 handle (local to this module) */
@@ -143,6 +154,7 @@ static HAL_StatusTypeDef eeprom_write(uint16_t mem_addr, const uint8_t *data, ui
         uint16_t page_remain = EEPROM_PAGE_SIZE - page_offset;
         uint16_t chunk = len - offset;
         if (chunk > page_remain) chunk = page_remain;
+        if (chunk > EEPROM_WRITE_CHUNK) chunk = EEPROM_WRITE_CHUNK;
 
         HAL_StatusTypeDef status = eeprom_write_page(mem_addr + offset, &data[offset], chunk);
         if (status != HAL_OK) return status;
