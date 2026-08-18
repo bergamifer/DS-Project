@@ -16,7 +16,7 @@
 ## DS11 — Control por HTTP (lo que más se usa)
 
 ```bash
-IP=192.168.100.64        # cambia; sale en la línea "ESP:" del heartbeat
+IP=domosonica.local      # mDNS; también sirve la IP de la línea "ESP:" del heartbeat
 
 curl -s http://$IP/status                                   # telemetría completa
 curl -X POST http://$IP/amps   -d '{"on":true}'             # ⚠️ arrancan APAGADOS

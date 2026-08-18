@@ -235,9 +235,15 @@ Esto importa cuando los cables cruzan una sala.
 1. Conectar parlantes y audio **con la placa apagada**.
 2. Dar tensión.
 3. Esperar unos 10 segundos a que el ESP32 se conecte al WiFi.
-4. Averiguar la dirección IP del equipo (aparece en el monitor serie, o en la lista
-   de dispositivos del router).
-5. Abrir esa dirección en el navegador: **`http://LA_IP`**.
+4. Abrir en el navegador: **`http://domosonica.local`**
+
+El equipo **se anuncia solo en la red** con ese nombre, así que no hace falta
+averiguar ninguna dirección. Funciona en Mac, iPhone y iPad sin instalar nada; en
+Windows y Android a veces no, y ahí sí hay que buscar la IP (aparece en el monitor
+serie o en la lista de dispositivos del router) y usar `http://LA_IP`.
+
+> En todos los comandos de acá en adelante, donde dice `LA_IP` podés escribir
+> `domosonica.local`.
 
 ### ⚠️ Primero hay que encender los amplificadores
 
@@ -302,9 +308,21 @@ distintos tipos de enfoque). Se cambian desde la página web, o así:
 curl -X POST http://LA_IP/mode -d '{"mode":1}'
 ```
 
-También hay un **botón físico (K2)** en la placa que va pasando de modo en modo —
-útil si no hay WiFi. La descripción de cada modo está en
-[manual_modos.md](manual_modos.md).
+### El botón físico (K2) — si no hay WiFi, alcanza con esto
+
+Hay un **botón en la placa** que hace dos cosas según cuánto lo apretés:
+
+| gesto | qué hace |
+|---|---|
+| **Toque corto** | pasa al modo siguiente |
+| **Mantener 1 segundo** | enciende / apaga los amplificadores |
+
+**Con ese botón el equipo es operable sin red**: se enciende, se mantiene apretado
+un segundo para que suene, y se toca para ir cambiando de modo. La descripción de
+cada modo está en [manual_modos.md](manual_modos.md).
+
+> 💡 Si algunos parlantes quedaron mudos después de un bajón de tensión, mantener
+> apretado el botón (apagar y volver a encender los amplificadores) los revive.
 
 ---
 

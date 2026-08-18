@@ -28,6 +28,7 @@
 #include "esp_netif.h"
 #include "esp_http_server.h"
 #include "nvs_flash.h"
+#include "mdns.h"
 #include "cJSON.h"
 
 // ============== Configuracion hardware ==============
@@ -82,7 +83,7 @@ typedef struct {
     uint16_t mutes;
 } ds_config_t;
 
-// Espejo de ds_status_t del STM32 (uart_protocol.h) — 54 bytes packed LE (v2).
+// Espejo de ds_status_t del STM32 (uart_protocol.h) — 63 bytes packed LE (v3).
 // Extender SOLO appendeando campos (proto_ver versiona el layout).
 typedef struct __attribute__((packed)) {
     uint8_t  proto_ver;
@@ -96,12 +97,15 @@ typedef struct __attribute__((packed)) {
     uint8_t  cal_state;
     int32_t  adc_pk[8];
     int8_t   master_vol_db;   // v2: volumen maestro actual (0..-63, <=-64 mute)
+    uint8_t  in_gain_db;      // v3: ganancia de ENTRADA actual (0..36)
+    uint32_t adc_ovf_count;   // v3: MONOTONICO — satura el ADC (bajar la fuente)
+    uint32_t out_clip_count;  // v3: MONOTONICO — satura la salida (bajar ingain)
 } ds_status_t;
 
 // Espejo de ui_states[] del STM32 — actualizar junto con el firmware STM32.
 // El indice es lo que viaja en CMD_SET_MODE; el nombre es solo para la UI.
 static const char *MODE_NAMES[] = {
-    "ADC monitor (+30dB)",
+    "ADC monitor",
     "Channel walker (1s/ch)",
     "RX beam az=0 (broadside)",
     "RX beam az=+30",
@@ -574,13 +578,16 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"proto_ver\":%u,\"mode\":%u,\"mode_name\":\"%s\",\"num_modes\":%u,"
             "\"rx_az\":%d,\"focus\":{\"fx\":%d,\"fy\":%d,\"fz\":%d},"
             "\"underruns\":%lu,\"sai_errors\":%lu,\"ovf\":%u,\"cal_state\":%u,"
-            "\"vol_db\":%d,"
+            "\"vol_db\":%d,\"ingain_db\":%u,"
+            "\"adc_ovf\":%lu,\"out_clip\":%lu,"
             "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
             "\"uptime_ms\":%lu}",
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
             (unsigned long)s->underruns, (unsigned long)s->sai_errors,
             s->ovf, s->cal_state, (int)s->master_vol_db,
+            s->in_gain_db,
+            (unsigned long)s->adc_ovf_count, (unsigned long)s->out_clip_count,
             (long)s->adc_pk[0], (long)s->adc_pk[1], (long)s->adc_pk[2],
             (long)s->adc_pk[3], (long)s->adc_pk[4], (long)s->adc_pk[5],
             (long)s->adc_pk[6], (long)s->adc_pk[7],
@@ -822,6 +829,14 @@ static const char INDEX_HTML[] =
 "<span class=val id=volv>0 dB</span></div>"
 "<div class=row style='margin-top:6px'><button onclick=setVol(-64)>Mute</button>"
 "<button onclick=setVol(+vol.value)>Aplicar</button></div></div>"
+"<div class=card><h2>Ganancia de entrada</h2>"
+"<div class=row><input type=range id=ig min=0 max=36 value=0 step=1>"
+"<span class=val id=igv>0 dB</span></div>"
+"<div class=row style='margin-top:6px'><button onclick=setIg(0)>Linea (0)</button>"
+"<button onclick=setIg(30)>Microfono (30)</button>"
+"<span class=val id=clipv></span></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Si distorsiona y bajar el "
+"volumen no lo arregla, es esto. Se guarda solo.</div></div>"
 "<div class=card><h2>Amplificadores</h2>"
 "<div class=row><button onclick=setAmps(1)>Encender amps</button>"
 "<button onclick=setAmps(0)>Apagar amps</button>"
@@ -856,6 +871,11 @@ static const char INDEX_HTML[] =
 "vol.oninput=()=>{volv.textContent=vol.value+' dB';volTouch=Date.now();"
 "if(Date.now()-volT>200){volT=Date.now();setVol(+vol.value);}};"
 "vol.onchange=()=>{volTouch=Date.now();setVol(+vol.value);};"
+"let igTouch=0,lastClip=null;"
+"function setIg(d){ig.value=d;igv.textContent=d+' dB';igTouch=Date.now();"
+"fetch('/ingain',{method:'POST',body:JSON.stringify({db:d})});}"
+"ig.oninput=()=>{igv.textContent=ig.value+' dB';igTouch=Date.now();};"
+"ig.onchange=()=>setIg(+ig.value);"
 "function setRx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'rx',az:+az.value})});}"
 "function setTx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'tx',fx:+fx.value,fy:+fy.value,fz:+fz.value})});}"
 "function poll(){fetch('/status').then(r=>r.json()).then(s=>{"
@@ -863,6 +883,14 @@ static const char INDEX_HTML[] =
 "if(s.stm32!='ok')return;"
 "for(let i=0;i<N;i++)document.getElementById('m'+i).className=(i==s.mode)?'on':'';"
 "if(s.vol_db!=null&&s.vol_db>-64&&Date.now()-volTouch>3000){vol.value=s.vol_db;volv.textContent=s.vol_db+' dB';}"
+"if(s.ingain_db!=null&&Date.now()-igTouch>3000){ig.value=s.ingain_db;igv.textContent=s.ingain_db+' dB';}"
+/* Los contadores del STM32 son monotonicos: lo que importa es que CREZCAN
+ * entre dos polls — eso es "esta saturando ahora", no "saturo alguna vez". */
+"if(s.out_clip!=null){const c=document.getElementById('clipv');"
+"if(lastClip!==null){const dc=s.out_clip-lastClip.c,dv=s.adc_ovf-lastClip.v;"
+"c.textContent=dv>0?'\\u26a0 satura la FUENTE':(dc>0?'\\u26a0 satura: bajar ganancia':'');"
+"c.style.color=(dc>0||dv>0)?'#f84':'#9cf';}"
+"lastClip={c:s.out_clip,v:s.adc_ovf};}"
 "const pk=s.adc_pk||[];for(let i=0;i<8;i++){const v=Math.max(2,Math.min(36,Math.log10((pk[i]||1)+1)/7*36));"
 "document.getElementById('b'+i).style.height=v+'px';}"
 "document.getElementById('st').textContent="
@@ -986,6 +1014,28 @@ static void wifi_init(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
+
+    /* mDNS: publicar "domosonica.local" para no depender de la IP.
+     *
+     * El DHCP del router la cambia sin avisar, y averiguarla obliga a abrir el
+     * monitor serie del STM32 (línea "ESP:") — o sea, un cable y una terminal
+     * antes de poder mandar un solo comando. Con esto, cualquier navegador de
+     * la red entra a http://domosonica.local sin saber nada.
+     *
+     * No es ESP_ERROR_CHECK a propósito: si mDNS falla, la placa tiene que
+     * seguir funcionando por IP igual. Es una comodidad, no un requisito. */
+    {
+        esp_err_t merr = mdns_init();
+        if (merr == ESP_OK) {
+            mdns_hostname_set("domosonica");
+            mdns_instance_name_set("Domosonica DS11");
+            mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+            printf("[ESP32] mDNS: http://domosonica.local\n");
+        } else {
+            printf("[ESP32] mDNS no arranco (%s) — usar la IP\n",
+                   esp_err_to_name(merr));
+        }
+    }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));

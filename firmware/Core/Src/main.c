@@ -252,8 +252,10 @@ static inline int32_t Apply_In_Gain(int32_t s) {
  * adc_peak_hold: pico por canal sobre TODAS las muestras (escala 24-bit).
  * adc_ovf_latch: cuántos medios buffers vieron el pin OVF alto (ADC saturando).
  * out_clip_count: cuántas muestras de SALIDA se recortaron (boost excesivo).
- * Los tres se limpian al imprimirse. Juntos separan las dos saturaciones
- * posibles, que suenan igual pero se arreglan distinto. */
+ * Juntos separan las dos saturaciones posibles, que suenan igual pero se
+ * arreglan distinto. El pico se limpia al imprimirse (es un peak-hold); los
+ * dos contadores son MONOTÓNICOS y se publican en /status — el heartbeat
+ * imprime su delta. */
 static volatile int32_t  adc_peak_hold[ADC_CHANNELS];
 static volatile uint32_t adc_ovf_latch = 0;
 static volatile uint32_t out_clip_count = 0;
@@ -603,6 +605,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void Service_Fills(void);
 static void Set_In_Gain(uint8_t db);
+static void Set_Amps(uint8_t on);
 static void UART_Print(const char *str);
 static void Print_DMA_Config(void);
 static void Beam_UpdateDelays(int16_t az_deg);
@@ -1214,17 +1217,43 @@ int main(void)
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
     if (autofocus_enabled) Cal_Process();
 
-    // ===== K2 button (PA4, external pull-up, press = LOW): cycle op state =====
+    /* ===== K2 button (PA4, external pull-up, press = LOW) =====
+     * Pulsación CORTA (al soltar) = siguiente modo.
+     * Pulsación LARGA (≥1 s, actúa sin soltar) = encender/apagar los amps.
+     *
+     * El toggle de amps existía solo por HTTP, y los amps arrancan APAGADOS: sin
+     * WiFi la placa quedaba muda sin forma de recuperarla desde el hardware. Con
+     * esto el equipo es operable sin red — que es la condición para que alguien
+     * lo use sin una terminal al lado. Además, como "on" republica el pulso de
+     * SD, la pulsación larga es el gesto de recuperación del UVLO enclavado de
+     * los PAM8302A: si tras un hundimiento del +5VA quedaron canales mudos, esto
+     * los revive.
+     *
+     * El modo se cambia al SOLTAR, no al presionar: si se disparara en el flanco
+     * de bajada, toda pulsación larga cambiaría de modo antes de tocar los amps. */
     {
-      static uint8_t k2_prev = 1;
+      static uint8_t  k2_prev = 1;
       static uint32_t k2_change_dwt = 0;
+      static uint32_t k2_press_dwt = 0;
+      static uint8_t  k2_long_done = 0;
       uint8_t k2_now = (HAL_GPIO_ReadPin(OPT_SW_K2_PORT, OPT_SW_K2_PIN) == GPIO_PIN_SET);
       if (k2_now != k2_prev && (DWT->CYCCNT - k2_change_dwt) > (30UL * 480000UL)) {
         k2_prev = k2_now;                          // 30ms debounce @480MHz
         k2_change_dwt = DWT->CYCCNT;
-        if (k2_now == 0) {                         // falling edge = press
+        if (k2_now == 0) {                         // flanco de bajada = presionado
+          k2_press_dwt = DWT->CYCCNT;
+          k2_long_done = 0;
+        } else if (!k2_long_done) {                // soltó sin llegar a larga
           UI_ApplyState((ui_state_idx + 1) % UI_NUM_STATES);
         }
+      }
+      /* Umbral de 1 s. DWT->CYCCNT da la vuelta cada ~8,9 s a 480 MHz; la resta
+       * sin signo lo maneja mientras el intervalo medido sea menor que eso. */
+      if (!k2_prev && !k2_long_done &&
+          (DWT->CYCCNT - k2_press_dwt) > (1000UL * 480000UL)) {
+        k2_long_done = 1;                          // el soltar ya no cambia modo
+        UART_Print("K2 largo: ");
+        Set_Amps(!amps_enabled);
       }
     }
 
@@ -1285,32 +1314,7 @@ int main(void)
         }
       }
 
-      if (UART_Protocol_GetAmpsRequest(&amps_on)) {
-        if (amps_on) {
-          /* "on" SIEMPRE pasa por off primero — no es redundante.
-           *
-           * El PAM8302A tiene un UVLO ENCLAVADO: del datasheet, "when the supply
-           * voltage drops to 2.1 V or below, the PAM8302A goes into a state of
-           * shutdown, and the device comes out of its shutdown state by reset the
-           * power supply or SD pin". O sea que tras cualquier hundimiento del
-           * +5VA, los amps que hayan cruzado 2,1 V quedan MUDOS aunque SD siga
-           * alto — y como SD ya está en 1, un "amps on" no los recuperaría.
-           *
-           * El síntoma sería "se me murieron algunos canales" sin causa visible,
-           * que es exactamente el tipo de cosa que hace perder una tarde. Con el
-           * pulso, cualquier "amps on" sirve además como comando de recuperación.
-           *
-           * 2 ms alcanzan de sobra: el SD del PAM8302A responde en microsegundos. */
-          HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
-          HAL_Delay(2);
-        }
-        HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN,
-                          amps_on ? GPIO_PIN_SET : GPIO_PIN_RESET);
-        amps_enabled = amps_on;
-        snprintf(uart_buf, sizeof(uart_buf), "AMPS: %s\r\n",
-                 amps_on ? "ON (32 PAM8302A habilitados)" : "OFF (silencio)");
-        UART_Print(uart_buf);
-      }
+      if (UART_Protocol_GetAmpsRequest(&amps_on)) Set_Amps(amps_on);
 
       if (UART_Protocol_StatusRequested()) {
         ds_status_t st;
@@ -1326,6 +1330,9 @@ int main(void)
         st.ovf = (uint8_t)HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN);
         st.cal_state = (uint8_t)cal_state;
         st.master_vol_db = beam_config.master_vol_db;
+        st.in_gain_db = in_gain_db;
+        st.adc_ovf_count = adc_ovf_latch;
+        st.out_clip_count = out_clip_count;
         for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
           int32_t pk = 0;
           for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
@@ -1478,8 +1485,14 @@ int main(void)
           pk[ch] = adc_peak_hold[ch];
           adc_peak_hold[ch] = 0;
         }
-        uint32_t ovf_n  = adc_ovf_latch;   adc_ovf_latch  = 0;
-        uint32_t clip_n = out_clip_count;  out_clip_count = 0;
+        /* Los contadores son MONOTÓNICOS y acá se imprime el delta contra la
+         * impresión anterior. Antes se ponían en cero al imprimir, lo que
+         * hacía imposible exponerlos por telemetría: el que leyera primero se
+         * los comía. Con delta local, /status puede publicar el acumulado y la
+         * UI derivar "está saturando AHORA" de que el número crezca. */
+        static uint32_t last_ovf = 0, last_clip = 0;
+        uint32_t ovf_n  = adc_ovf_latch  - last_ovf;   last_ovf  = adc_ovf_latch;
+        uint32_t clip_n = out_clip_count - last_clip;  last_clip = out_clip_count;
 
         // RX DMA liveness (~100/s).
         static uint32_t last_rx3b = 0;
@@ -2911,6 +2924,39 @@ static void Cal_Process(void) {
   }
   UART_Print("Playing steered tone focused at the mic — ADCpk c0 = level at focus.\r\n");
   cal_state = CAL_DONE;
+}
+
+/** @brief Habilita o apaga el banco de 32 PAM8302A (pin SD, PD3).
+ *
+ * Llamar SOLO desde el main loop: hace HAL_Delay. Con los amps apagados corre
+ * TODO el pipeline (SAI, DMA, beamforming) en silencio, así se aísla si un
+ * reinicio viene de la demanda de los 32 amps sobre el buck (que quedó con
+ * menos bulk tras remover C290 — ver docs/ds11_errata.md).
+ */
+static void Set_Amps(uint8_t on) {
+  if (on) {
+    /* "on" SIEMPRE pasa por off primero — no es redundante.
+     *
+     * El PAM8302A tiene un UVLO ENCLAVADO: del datasheet, "when the supply
+     * voltage drops to 2.1 V or below, the PAM8302A goes into a state of
+     * shutdown, and the device comes out of its shutdown state by reset the
+     * power supply or SD pin". O sea que tras cualquier hundimiento del
+     * +5VA, los amps que hayan cruzado 2,1 V quedan MUDOS aunque SD siga
+     * alto — y como SD ya está en 1, un "amps on" no los recuperaría.
+     *
+     * El síntoma sería "se me murieron algunos canales" sin causa visible,
+     * que es exactamente el tipo de cosa que hace perder una tarde. Con el
+     * pulso, cualquier "amps on" sirve además como comando de recuperación.
+     *
+     * 2 ms alcanzan de sobra: el SD del PAM8302A responde en microsegundos. */
+    HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
+    HAL_Delay(2);
+  }
+  HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  amps_enabled = on;
+  snprintf(uart_buf, sizeof(uart_buf), "AMPS: %s\r\n",
+           on ? "ON (32 PAM8302A habilitados)" : "OFF (silencio)");
+  UART_Print(uart_buf);
 }
 
 /** @brief Fija la ganancia de entrada en dB (0..36), con clamp.

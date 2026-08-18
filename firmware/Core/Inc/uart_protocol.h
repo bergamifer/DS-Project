@@ -49,7 +49,8 @@
 #define PROTO_MAX_PAYLOAD   64
 #define CFG_PAYLOAD_SIZE    52
 #define CFG_NUM_CHANNELS    16
-#define PROTO_VERSION       2   /* v2: + master_vol_db en ds_status_t */
+#define PROTO_VERSION       3   /* v2: + master_vol_db; v3: + in_gain_db y los
+                                 * dos contadores de saturación en ds_status_t */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -103,9 +104,17 @@ typedef struct __attribute__((packed)) {
     uint8_t  cal_state;      /* AUTOFOCUS: 0 idle … 5 done (cal_state_t) */
     int32_t  adc_pk[8];      /* per-channel input peak, 24-bit scale */
     int8_t   master_vol_db;  /* v2: volumen maestro actual (0..-63, ≤-64 mute) */
-} ds_status_t;               /* 21 + 32 + 1 = 54 bytes */
+    uint8_t  in_gain_db;     /* v3: ganancia de ENTRADA actual (0..36) */
+    uint32_t adc_ovf_count;  /* v3: medios buffers con OVF alto, MONOTÓNICO */
+    uint32_t out_clip_count; /* v3: muestras de salida recortadas, MONOTÓNICO */
+} ds_status_t;               /* 54 + 1 + 4 + 4 = 63 bytes */
 
-_Static_assert(sizeof(ds_status_t) == 54, "ds_status_t must be 54 bytes");
+_Static_assert(sizeof(ds_status_t) == 63, "ds_status_t must be 63 bytes");
+/* ⚠️ 63 de 64: el status ya casi llena PROTO_MAX_PAYLOAD. El próximo campo
+ * obliga a subir ese límite EN AMBOS LADOS (acá y en firmware_esp32c3), o el
+ * ESP32 descarta la trama por larga y el status se queda mudo sin error. */
+_Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,
+               "ds_status_t no entra en PROTO_MAX_PAYLOAD");
 
 /**
  * @brief Initialize UART protocol module

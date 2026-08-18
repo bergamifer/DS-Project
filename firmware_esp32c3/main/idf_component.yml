@@ -1,0 +1,7 @@
+## Dependencias del registro de componentes de ESP-IDF.
+##
+## mdns publica "domosonica.local" en la red: sin esto hay que averiguar la IP
+## por el monitor serie del STM32 (línea "ESP:") antes de poder mandar un solo
+## comando, y la IP cambia cada vez que el router renueva el DHCP.
+dependencies:
+  espressif/mdns: "^1.2"

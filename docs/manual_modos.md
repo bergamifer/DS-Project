@@ -34,7 +34,14 @@ todo el pipeline —SAI, DMA, beamforming, los 4 bancos— en silencio absoluto.
 
 | Vía | Mecanismo |
 |-----|-----------|
-| **Botón K2** (PA4, presionar = LOW) | Avanza un modo por pulsación, con wrap 15→0. Debounce de 30 ms. |
+| **Botón K2** (PA4, presionar = LOW) | **Corto** (al soltar): avanza un modo, con wrap 15→0. **Largo** (≥1 s, actúa sin soltar): toggle de los amps. Debounce de 30 ms. |
+
+> El K2 largo es lo que hace al instrumento **operable sin red**: los amps arrancan
+> apagados y hasta ahora solo se encendían por HTTP, así que sin WiFi la placa
+> quedaba muda sin forma de recuperarla desde el hardware. Como "on" republica el
+> pulso de SD, también es el gesto de recuperación del UVLO enclavado de los
+> PAM8302A. El modo se cambia **al soltar**, no al presionar: si no, toda pulsación
+> larga cambiaría de modo antes de llegar a tocar los amps.
 | **HTTP** (web/app vía ESP32) | `POST /mode` con `{"mode":N}` → trama `CMD_SET_MODE` por UART4. |
 | **UART4 directo** | Trama binaria `CMD_SET_MODE` (0x02), payload = 1 byte con el índice. |
 
@@ -366,7 +373,17 @@ lugares distintos, simultáneamente.
 | **Ganancia de entrada** | `POST /ingain {"db":0}` → `CMD_SET_INGAIN` | Ganancia de la etapa de ENTRADA, 0…36 dB en pasos de 1 dB (multiplicador Q8). Global, **no** por modo. Se persiste en EEPROM (debounce 3 s). Default 0 dB = línea; 30 dB = preset micrófono. Ver "Las DOS ganancias" arriba. |
 | **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (52 bytes) | mute_global, gains/delays/mutes de los primeros 16 canales. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
 | **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32; `type:"mf"` con `src` 0-7 — re-apunta el foco de UNA fuente MULTIFOCUS (tonos del 14 o entradas del 15, según el modo activo). No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
-| **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2). |
+| **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2), ganancia de entrada y los dos contadores de saturación (`ingain_db`, `adc_ovf`, `out_clip`, proto v3). |
+
+> **Los contadores de saturación son MONOTÓNICOS**: lo que importa es que *crezcan*
+> entre dos lecturas — eso es "está saturando ahora", no "saturó alguna vez". Antes
+> se ponían en cero al imprimirse en el heartbeat, y así no se podían exponer por
+> telemetría (el que leyera primero se los comía). Ahora el heartbeat imprime el
+> delta contra su propia lectura anterior y `/status` publica el acumulado.
+>
+> ⚠️ `ds_status_t` ocupa **63 de los 64 bytes** de `PROTO_MAX_PAYLOAD`. El próximo
+> campo obliga a subir ese límite **en ambos lados** — si no, el ESP32 descarta la
+> trama por larga y el status se queda mudo sin dar error.
 
 ## Diagnóstico por UART7 (115200 8N1, J7 → ST-Link VCP)
 
