@@ -63,6 +63,41 @@ la cadena entera), sino en una **derivación** que alimenta el buck local.
 
 ---
 
+### 0.5. 🔴 Las filas están al DOBLE de separación que las columnas — el eje vertical no enfoca
+
+**Verificado a oído el 2026-08-19**: en el modo 15 se percibe el movimiento del foco
+en horizontal, algo en profundidad, y **nada en vertical**. No es percepción: es la
+geometría del array.
+
+| a 2 kHz (λ = 172 mm) | pitch | |
+|---|---|---|
+| horizontal — 8 columnas, **80 mm** | 0,47 λ | ✅ bajo el límite λ/2 |
+| **vertical — 4 filas, 160 mm** | **0,93 λ** | ❌ **lóbulos de rejilla** |
+
+El criterio de muestreo espacial es **d ≤ λ/2**. Con 160 mm entre filas el techo
+vertical es **1072 Hz**, la mitad del horizontal (2144 Hz). A 2 kHz el enfoque
+vertical está *aliaseado*: en vez de un foco produce varios lóbulos repartidos, y
+por eso no se percibe ningún movimiento al cambiar la altura del foco.
+
+Además hay **la mitad de elementos** en vertical (4 filas contra 8 columnas), así
+que aunque se respetara λ/2 la resolución vertical sería peor.
+
+**Decisión para DS12 — es una decisión de producto, no un fix:**
+
+- **Si el eje vertical importa** (colocar fuentes a distintas alturas, que es
+  bastante del atractivo de la intervención): las filas tienen que ir a **≤ 86 mm**
+  de pitch para 2 kHz. Eso implica repensar el layout mecánico — hoy 160 mm viene
+  del tamaño del parlante y su montaje.
+- **Si no importa**: dejarlo documentado y **no prometer enfoque vertical**. El
+  array es esencialmente **lineal horizontal con algo de apertura vertical**, y
+  conviene decirlo así en la comunicación del proyecto.
+- **Camino intermedio**: aceptar que el enfoque vertical sólo existe **por debajo
+  de ~1 kHz**, y usar la altura sólo con material grave.
+
+> Esto no se puede arreglar por firmware. Los delays ya se calculan bien en 3D
+> (`Beam_InitTxGeometry` + `Beam_SetTxFocus`); lo que falla es que el array no
+> tiene resolución vertical a esa frecuencia.
+
 ## 🔴 Prioridad alta
 
 ### 1. Margen del buck a 24V — el TVS NO protege al MP2315S

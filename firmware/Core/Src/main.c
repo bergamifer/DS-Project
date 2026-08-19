@@ -295,6 +295,7 @@ typedef struct {
   uint16_t tone_hz;               // tone frequency (keep ≤2140: d=λ/2 limit)
   uint8_t mf;                     // 1 = MULTIFOCUS tonos (N fuentes internas)
   uint8_t mfin;                   // 1 = MULTIFOCUS de ENTRADAS (8 ADC → 8 focos)
+  uint8_t sweep;                  // 1 = el foco X barre solo, izquierda↔derecha
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor",                  .monitor = 1 },
@@ -326,8 +327,8 @@ static const ui_state_t ui_states[] = {
   //
   // X en el marco del OYENTE MIRANDO LOS CONOS (si L/R salen espejados en la
   // caja real, invertir el signo de las coords SPK — una línea). Y hacia fila 4.
-  { .name = "TX 2k ondulante centro @1m",   .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 2000, .fx_mm =    0, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX 2k ondulante LEJOS 2m",     .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 2000, .fx_mm =    0, .fy_mm = 0, .fz_mm = 2000 },
   { .name = "TX 2k ondulante izq 0.5m @1m", .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 2000, .fx_mm = -500, .fy_mm = 0, .fz_mm = 1000 },
   { .name = "TX 2k ondulante der 0.5m @1m", .beam = 1, .tx = 1, .tone = 1,
@@ -345,9 +346,9 @@ static const ui_state_t ui_states[] = {
   // única fila poblada. Ahora la apertura vertical (480mm) también enfoca.
   // 2kHz spot @1m: ±14cm; 1kHz: ±27cm (ratio ~2 is the self-validating
   // test). APPEND ONLY: the ESP32/web/app mirror these indices.
-  { .name = "TX 2k ondulante centro @1m (= modo 7)", .beam = 1, .tx = 1, .tone = 1,
+  { .name = "TX 2k ondulante centro @1m",   .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 2000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX 1k ondulante centro @1m (spot 2x)",  .beam = 1, .tx = 1, .tone = 1,
+  { .name = "TX 1k ondulante centro @1m (spot 2x)", .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 1000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000 },
   // MULTIFOCUS: 4 tonos internos, cada uno enfocado en su propio punto —
   // caminando la sala, un analizador espectral "lee" la posición por cuál
@@ -359,6 +360,12 @@ static const ui_state_t ui_states[] = {
   // reales — voces, instrumentos — en 8 lugares). Mismas tablas de foco que
   // el modo 14; la fuente es delay_line[src] en vez de tonos.
   { .name = "MULTIFOCUS 8 entradas @1m",    .mfin = 1 },
+  // BARRIDO: el foco recorre solo la sala de izquierda a derecha y vuelta. Es la
+  // demostración del steering que NO exige caminar ni comparar dos modos: parado
+  // en un punto fijo, el nivel sube cuando el foco pasa por vos y baja cuando se
+  // va. Mismo tono ondulante de 2 kHz que los presets.
+  { .name = "TX 2k BARRIDO izq<->der @1m", .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 2000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000, .sweep = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 static volatile uint8_t ui_state_idx = 0;
@@ -440,6 +447,21 @@ static float spk_y_mm[BEAM_NUM_CHANNELS];
 static float spk_center_x_mm = 0, spk_center_y_mm = 0;
 // Last TX focal point — reported in CMD_STATUS telemetry
 static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
+
+/* ===== BARRIDO (modo 16) — el foco recorre la sala solo =====
+ * Los presets 8/9 prueban el steering, pero exigen pararse en un punto
+ * descentrado y comparar dos modos de memoria. Acá el foco se mueve solo: parado
+ * donde sea, el nivel sube cuando el foco pasa por vos y baja cuando se va. Es
+ * la demostración que se entiende sin explicación previa.
+ *
+ * Triángulo de ±SWEEP_X_MM en 2×SWEEP_HALF_MS. Se reapunta cada SWEEP_STEP_MS
+ * desde el main loop: 32 raíces cuadradas por paso, ~3 µs, despreciable. El paso
+ * de foco por actualización es de ~14 mm = 0,04 muestras de delay, así que no
+ * hay salto audible al reapuntar. */
+#define SWEEP_X_MM      700     /* amplitud a cada lado del centro */
+#define SWEEP_HALF_MS   2500    /* medio recorrido → ciclo completo de 5 s */
+#define SWEEP_STEP_MS   50      /* 20 actualizaciones por segundo */
+static volatile uint8_t sweep_enabled = 0;
 
 /* ===== MULTIFOCUS (modo 14) — N fuentes internas, cada una con su foco =====
  * Precuela de la intervención de 8 entradas analógicas: la infraestructura
@@ -689,6 +711,7 @@ static void Check_Memory_Placement(void);
 static void Beam_UpdateDelays(int16_t az_deg);
 static void Beam_InitTxGeometry(void);
 static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
+static void Beam_SetTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
 static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
                               int16_t fx_mm, int16_t fy_mm, int16_t fz_mm);
 static void MFocus_ApplyDefaults(void);
@@ -1287,6 +1310,26 @@ int main(void)
 
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
     if (autofocus_enabled) Cal_Process();
+
+    /* ===== BARRIDO: mover el foco, 20 veces por segundo =====
+     * Triángulo entre −SWEEP_X_MM y +SWEEP_X_MM. Va acá y no en el fill porque
+     * Beam_SetTxFocus usa floats y escribe tx_delay_q8[], que el fill lee: en el
+     * main loop el peor caso es que un fill agarre la tabla a mitad de
+     * actualización, y como el paso son ~14 mm (0,04 muestras) eso no se oye. */
+    if (sweep_enabled) {
+      static uint32_t sweep_last_ms = 0;
+      uint32_t now_ms = HAL_GetTick();
+      if (now_ms - sweep_last_ms >= SWEEP_STEP_MS) {
+        sweep_last_ms = now_ms;
+        uint32_t ph = now_ms % (2u * SWEEP_HALF_MS);          /* 0 … 2·half */
+        int32_t tri = (ph < SWEEP_HALF_MS)                    /* 0→half→0 */
+                      ? (int32_t)ph
+                      : (int32_t)(2u * SWEEP_HALF_MS - ph);
+        /* tri: 0..SWEEP_HALF_MS  →  x: −SWEEP_X_MM..+SWEEP_X_MM */
+        int32_t x = (2 * SWEEP_X_MM * tri) / (int32_t)SWEEP_HALF_MS - SWEEP_X_MM;
+        Beam_SetTxFocus((int16_t)x, 0, 1000);
+      }
+    }
 
     /* ===== K2 button (PA4, external pull-up, press = LOW) =====
      * Pulsación CORTA (al soltar) = siguiente modo.
@@ -2624,7 +2667,10 @@ static void Beam_InitTxGeometry(void) {
  * wavefronts arrive at the focus together. Prints one row per line for
  * geometric sanity-checking. Runs only on state changes (float OK).
  */
-static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
+/* Versión silenciosa. La ruidosa (Beam_UpdateTxFocus, abajo) imprime la tabla de
+ * delays por fila, que es útil al entrar a un modo pero imposible en el modo
+ * BARRIDO, que reapunta 20 veces por segundo. */
+static void Beam_SetTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
   tx_focus_x_mm = fx_mm;
   tx_focus_y_mm = fy_mm;
   tx_focus_z_mm = fz_mm;
@@ -2645,6 +2691,12 @@ static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
     if (dq > (TX_MAX_DELAY_SAMPLES << 8)) dq = TX_MAX_DELAY_SAMPLES << 8;
     tx_delay_q8[ch] = (uint16_t)dq;
   }
+}
+
+/** @brief Igual que Beam_SetTxFocus pero además imprime la tabla de delays
+ *         por fila, para sanity-check geométrico al entrar a un modo. */
+static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
+  Beam_SetTxFocus(fx_mm, fy_mm, fz_mm);
   sprintf(uart_buf, "TX focus (%d,%d,%d)mm rel center — delays/row (samples.frac):\r\n",
           (int)fx_mm, (int)fy_mm, (int)fz_mm);
   UART_Print(uart_buf);
@@ -3083,6 +3135,7 @@ static void UI_ApplyState(uint8_t idx) {
   }
   mfocus_in_enabled = st->mfin;
   if (st->mfin) MFocusIn_ApplyDefaults();
+  sweep_enabled = st->sweep;
   /* Tone source is -6dBFS: el boost que levanta el beam débil del ADC lo
    * saturaría contra los PAM (plan §3.1). Con fuente de ADC, el beam usa la
    * MISMA ganancia de entrada que el resto — un ajuste, una cadena. */

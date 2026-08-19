@@ -125,15 +125,16 @@ static const char *MODE_NAMES[] = {
     "RX beam az=-30",
     "RX beam az=+60",
     "RX beam az=-60",
-    "TX 2k ondulante centro @1m",
+    "TX 2k ondulante LEJOS 2m",
     "TX 2k ondulante izq 0.5m @1m",
     "TX 2k ondulante der 0.5m @1m",
     "TX 2k ondulante CERCA 0.3m",
     "AUTOFOCUS scan (mic->c0)",
-    "TX 2k ondulante centro @1m (= modo 7)",
+    "TX 2k ondulante centro @1m",
     "TX 1k ondulante centro @1m (spot 2x)",
     "MULTIFOCUS 4 tonos @1m",
     "MULTIFOCUS 8 entradas @1m",
+    "TX 2k BARRIDO izq<->der @1m",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 
@@ -939,7 +940,7 @@ static const char INDEX_HTML[] =
 "<div style='font-size:.75em;color:#888;margin-top:6px'>Volumen &minus;24 dB, "
 "ganancia 0 dB, modo 0 y focos por defecto. No toca los amplificadores.</div></div>"
 "<script>"
-"const N=16,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. centro','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','2k ondul. (= 7)','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in'];"
+"const N=17,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. LEJOS 2m','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','TX 2k ondul. centro','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in','TX 2k BARRIDO izq-der'];"
 "const md=document.getElementById('modes');"
 /* El numero adelante: es lo que se usa para referenciar el modo en los comandos
  * (POST /mode {"mode":N}), en los logs y al hablar del equipo. */

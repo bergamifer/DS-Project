@@ -1,6 +1,6 @@
 # Manual de modos de operación — DS11 (firmware STM32)
 
-> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (16 modos, índices 0–15).
+> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (17 modos, índices 0–16).
 > Última actualización: 2026-08-16.
 >
 > **¿Primera vez con el equipo?** Empezá por [guia_operacion.md](guia_operacion.md),
@@ -69,18 +69,37 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 | 4 | `RX beam az=-30` | ídem, −30° | ídem | |
 | 5 | `RX beam az=+60` | ídem, +60° | ídem | |
 | 6 | `RX beam az=-60` | ídem, −60° | ídem | |
-| 7 | `TX 2k ondulante centro @1m` | Tono interno 2 kHz | 32 canales con delays focales | Foco (0, 0, 1000) mm |
+| 7 | `TX 2k ondulante LEJOS 2m` | Tono interno 2 kHz | 32 canales con delays focales | Foco (0, 0, 2000) mm — el par de profundidad con el 10 |
 | 8 | `TX 2k ondulante izq 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
 | 9 | `TX 2k ondulante der 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
 | 10 | `TX 2k ondulante CERCA 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
 | 11 | `AUTOFOCUS scan (mic->ADC c0)` | Chirp por parlante + mic | Scan → tono enfocado medido | Requiere mic en ADC c0 |
-| 12 | `TX 2k ondulante centro @1m (= modo 7)` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
+| 12 | `TX 2k ondulante centro @1m` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
 | 13 | `TX 1k ondulante centro @1m (spot 2x)` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
 | 14 | `MULTIFOCUS 4 tonos @1m` | 4 tonos internos (1.3/1.6/1.9/2.1 kHz) | Cada tono enfocado en su propio punto | Precuela de la intervención 8-in |
 | 15 | `MULTIFOCUS 8 entradas @1m` | Las 8 entradas analógicas | Cada entrada enfocada en su propio punto | **La intervención**: 8 señales, 8 lugares |
+| 16 | `TX 2k BARRIDO izq<->der @1m` | Tono interno 2 kHz | Foco barriendo ±700 mm, ciclo de 5 s | **Demuestra el steering sin caminar** |
 
 **IMPORTANTE (append-only)**: los índices están espejados en el ESP32, la web y
 la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
+
+## Modo 16 — BARRIDO: la demostración que no hay que explicar
+
+El foco recorre solo la sala, **±700 mm en un ciclo de 5 segundos**, con el mismo
+tono ondulante de 2 kHz. Los presets 8/9 prueban el steering, pero exigen pararse
+en un punto descentrado y **comparar dos modos de memoria**. Acá no hace falta
+nada de eso: parado donde sea, el nivel **sube cuando el foco pasa por vos y baja
+cuando se va**.
+
+- Se reapunta 20 veces por segundo desde el main loop (32 raíces cuadradas por
+  paso, ~3 µs). El paso de foco por actualización son ~14 mm = **0,04 muestras de
+  delay**, así que no hay salto audible al reapuntar.
+- Usa `Beam_SetTxFocus()`, la versión **silenciosa**: la que imprime la tabla de
+  delays por fila sería inviable 20 veces por segundo.
+
+> ⚠️ **El barrido es horizontal a propósito.** En vertical el array no enfoca a
+> 2 kHz — las filas están a 160 mm = 0,93 λ, por encima del límite λ/2, así que
+> produce lóbulos de rejilla en vez de un foco. Ver `DS12_PLANNING.md` §0.5.
 
 ---
 
