@@ -109,8 +109,9 @@ typedef struct __attribute__((packed)) {
     uint32_t out_clip_count;  // v3: MONOTONICO — satura la salida (bajar ingain)
     uint8_t  state_flags;     // v4: bit0 amps encendidos, bit1 beam custom activo
     uint32_t uptime_ms;       // v5: uptime DEL STM32 (el otro uptime es de este chip)
+    uint16_t cpu_fills_x10;   // v6: % de CPU en los 4 fills, x10 (263 = 26,3%)
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 68, "ds_status_t debe ser 68 bytes");
+_Static_assert(sizeof(ds_status_t) == 70, "ds_status_t debe ser 70 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 
@@ -602,6 +603,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"vol_db\":%d,\"ingain_db\":%u,\"amps\":%s,\"custom\":%s,"
             "\"adc_ovf\":%lu,\"out_clip\":%lu,"
             "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
+            "\"cpu_fills_pct\":%u.%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
@@ -617,6 +619,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             /* Los DOS uptimes, separados a proposito: uptime_ms era el de este
              * chip y se leia como si fuera el de la placa, asi que un reinicio
              * del STM32 resultaba INVISIBLE desde la red. */
+            s->cpu_fills_x10 / 10, s->cpu_fills_x10 % 10,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
     } else {

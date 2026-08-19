@@ -699,3 +699,72 @@ pasó. Es una bomba con la espoleta puesta, no un bug activo.
 entonces** se copian al destino. Si `config_size` no entra en el buffer,
 devuelve `EEPROM_ERR_SIZE` en vez de desbordar. Verificado que la persistencia
 sigue funcionando: `ingain=7` y `modo=12` sobrevivieron un reset por ST-Link.
+
+---
+
+## 10. El modo 15 estaba al tope, y no se veía (2026-08-18)
+
+### Primero: hacer visible el presupuesto
+
+El `%` de CPU del pipeline sólo salía por el puerto serie, así que diagnosticar
+"este modo no entra" pedía un cable enchufado. Desde **proto v6**, `/status`
+publica `cpu_fills_pct`. Con eso el diagnóstico pasó de conjetura a medición en
+un par de minutos.
+
+### El hallazgo
+
+Con el modo 15 activo, `/status` **no contestaba** y se acumulaban ~25-55
+underruns por segundo. Los demás modos daban 0. Al exponer el `%`:
+
+| modo | CPU antes |
+|---|---|
+| 0 (monitor) | 4,9 % |
+| 12 / 7 (tono + TX) | 25,2 % |
+| 14 (MULTIFOCUS 4 tonos) | 56,8 % |
+| **15 (MULTIFOCUS 8 entradas)** | **no contestaba — al tope** |
+
+Causa: cuando la ganancia de entrada pasó a ser ajustable en runtime, el
+`<< mf_in_shift` del lazo interno se reemplazó por `Apply_In_Gain()`, que es una
+**multiplicación de 64 bits sobre una variable `volatile`** — o sea que el
+compilador está obligado a recargarla de memoria en cada uso. En el lazo más
+caliente del firmware eso son **8 fuentes × 8 canales × 240 muestras × 4 bancos =
+61440 multiplicaciones por ventana de 5 ms**, donde antes había un shift.
+
+Es el precio de una decisión de diseño que sigue siendo correcta (ganancia
+ajustable en dB en vez de saltos de 6 dB), mal ubicada.
+
+### El arreglo
+
+La ganancia es **lineal**, así que aplicarla a cada fuente y sumar es idéntico a
+sumar y aplicarla una vez:
+
+```c
+const int32_t g_q8 = (int32_t)in_gain_q8;   // el volatile, leído UNA vez
+...
+for (src) sum += interpolación;             // sin multiplicar
+acc = (int32_t)(((int64_t)sum * g_q8) >> 8);  // una sola multiplicación
+```
+
+Siete de cada ocho multiplicaciones desaparecen. `sum` son 8 × 24 bits = 27 bits,
+× `g_q8` (≤ 2^14) = 41 bits → el intermedio de 64 bits sigue siendo necesario.
+
+**Resultado: el modo 15 pasa de estar al tope a 64,8 % con 0 underruns**, y la
+telemetría vuelve a responder (24/24 lecturas en 100 s).
+
+### Presupuesto de CPU por modo — medido 2026-08-18
+
+Los 16 modos, amps apagados, sin señal de entrada, **0 underruns en todos**:
+
+| modo | | CPU |
+|---|---|---|
+| 2–6 | RX beam (5 presets) | 1,3 % |
+| 1 | Channel walker | 2,2 % |
+| 0 | ADC monitor | 4,9 % |
+| 11 | AUTOFOCUS scan | 11,1 % |
+| 7–10, 12–13 | TX con tono (6 modos) | 27,0 % |
+| 14 | MULTIFOCUS 4 tonos | 63,4 % |
+| 15 | MULTIFOCUS 8 entradas | **64,8 %** |
+
+El techo real no es 100 %: el main loop también atiende el protocolo, la EEPROM,
+el botón y los prints. Los dos MULTIFOCUS a ~64 % son los que hay que vigilar si
+se agrega trabajo por muestra — y ahora se puede vigilar sin cable.

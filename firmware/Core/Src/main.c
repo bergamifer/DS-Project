@@ -620,6 +620,10 @@ static volatile uint32_t jitter_sample_count = 0;
  * fill_all_cycles acumula TODOS los fills; el heartbeat lo derivada a %CPU.
  * Presupuesto: 480M ciclos/s → cada 1% son 4.8M ciclos/s. */
 static volatile uint64_t fill_all_cycles = 0;
+/* Último % de CPU en fills (×10), calculado en el heartbeat y publicado por
+ * telemetría: sin esto, "este modo no entra en presupuesto" sólo se podía
+ * diagnosticar con el cable serie enchufado. */
+static volatile uint16_t cpu_fills_x10 = 0;
 /* Offset entre bancos: timestamp del último Half callback de cada master.
  * SAI1_A y SAI2_A son masters asíncronos entre sí — si arrancan separados,
  * ese desfase queda fijo para siempre. Se reporta en la línea SYNC. */
@@ -1388,6 +1392,7 @@ int main(void)
         st.state_flags = (amps_enabled ? STATE_F_AMPS : 0)
                        | (custom_beam_active ? STATE_F_CUSTOM : 0);
         st.uptime_ms = HAL_GetTick();
+        st.cpu_fills_x10 = cpu_fills_x10;
         for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
           int32_t pk = 0;
           for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
@@ -1519,6 +1524,7 @@ int main(void)
         uint64_t now_fill = fill_all_cycles;
         uint32_t cpu_x10 = (uint32_t)(((now_fill - last_fill_all) * 1000ULL) / 480000000ULL);
         last_fill_all = now_fill;
+        cpu_fills_x10 = (uint16_t)(cpu_x10 > 65535 ? 65535 : cpu_x10);
 
         snprintf(uart_buf, sizeof(uart_buf),
                  "     SYNC bancos: %ld us (%ld cyc) | CPU fills: %lu.%lu%%\r\n",
@@ -2650,8 +2656,13 @@ static void Beam_UpdateTxFocus(int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
  * (delay_q8 × inc >> 8, mod período) para que el fill no haga math de 64
  * bits por muestra. Solo en cambios de estado (float OK).
  */
-static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
-                              int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
+/* Versión silenciosa. La ruidosa (con print) es Beam_UpdateMFocus, más abajo:
+ * cuando se re-apunta UNA fuente el log es útil, pero al entrar a un modo se
+ * llamaba 8 veces seguidas y esos 8 prints costaban 6 deadlines de fill —
+ * medido: entrar al modo 15 daba +6 underruns SIEMPRE, y ninguna otra
+ * transición costaba nada. Los defaults ahora imprimen una sola línea. */
+static void Beam_SetMFocus(uint8_t src, uint16_t f_hz,
+                           int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
   mf_freq_hz[src] = f_hz;
   mf_fx_mm[src] = fx_mm;
   mf_fy_mm[src] = fy_mm;
@@ -2675,6 +2686,13 @@ static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
     mf_phoff_q16[src][ch] = (uint32_t)((((uint64_t)dq * mf_inc_q16[src]) >> 8)
                                        % TONE_PERIOD_Q16);
   }
+}
+
+/** @brief Igual que Beam_SetMFocus pero además lo informa. Para cuando se
+ *         re-apunta UNA fuente en vivo (POST /beam type=mf). */
+static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
+                              int16_t fx_mm, int16_t fy_mm, int16_t fz_mm) {
+  Beam_SetMFocus(src, f_hz, fx_mm, fy_mm, fz_mm);
   sprintf(uart_buf, "MFOCUS src%u: %uHz @ (%d,%d,%d)mm\r\n", (unsigned)src,
           (unsigned)f_hz, (int)fx_mm, (int)fy_mm, (int)fz_mm);
   UART_Print(uart_buf);
@@ -2683,7 +2701,10 @@ static void Beam_UpdateMFocus(uint8_t src, uint16_t f_hz,
 /** @brief Reset the MULTIFOCUS sources to the 4 default tones/foci. */
 static void MFocus_ApplyDefaults(void) {
   for (uint8_t s = 0; s < MF_NUM_SRC; s++)
-    Beam_UpdateMFocus(s, mf_def_freq[s], mf_def_fx[s], 0, 1000);
+    Beam_SetMFocus(s, mf_def_freq[s], mf_def_fx[s], 0, 1000);
+  sprintf(uart_buf, "MFOCUS: %u tonos en sus focos por defecto\r\n",
+          (unsigned)MF_NUM_SRC);
+  UART_Print(uart_buf);
 }
 
 /** @brief Defaults del modo 15: las 8 entradas repartidas en X, −700..+700mm
@@ -2691,8 +2712,11 @@ static void MFocus_ApplyDefaults(void) {
  *         (La frecuencia queda seteada pero el modo de entradas no la usa.) */
 static void MFocusIn_ApplyDefaults(void) {
   for (uint8_t s = 0; s < MF_IN_NUM_SRC; s++)
-    Beam_UpdateMFocus(s, mf_def_freq[s % MF_NUM_SRC],
-                      (int16_t)(-700 + 200 * (int16_t)s), 0, 1000);
+    Beam_SetMFocus(s, mf_def_freq[s % MF_NUM_SRC],
+                   (int16_t)(-700 + 200 * (int16_t)s), 0, 1000);
+  sprintf(uart_buf, "MFOCUS: %u entradas repartidas de -700 a +700mm @1m\r\n",
+          (unsigned)MF_IN_NUM_SRC);
+  UART_Print(uart_buf);
 }
 
 /* Master volume via PCM1690 attenuation. ATDAx = 255 + dB×2 (0.5 dB/step);
@@ -3327,21 +3351,36 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
         d_fr[ch][src]  = (int32_t)(dq & 0xFF);
       }
     }
+    /* La ganancia de entrada se aplica UNA VEZ a la suma, no una vez por fuente.
+     * Es lo mismo (la ganancia es lineal) y ahorra 7 de cada 8 multiplicaciones
+     * en el lazo más caliente del firmware. Además se lee in_gain_q8 a un local:
+     * es `volatile`, así que dentro del lazo el compilador estaba obligado a
+     * recargarla de memoria en cada uso.
+     *
+     * Medido con `cpu_fills_pct` de /status: este modo estaba al tope del
+     * presupuesto —tanto que ni contestaba la telemetría— y ninguna otra parte
+     * del pipeline lo explicaba. Son 8 fuentes × 8 canales × 240 muestras × 4
+     * bancos = 61440 multiplicaciones de 64 bits por ventana de 5 ms, que
+     * reemplazaron a un simple shift cuando la ganancia pasó a ser ajustable. */
+    const int32_t g_q8 = (int32_t)in_gain_q8;
     for (uint32_t i = 0; i < samples; i++) {
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
         uint32_t gch = ch_offset + ch;
         int32_t acc = 0;
         if (unmuted && !((beam_config.mutes >> gch) & 1)) {
+          int32_t sum = 0;
           for (uint32_t src = 0; src < MF_IN_NUM_SRC; src++) {
             uint32_t base = wp - d_int[ch][src] - samples + i;
             int32_t fr = d_fr[ch][src];
             int32_t s0 = delay_line[src][base & DELAY_LINE_MASK] >> 8;
             int32_t s1 = delay_line[src][(base - 1) & DELAY_LINE_MASK] >> 8;
             // (s1−s0) 25 bits × fr 8 bits → intermedio de 64 bits
-            acc += Apply_In_Gain(s0 + (int32_t)(((int64_t)(s1 - s0) * fr) >> 8));
+            sum += s0 + (int32_t)(((int64_t)(s1 - s0) * fr) >> 8);
           }
-          // Clamp ANTES del gain: 8 fuentes × boost pueden exceder ±FS,
-          // y FS×255 es el máximo que el multiply soporta en int32.
+          /* sum: 8 fuentes × 24 bits = 27 bits; × g_q8 (≤ 2^14) = 41 bits → 64. */
+          acc = (int32_t)(((int64_t)sum * g_q8) >> 8);
+          // Clamp ANTES del gain por canal: 8 fuentes × boost pueden exceder
+          // ±FS, y FS×255 es el máximo que el multiply soporta en int32.
           if (acc > 8388607) acc = 8388607;
           else if (acc < -8388608) acc = -8388608;
           acc = (acc * (int32_t)beam_config.gains[gch]) >> 8;
