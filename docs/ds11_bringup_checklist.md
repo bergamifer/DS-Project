@@ -119,7 +119,14 @@ curl -X POST http://$IP/volume -d '{"db":-40}' # y subir de a poco
 
 3. **Modos 8 y 9 — ¿el spot cae donde dice?**
    `8` enfoca 0,5 m a la **izquierda**, `9` a la **derecha**, del oyente mirando
-   los conos. Caminar entre los dos puntos a 1 m del array.
+   los conos, con un tono de **2 kHz** (spot ±143 mm a 1 m).
+
+   ⚠️ **No se distinguen por el timbre: es el mismo tono en los dos.** Lo que
+   cambia es dónde sube el nivel. El test correcto es un **A/B desde un punto
+   fijo**: pararse a 50 cm a la izquierda del centro, a 1 m del array, y alternar
+   8 ↔ 9. Ahí el 8 tiene que sonar **claramente más fuerte** que el 9. Después
+   repetir 50 cm a la derecha y esperar lo contrario. Escuchar parado en el
+   centro no prueba nada — es justo el punto donde los dos suenan igual.
    - Si están **espejados**, es una línea: el signo de `spk_x_mm[]` en
      `Beam_InitTxGeometry()`. **Conviene saberlo antes de la DS12.**
    - Si no se nota ningún spot, sospechar de la polaridad (`speaker_sign`) o del

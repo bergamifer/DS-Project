@@ -69,10 +69,10 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 | 4 | `RX beam az=-30` | ídem, −30° | ídem | |
 | 5 | `RX beam az=+60` | ídem, +60° | ídem | |
 | 6 | `RX beam az=-60` | ídem, −60° | ídem | |
-| 7 | `TX tono 1k centro @1m` | Tono interno 1 kHz | 32 canales con delays focales | Foco (0, 0, 1000) mm |
-| 8 | `TX tono 1k izq 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
-| 9 | `TX tono 1k der 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
-| 10 | `TX tono 1k CERCA 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
+| 7 | `TX tono 2k centro @1m` | Tono interno 2 kHz | 32 canales con delays focales | Foco (0, 0, 1000) mm |
+| 8 | `TX tono 2k izq 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
+| 9 | `TX tono 2k der 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
+| 10 | `TX tono 2k CERCA 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
 | 11 | `AUTOFOCUS scan (mic->ADC c0)` | Chirp por parlante + mic | Scan → tono enfocado medido | Requiere mic en ADC c0 |
 | 12 | `TX tono 2k dither foco @1m` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
 | 13 | `TX tono 1k dither foco @1m` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
@@ -213,7 +213,7 @@ mínimo 0, redondeados a muestras @48 kHz (tope `MAX_DELAY_SAMPLES = 64`).
 
 ## Modos 7–10 — TX focus (steering de transmisión, presets)
 
-Beamforming **de transmisión** near-field: un **tono interno de 1 kHz** que cada
+Beamforming **de transmisión** near-field: un **tono interno de 2 kHz** que cada
 canal de salida reproduce retrasado para que los frentes de onda converjan en el
 punto focal. Caminando la sala se oye el spot moverse — el modo se valida solo,
 sin instrumental y sin nada conectado a la entrada.
@@ -225,7 +225,19 @@ sin instrumental y sin nada conectado a la entrada.
 > exactamente el reporte ("los modos TX suenan como RX"). Escuchar la entrada ya
 > lo hacen los modos 2-6, y mucho mejor el 15. Lo que faltaba era **demostrar el
 > steering**, y para eso la fuente tiene que ser interna. El modo 7 queda
-> equivalente al 13; los que agregan valor son el 8, 9 y 10.
+> equivalente al 12; los que agregan valor son el 8, 9 y 10.
+
+> **2 kHz, no 1 kHz** (corregido 2026-08-19 tras escucharlos). La apertura en X
+> son 600 mm (8 columnas × 80 mm + 40 de ladrillo). A **1 kHz** eso es **1,75 λ**
+> y el spot a 1 m sale de **±286 mm**: los focos de izquierda y derecha, separados
+> 1 m, se solapan tanto que **desde el centro suenan idénticos** — que fue
+> exactamente el reporte. A **2 kHz** la apertura es **3,50 λ** y el spot cae a
+> **±143 mm**, el doble de resolución. El techo es **2144 Hz** (c/2d, lóbulos de
+> rejilla), así que 2 kHz es lo mejor que puede hacer este array.
+>
+> ⚠️ **Estos modos NO se distinguen por el timbre** — es el mismo tono en los
+> cuatro. Lo que cambia es **dónde** en la sala sube el nivel. Escucharlos parado
+> en un solo punto no prueba nada.
 
 - `Beam_UpdateTxFocus()`: d_k = |foco − parlante_k|/c; delay_k = max(d) − d_k
   (el parlante más lejano dispara primero). Delays en **Q8** (1 LSB = 1/256 de
