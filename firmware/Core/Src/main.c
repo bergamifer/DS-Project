@@ -304,9 +304,17 @@ static const ui_state_t ui_states[] = {
   { .name = "RX beam az=-30",               .beam = 1, .az_deg = -30 },
   { .name = "RX beam az=+60",               .beam = 1, .az_deg =  60 },
   { .name = "RX beam az=-60",               .beam = 1, .az_deg = -60 },
-  // TX steering presets (Phase 2): tono interno de 1 kHz enfocado en 4 puntos
+  // TX steering presets (Phase 2): tono interno de 2 kHz enfocado en 4 puntos
   // distintos. Caminando la sala se oye el spot moverse — el modo se valida
   // solo, sin instrumental y sin nada conectado a la entrada.
+  //
+  // 2 kHz, NO 1 kHz: la apertura en X son 600 mm (8 columnas × 80 mm + 40 de
+  // ladrillo). A 1 kHz eso es 1,75 λ y el spot a 1 m sale de ±286 mm — los
+  // focos de izquierda y derecha, separados 1 m, casi se solapan y desde el
+  // centro suenan IGUAL (verificado a oído el 2026-08-19: "8 y 9 hacen lo
+  // mismo que el 13"). A 2 kHz la apertura es 3,50 λ y el spot cae a ±143 mm:
+  // el doble de resolución. El techo es 2144 Hz (c/2d, lóbulos de rejilla),
+  // así que 2 kHz es lo mejor que este array puede hacer.
   //
   // La fuente era el RX beam (los micrófonos) hasta 2026-08-18. El diseño
   // asumía micrófonos en la placa, y la DS11 no los tiene: J9 son entradas de
@@ -318,14 +326,14 @@ static const ui_state_t ui_states[] = {
   //
   // X en el marco del OYENTE MIRANDO LOS CONOS (si L/R salen espejados en la
   // caja real, invertir el signo de las coords SPK — una línea). Y hacia fila 4.
-  { .name = "TX tono 1k centro @1m",        .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 1000, .fx_mm =    0, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX tono 1k izq 0.5m @1m",      .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 1000, .fx_mm = -500, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX tono 1k der 0.5m @1m",      .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 1000, .fx_mm =  500, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX tono 1k CERCA 0.3m",        .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 1000, .fx_mm =    0, .fy_mm = 0, .fz_mm =  300 },
+  { .name = "TX tono 2k centro @1m",        .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 2000, .fx_mm =    0, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX tono 2k izq 0.5m @1m",      .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 2000, .fx_mm = -500, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX tono 2k der 0.5m @1m",      .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 2000, .fx_mm =  500, .fy_mm = 0, .fz_mm = 1000 },
+  { .name = "TX tono 2k CERCA 0.3m",        .beam = 1, .tx = 1, .tone = 1,
+    .tone_hz = 2000, .fx_mm =    0, .fy_mm = 0, .fz_mm =  300 },
   // Measured focal calibration: mic at the target point → ADC input 1 (c0),
   // chirp scan of every speaker → TOF-derived delays + polarity, then a
   // steered tone focused at the mic. Re-enter the mode to re-scan.

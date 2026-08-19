@@ -125,10 +125,10 @@ static const char *MODE_NAMES[] = {
     "RX beam az=-30",
     "RX beam az=+60",
     "RX beam az=-60",
-    "TX tono 1k centro @1m",
-    "TX tono 1k izq 0.5m @1m",
-    "TX tono 1k der 0.5m @1m",
-    "TX tono 1k CERCA 0.3m",
+    "TX tono 2k centro @1m",
+    "TX tono 2k izq 0.5m @1m",
+    "TX tono 2k der 0.5m @1m",
+    "TX tono 2k CERCA 0.3m",
     "AUTOFOCUS scan (mic->c0)",
     "TX tono 2k dither foco @1m",
     "TX tono 1k dither foco @1m",
@@ -939,7 +939,7 @@ static const char INDEX_HTML[] =
 "<div style='font-size:.75em;color:#888;margin-top:6px'>Volumen &minus;24 dB, "
 "ganancia 0 dB, modo 0 y focos por defecto. No toca los amplificadores.</div></div>"
 "<script>"
-"const N=16,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 1k centro @1m','TX 1k izq @1m','TX 1k der @1m','TX 1k cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither','MULTIFOCUS 4t','MULTIFOCUS 8in'];"
+"const N=16,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k centro @1m','TX 2k izq @1m','TX 2k der @1m','TX 2k cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither','MULTIFOCUS 4t','MULTIFOCUS 8in'];"
 "const md=document.getElementById('modes');"
 /* El numero adelante: es lo que se usa para referenciar el modo en los comandos
  * (POST /mode {"mode":N}), en los logs y al hablar del equipo. */
