@@ -617,3 +617,85 @@ Los 6 de la ráfaga de modos aparecen **una sola vez** y no se repiten en las
 vueltas siguientes; con el arreglo del descarte de fills hay que volver a
 medirlos. Falta la validación auditiva, que es la única que ve los artefactos
 que no cuentan como deadline perdido.
+
+---
+
+## 9. Auditoría de concurrencia ISR ↔ main loop (2026-08-18)
+
+Motivada por el `-O2`: lo clásico que destapa subir el nivel de optimización es
+estado compartido mal declarado. El resultado fue mejor de lo esperado en un
+frente y peor en otro.
+
+**Lo que estaba bien**: las 28 variables que escriben las callbacks del SAI y las
+6 del parser del UART son **todas `volatile`**. La disciplina del pipeline
+diferido (ISR pone bandera, main loop trabaja) está bien sostenida. Y las
+prioridades son correctas: DMA de audio en 0, UART4 en 1 — el ACK que se manda
+desde el ISR del UART **no** puede retrasar una callback de audio.
+
+Lo que apareció fueron **tres carreras estructurales**, ninguna detectable por el
+compilador.
+
+### 9.1 Dos escritores sobre el mismo UART
+
+`UART_Protocol_SendStatus()` escribe la trama de status en `TDR` **byte a byte
+desde el main loop**, sirviendo los fills entre carácter y carácter — cientos de
+ms en el modo 15. `send_ack()` escribe **el mismo `TDR` desde el ISR** del
+parser. Sin coordinación, un comando que llegue durante un status mete sus 5
+bytes **en medio de la trama**. Las dos consecuencias son silenciosas:
+
+- el status queda corrupto → el ESP32 lo descarta → `stm32: timeout`;
+- los bytes del ACK se los come el status → el ESP32 nunca ve su ACK → el POST
+  contesta `timeout` **aunque el STM32 haya ejecutado el comando**.
+
+Es exactamente el escenario de arrastrar el pad de MULTIFOCUS (un `POST /beam`
+cada 150 ms) con la página polleando `/status` cada segundo.
+
+**Fix**: mientras el main loop manda una trama, el ISR **encola**; el main loop
+drena la cola al terminar, y baja la bandera sólo cuando quedó vacía (comprobado
+con la IRQ apagada, para que un ACK que entre durante el drenaje no vuelva a
+intercalarse). Medido después: **40/40 status y 40/40 comandos OK** con ambos
+tráficos a la vez en modo 15.
+
+De paso, el timeout de esos envíos baja de 50 ms a 5 ms. Son 5 bytes = 434 µs; si
+el TX alguna vez se trabara, 50 ms de bloqueo en el ISR son **diez** deadlines de
+fill perdidos. Con 5 ms el peor caso es uno.
+
+### 9.2 El módulo entregaba punteros a memoria que escribe el ISR
+
+`UART_Protocol_GetConfig()` devolvía un puntero al buffer vivo. El main loop leía
+de ahí durante decenas de µs —102 bytes de config, y encima `PrintConfig()`
+formateando 32 líneas— mientras el ISR podía estar haciendo `memcpy` de una trama
+nueva **encima**. El resultado sería una config mezclada de dos tramas: delays de
+unos canales y ganancias de otros, todos en rango, ninguno el pedido. Ídem
+`beam_req` (9 bytes) y `esp_ip`.
+
+**Fix**: regla del módulo — *nada devuelve un puntero a memoria que escribe el
+ISR*. `TakeConfig(dst)` y `CopyEspIp(dst,n)` copian con la IRQ apagada (~100
+ciclos, irrelevante para el audio), y `PrintConfig()` ahora recibe el snapshot.
+
+### 9.3 🔴 La EEPROM cargaba datos corruptos y avisaba que no
+
+El más serio de los tres, y no es de concurrencia. `EEPROM_LoadConfig()` leía los
+datos **directamente sobre la estructura del llamador** y verificaba el CRC
+**después**:
+
+```c
+eeprom_read(addr, (uint8_t*)config, config_size);   // ya piso beam_config
+...
+if (calc_crc != stored_crc) return EEPROM_ERR_CRC;  // demasiado tarde
+```
+
+El `main.c` imprime **"EEPROM: CRC error — using defaults"** y sigue — pero los
+defaults **ya habían sido destruidos**. Con un solo byte dado vuelta, el
+instrumento arranca con `master_vol_db`, `in_gain_db`, gains, delays y mutes
+**arbitrarios**. Y los clamps no salvan: un `master_vol_db` positivo se satura a
+**0 dB, o sea volumen máximo**, y `in_gain_db` a **+36 dB**, sobre 32
+amplificadores.
+
+Nunca se manifestó porque hizo falta que la EEPROM se corrompiera, cosa que no
+pasó. Es una bomba con la espoleta puesta, no un bug activo.
+
+**Fix**: los datos van a un buffer intermedio, se valida el CRC y **recién
+entonces** se copian al destino. Si `config_size` no entra en el buffer,
+devuelve `EEPROM_ERR_SIZE` en vez de desbordar. Verificado que la persistencia
+sigue funcionando: `ingain=7` y `modo=12` sobrevivieron un reset por ST-Link.

@@ -28,6 +28,7 @@ typedef enum {
     EEPROM_ERR_MAGIC,       /* No valid config found (first boot) */
     EEPROM_ERR_VERSION,     /* Version mismatch */
     EEPROM_ERR_CRC,         /* CRC mismatch (data corruption) */
+    EEPROM_ERR_SIZE,        /* config_size > el buffer de verificación */
 } eeprom_status_t;
 
 /**
@@ -52,13 +53,22 @@ HAL_StatusTypeDef EEPROM_Init(void);
 uint8_t EEPROM_IsAvailable(void);
 
 /**
- * @brief Save beamforming config to EEPROM
- * WARNING: Blocks ~12ms (page writes with HAL_Delay). Causes audio underruns.
+ * @brief Save beamforming config to EEPROM.
+ *
+ * Tarda decenas de ms, pero NO produce underruns: las transferencias I2C van de
+ * a 32 bytes (~3,2 ms, bajo el deadline de fill) y las esperas del ciclo de
+ * escritura del chip llaman a EEPROM_Yield(). Llamar sólo desde el main loop.
  */
 eeprom_status_t EEPROM_SaveConfig(const void *config, uint16_t config_size);
 
 /**
- * @brief Load beamforming config from EEPROM
+ * @brief Load beamforming config from EEPROM.
+ *
+ * ⚠️ `config` NO se toca salvo que TODO valide (magic + versión + CRC). Antes
+ * se leía directo encima del destino y recién después se chequeaba el CRC: el
+ * llamador imprimía "CRC error — using defaults" mientras corría con los datos
+ * corruptos ya cargados. Con un byte dado vuelta eso arranca el instrumento con
+ * volumen y ganancia de entrada arbitrarios sobre 32 amplificadores.
  */
 eeprom_status_t EEPROM_LoadConfig(void *config, uint16_t config_size);
 

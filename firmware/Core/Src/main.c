@@ -1402,8 +1402,12 @@ int main(void)
     }
 
     // ===== Check for new ESP32 config → apply to beam_config =====
-    if (UART_Protocol_HasNewConfig()) {
-      const ds_config_t *cfg = UART_Protocol_GetConfig();
+    /* Snapshot: se trabaja sobre una copia, nunca sobre el buffer que escribe
+     * el ISR (ver UART_Protocol_TakeConfig). Estático y no local porque son 102
+     * bytes y este bloque está adentro del lazo principal. */
+    static ds_config_t cfg_snapshot;
+    if (UART_Protocol_TakeConfig(&cfg_snapshot)) {
+      const ds_config_t *cfg = &cfg_snapshot;
       beam_config.master_gain = cfg->master_gain;
       beam_config.mute_global = cfg->mute_global;
       /* Desde 2026-08-18 la config del ESP32 cubre los 32 canales; antes eran
@@ -1422,7 +1426,7 @@ int main(void)
         }
         UART_Print("BEAM: raw RX delays applied from ESP32 config\r\n");
       }
-      UART_Protocol_PrintConfig();
+      UART_Protocol_PrintConfig(cfg);
       UART_Print("Config applied to beamformer\r\n");
 
       // Debounced EEPROM save — coalesces bursts of config frames
@@ -1478,7 +1482,8 @@ int main(void)
 
       // Expected: 50 half + 50 full per second (20ms buffer cycle @ 48kHz TDM8)
       // snprintf: con la IP anexada la linea puede exceder los 128B de uart_buf.
-      const char *esp_ip = UART_Protocol_GetEspIp();
+      char esp_ip[ESP_IP_MAXLEN + 1];
+      UART_Protocol_CopyEspIp(esp_ip, sizeof(esp_ip));
       snprintf(uart_buf, sizeof(uart_buf),
               "[%lus] Half: %lu/s, Full: %lu/s, Err: %lu, Undr: %lu, RX: %lu bytes | ESP: %s\r\n",
               HAL_GetTick() / 1000, half_per_sec, full_per_sec,

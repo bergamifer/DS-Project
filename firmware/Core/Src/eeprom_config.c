@@ -36,7 +36,14 @@ __weak void EEPROM_Yield(void) { }
  * espera de abajo sirve los fills), así que no se oyen. Escribir de a media
  * página es legal: el CAT24C256 sólo prohíbe cruzar el límite de página. */
 #define EEPROM_WRITE_CHUNK  32
+
 #define EEPROM_I2C_TIMEOUT  100  /* ms */
+
+/* Buffer de verificación: la config se lee acá, se le chequea el CRC y sólo
+ * entonces se copia al destino. 256 basta de sobra para beam_config_t (108 B) y
+ * deja margen; si algún día no alcanza, LoadConfig devuelve EEPROM_ERR_SIZE en
+ * vez de desbordar. */
+static uint8_t cfg_scratch[256];
 
 /* I2C4 handle (local to this module) */
 static I2C_HandleTypeDef hi2c4;
@@ -215,6 +222,8 @@ eeprom_status_t EEPROM_LoadConfig(void *config, uint16_t config_size)
 {
     uint16_t addr = EEPROM_CFG_BASE_ADDR;
 
+    if (config_size > sizeof(cfg_scratch)) return EEPROM_ERR_SIZE;
+
     /* Read and verify magic */
     uint32_t magic;
     if (eeprom_read(addr, (uint8_t*)&magic, 4) != HAL_OK)
@@ -231,8 +240,11 @@ eeprom_status_t EEPROM_LoadConfig(void *config, uint16_t config_size)
         return EEPROM_ERR_VERSION;
     addr += 2;
 
-    /* Read config data */
-    if (eeprom_read(addr, (uint8_t*)config, config_size) != HAL_OK)
+    /* Los datos van a un buffer intermedio, NO al destino: recién se copian si
+     * el CRC valida. Leer directo sobre `config` dejaba al llamador corriendo
+     * con datos corruptos aunque detectara el error — y "los defaults" que creía
+     * conservar ya habían sido pisados. */
+    if (eeprom_read(addr, cfg_scratch, config_size) != HAL_OK)
         return EEPROM_ERR_I2C;
     addr += config_size;
 
@@ -241,9 +253,10 @@ eeprom_status_t EEPROM_LoadConfig(void *config, uint16_t config_size)
     if (eeprom_read(addr, (uint8_t*)&stored_crc, 2) != HAL_OK)
         return EEPROM_ERR_I2C;
 
-    uint16_t calc_crc = crc16_ccitt((const uint8_t*)config, config_size);
+    uint16_t calc_crc = crc16_ccitt(cfg_scratch, config_size);
     if (calc_crc != stored_crc)
         return EEPROM_ERR_CRC;
 
+    memcpy(config, cfg_scratch, config_size);
     return EEPROM_OK;
 }

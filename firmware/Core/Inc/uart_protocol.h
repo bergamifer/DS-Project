@@ -164,21 +164,22 @@ _Static_assert(CFG_PAYLOAD_SIZE <= PROTO_MAX_PAYLOAD,
 void UART_Protocol_Init(UART_HandleTypeDef *huart_esp, UART_HandleTypeDef *huart_dbg);
 
 /**
- * @brief Check if a new valid config has been received
- * @return 1 if new config available (clears flag), 0 otherwise
+ * @brief Se lleva una COPIA de la última config recibida, si hay una nueva.
+ * @param dst  destino; se llena sólo si la función devuelve 1.
+ * @return 1 una vez por config nueva, 0 si no hay ninguna pendiente.
+ *
+ * ⚠️ REGLA DEL MÓDULO: nada devuelve un puntero a memoria que escribe el ISR.
+ * Reemplaza al par HasNewConfig()/GetConfig(), donde el segundo entregaba el
+ * buffer vivo y el main loop leía de ahí mientras el ISR podía estar
+ * escribiéndole encima una trama nueva. La copia va con la IRQ apagada.
  */
-uint8_t UART_Protocol_HasNewConfig(void);
+uint8_t UART_Protocol_TakeConfig(ds_config_t *dst);
 
 /**
- * @brief Get pointer to the current received config
- * @return Pointer to ds_config_t (valid after HasNewConfig returns 1)
+ * @brief Print a config snapshot to debug UART (minicom).
+ * @param cfg  la copia obtenida con UART_Protocol_TakeConfig().
  */
-const ds_config_t* UART_Protocol_GetConfig(void);
-
-/**
- * @brief Print received config to debug UART (minicom)
- */
-void UART_Protocol_PrintConfig(void);
+void UART_Protocol_PrintConfig(const ds_config_t *cfg);
 
 /**
  * @brief Get total bytes received on UART4 RX (diagnostic)
@@ -222,10 +223,15 @@ void UART_Protocol_Yield(void);
 void UART_Protocol_SendStatus(const ds_status_t *st);
 
 /**
- * @brief IP del ESP32, reportada por CMD_ESP_INFO.
- * @return Cadena NUL-terminada; "" mientras no se haya recibido ninguna.
+ * @brief Copia la IP del ESP32 (CMD_ESP_INFO) al buffer del llamador.
+ * @param dst       destino; queda NUL-terminado siempre.
+ * @param dst_size  tamaño de dst (≥ ESP_IP_MAXLEN+1 para no truncar).
+ *
+ * Copia en vez de devolver el puntero, por la misma regla que TakeConfig: la
+ * cadena la escribe el ISR y una trama nueva a mitad de lectura mezclaría dos
+ * direcciones. Queda "" mientras no se haya recibido ninguna.
  */
-const char* UART_Protocol_GetEspIp(void);
+void UART_Protocol_CopyEspIp(char *dst, uint32_t dst_size);
 
 /**
  * @brief Poll for a CMD_SET_VOLUME request.
