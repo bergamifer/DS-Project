@@ -139,8 +139,14 @@ curl -X POST http://$IP/volume -d '{"db":-40}' # y subir de a poco
 
 > Si algo suena mal, lo más útil que se puede capturar es el **log serie del
 > minuto en cuestión** más `curl -s http://$IP/status`: entre `underruns`
-> (acumulado desde v5), `out_clip`, `adc_ovf` y `stm32_uptime_ms` casi siempre
-> alcanza para separar deadline / recorte / reinicio sin volver a escuchar.
+> (acumulado desde v5), `out_clip`, `adc_ovf`, `cpu_fills_pct` (v6) y
+> `stm32_uptime_ms` casi siempre alcanza para separar deadline / recorte /
+> presupuesto de CPU / reinicio **sin volver a escuchar**.
+>
+> **Presupuesto de CPU esperado** (`cpu_fills_pct`, medido 2026-08-18): RX beam
+> 1,3 % · walker 2,2 % · monitor 4,9 % · AUTOFOCUS 11,1 % · TX con tono 27,0 % ·
+> MULTIFOCUS 4 tonos 63,4 % · MULTIFOCUS 8 entradas 64,8 %. Si alguno aparece
+> muy por encima de eso, hay una regresión de rendimiento — y esa se ve sin oído.
 
 ## 4. Pruebas, en orden de valor diagnóstico
 
