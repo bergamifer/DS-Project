@@ -1,0 +1,71 @@
+{
+  "$comment": [
+    "Permisos de herramientas para este proyecto. La idea es no tener que aprobar",
+    "de a una cada compilacion, cada flasheo y cada consulta a la placa.",
+    "Son reglas de PREFIJO: 'Bash(make:*)' cubre cualquier invocacion de make.",
+    "Deliberadamente NO se incluye nada que borre (rm, git clean) ni que publique",
+    "hacia afuera: eso conviene que siga preguntando."
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(make:*)",
+      "Bash(cmake:*)",
+      "Bash(idf.py:*)",
+      "Bash(st-flash:*)",
+      "Bash(st-info:*)",
+      "Bash(st-util:*)",
+      "Bash(arm-none-eabi-gcc:*)",
+      "Bash(arm-none-eabi-nm:*)",
+      "Bash(arm-none-eabi-size:*)",
+      "Bash(arm-none-eabi-objdump:*)",
+      "Bash(arm-none-eabi-objcopy:*)",
+
+      "Bash(curl -s http://domosonica.local/*)",
+      "Bash(curl -s -m * http://domosonica.local/*)",
+      "Bash(curl -X POST http://domosonica.local/*)",
+      "Bash(curl -s -X POST http://domosonica.local/*)",
+      "Bash(curl -s -m * -X POST http://domosonica.local/*)",
+      "Bash(ping -c * domosonica.local)",
+      "Bash(dns-sd:*)",
+
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git stash:*)",
+
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(sort:*)",
+      "Bash(cut:*)",
+      "Bash(tr:*)",
+      "Bash(find:*)",
+      "Bash(chmod:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(sleep:*)",
+      "Bash(until:*)",
+      "Bash(for:*)",
+      "Bash(echo:*)",
+
+      "Read(//Users/bergamifer/STM32CubeIDE/DS-Firmware/**)",
+      "Read(//private/tmp/claude-501/**)",
+      "Edit(//Users/bergamifer/STM32CubeIDE/DS-Firmware/**)",
+      "Write(//private/tmp/claude-501/**)"
+    ]
+  }
+}
