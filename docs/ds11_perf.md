@@ -1,9 +1,44 @@
-# DS11 — Performance del pipeline de audio (2026-08-13)
+# DS11 — Performance del pipeline de audio
 
-> Sesión de medición sobre la placa DS11 reparada, con los 32 canales activos.
-> Resultado corto: **el modo 15 no entraba en el presupuesto de CPU y ahora sí.**
-> El costo de fill bajó ~43× en el peor modo con tres cambios, ninguno de los
-> cuales toca el algoritmo de beamforming.
+> **Bitácora acumulativa**, de la más vieja a la más nueva. Si venís a buscar el
+> estado actual, está acá abajo; las secciones son el registro de cómo se llegó.
+
+## Estado actual (2026-08-19)
+
+| | |
+|---|---|
+| Buffer | **240 muestras** = 5 ms · latencia total **5062 µs** |
+| Fill | min 61 / avg 62 / max 63 µs · jitter **1 µs** · SYNC bancos **1 µs** |
+| Errores | **0 underruns, 0 errores SAI** en los 16 modos, y en 13 h continuas |
+| CPU | RX beam 1,3 % · walker 2,2 % · monitor 4,9 % · AUTOFOCUS 11,1 % · TX ondulante 27,0 % · MULTIFOCUS 4 tonos 63,4 % · **MULTIFOCUS 8 entradas 64,8 %** |
+| Validado a oído | 2026-08-19: sin pops en 13/14/0, steering correcto y **no espejado** |
+| Pendiente | **MDMA** (§5, "la palanca que sí queda") — nada más en la lista |
+
+**Cómo mirar el rendimiento sin cable**: `curl -s http://domosonica.local/status`
+trae `cpu_fills_pct`, `underruns`, `sai_errors`, `out_clip`, `adc_ovf` y
+`stm32_uptime_ms` (proto v6). Un modo muy por encima de la tabla de arriba es una
+regresión, y se ve sin escuchar nada.
+
+### Índice
+
+| § | tema |
+|---|---|
+| 1–4 | La sesión fundacional (2026-08-13): sin cachés, modo 15 inusable → 43× |
+| 5 | Roadmap: qué se hizo, qué se descartó y qué queda (MDMA) |
+| 6 | Soak de 19,6 h |
+| 7 | El buffer de 240 destapó dos bugs en el modo 14 |
+| 8 | El resumen de 60 s tiraba fills pendientes — un pop por minuto |
+| 9 | Auditoría de concurrencia ISR ↔ main loop: tres carreras |
+| 10 | El modo 15 estaba al tope, y no había forma de verlo |
+
+---
+
+## 1–4 · La sesión fundacional (2026-08-13)
+
+> Resultado corto: **el modo 15 no entraba en el presupuesto de CPU y pasó a
+> entrar.** El costo de fill bajó ~43× en el peor modo con tres cambios —I-cache,
+> `delay_line` a DTCM, `-O2`— ninguno de los cuales toca el algoritmo de
+> beamforming.
 
 ---
 
@@ -300,7 +335,10 @@ esas frecuencias romperían el modo single-rate de 8 canales que necesitamos
 Por lo tanto **la única palanca que queda es el buffer**, que son 10 de los
 11,4 ms. Ver la sección siguiente.
 
-### Bajar el buffer de 480 a 240 muestras — la optimización grande pendiente
+### ✅ Bajar el buffer de 480 a 240 muestras — HECHO (2026-08-18)
+
+> Aplicado y medido: latencia total **5062 µs**. Destapó dos bugs en el modo 14
+> (§7) que estaban latentes. El análisis de abajo es el que llevó a hacerlo.
 
 Ahorraría **5 ms**: la latencia total pasaría de 11,4 ms a **6,4 ms (−44 %)**.
 
