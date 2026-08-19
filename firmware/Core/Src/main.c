@@ -326,13 +326,13 @@ static const ui_state_t ui_states[] = {
   //
   // X en el marco del OYENTE MIRANDO LOS CONOS (si L/R salen espejados en la
   // caja real, invertir el signo de las coords SPK — una línea). Y hacia fila 4.
-  { .name = "TX tono 2k centro @1m",        .beam = 1, .tx = 1, .tone = 1,
+  { .name = "TX 2k ondulante centro @1m",   .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 2000, .fx_mm =    0, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX tono 2k izq 0.5m @1m",      .beam = 1, .tx = 1, .tone = 1,
+  { .name = "TX 2k ondulante izq 0.5m @1m", .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 2000, .fx_mm = -500, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX tono 2k der 0.5m @1m",      .beam = 1, .tx = 1, .tone = 1,
+  { .name = "TX 2k ondulante der 0.5m @1m", .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 2000, .fx_mm =  500, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX tono 2k CERCA 0.3m",        .beam = 1, .tx = 1, .tone = 1,
+  { .name = "TX 2k ondulante CERCA 0.3m",   .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 2000, .fx_mm =    0, .fy_mm = 0, .fz_mm =  300 },
   // Measured focal calibration: mic at the target point → ADC input 1 (c0),
   // chirp scan of every speaker → TOF-derived delays + polarity, then a
@@ -345,9 +345,9 @@ static const ui_state_t ui_states[] = {
   // única fila poblada. Ahora la apertura vertical (480mm) también enfoca.
   // 2kHz spot @1m: ±14cm; 1kHz: ±27cm (ratio ~2 is the self-validating
   // test). APPEND ONLY: the ESP32/web/app mirror these indices.
-  { .name = "TX tone 2k focus @1m",         .beam = 1, .tx = 1, .tone = 1,
+  { .name = "TX 2k ondulante centro @1m (= modo 7)", .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 2000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000 },
-  { .name = "TX tone 1k focus @1m",         .beam = 1, .tx = 1, .tone = 1,
+  { .name = "TX 1k ondulante centro @1m (spot 2x)",  .beam = 1, .tx = 1, .tone = 1,
     .tone_hz = 1000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000 },
   // MULTIFOCUS: 4 tonos internos, cada uno enfocado en su propio punto —
   // caminando la sala, un analizador espectral "lee" la posición por cuál
@@ -402,6 +402,15 @@ static uint32_t tone_phase_q16 = 0;
  * El acumulador de fase de Tone_NextSample es continuo → sin clicks. La
  * frecuencia se actualiza una vez por half-buffer (pasos ≤0.3% cada 10ms).
  * Techo: 2000×1.05 = 2100 Hz < 2140 (límite d=λ/2, sin grating lobes). */
+/* Dither de frecuencia: triángulo de ±5% a 3 Hz sobre la base (a 2 kHz son
+ * 1900-2100 Hz). Se oye como un tono ONDULANTE, y de ahí el nombre de los modos
+ * — no es un tono puro y llamarlo así confundía.
+ *
+ * No es cosmético ni un defecto: un tono PURO en una sala arma ondas
+ * estacionarias con nodos fijos en el espacio, así que caminando se escucha el
+ * patrón de la SALA en vez del foco del beam. El dither los emborrona. La
+ * verificación del steering del 2026-08-19 —modo 8 más fuerte a 50 cm a la
+ * izquierda, modo 9 a la derecha— funcionó gracias a esto. */
 #define TONE_DITHER_PERIOD 16000   /* samples @48kHz → LFO de 3 Hz */
 static volatile uint16_t tone_base_hz = 2000;
 static uint32_t tone_dither_pos = 0;

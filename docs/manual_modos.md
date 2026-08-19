@@ -69,13 +69,13 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 | 4 | `RX beam az=-30` | ídem, −30° | ídem | |
 | 5 | `RX beam az=+60` | ídem, +60° | ídem | |
 | 6 | `RX beam az=-60` | ídem, −60° | ídem | |
-| 7 | `TX tono 2k centro @1m` | Tono interno 2 kHz | 32 canales con delays focales | Foco (0, 0, 1000) mm |
-| 8 | `TX tono 2k izq 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
-| 9 | `TX tono 2k der 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
-| 10 | `TX tono 2k CERCA 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
+| 7 | `TX 2k ondulante centro @1m` | Tono interno 2 kHz | 32 canales con delays focales | Foco (0, 0, 1000) mm |
+| 8 | `TX 2k ondulante izq 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
+| 9 | `TX 2k ondulante der 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
+| 10 | `TX 2k ondulante CERCA 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
 | 11 | `AUTOFOCUS scan (mic->ADC c0)` | Chirp por parlante + mic | Scan → tono enfocado medido | Requiere mic en ADC c0 |
-| 12 | `TX tono 2k dither foco @1m` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
-| 13 | `TX tono 1k dither foco @1m` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
+| 12 | `TX 2k ondulante centro @1m (= modo 7)` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
+| 13 | `TX 1k ondulante centro @1m (spot 2x)` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
 | 14 | `MULTIFOCUS 4 tonos @1m` | 4 tonos internos (1.3/1.6/1.9/2.1 kHz) | Cada tono enfocado en su propio punto | Precuela de la intervención 8-in |
 | 15 | `MULTIFOCUS 8 entradas @1m` | Las 8 entradas analógicas | Cada entrada enfocada en su propio punto | **La intervención**: 8 señales, 8 lugares |
 
@@ -238,6 +238,30 @@ sin instrumental y sin nada conectado a la entrada.
 > ⚠️ **Estos modos NO se distinguen por el timbre** — es el mismo tono en los
 > cuatro. Lo que cambia es **dónde** en la sala sube el nivel. Escucharlos parado
 > en un solo punto no prueba nada.
+
+### Por qué se llaman "ondulante" y no "tono"
+
+No producen un tono puro: la frecuencia hace un **triángulo de ±5 % a 3 Hz**
+(a 2 kHz, entre 1900 y 2100 Hz). Se llamaban "tono 2k", y eso confundía —
+reportado el 2026-08-19 escuchándolos.
+
+**No es un defecto ni algo cosmético.** Un tono puro en una sala arma **ondas
+estacionarias** con nodos fijos en el espacio: caminando se escucharía el patrón
+de la **sala**, no el foco del beam. El dither los emborrona, y por eso lo que se
+oye es el beam de verdad.
+
+Concretamente: la verificación del steering —modo 8 más fuerte parado 50 cm a la
+izquierda, modo 9 más fuerte a la derecha, **sin espejar**— funcionó *gracias* a
+la ondulación. Un tono puro habría dado un resultado mucho menos confiable.
+
+> ✅ **Steering verificado a oído el 2026-08-19.** El 8 (foco −500 mm) suena más
+> fuerte a la izquierda y más bajo a la derecha; el 9 al revés. **La orientación
+> NO está espejada** — el marco del oyente mirando los conos es correcto y
+> `spk_x_mm[]` no necesita cambio de signo. Dato firme para la DS12.
+>
+> El 10 (0,3 m) contra el 7 (1 m) también se percibe, aunque **es ambiguo**:
+> acercarse al array sube el nivel por distancia, más allá del foco. Para que ese
+> test sea concluyente conviene que el 7 enfoque más lejos (ver "Próximos pasos").
 
 - `Beam_UpdateTxFocus()`: d_k = |foco − parlante_k|/c; delay_k = max(d) − d_k
   (el parlante más lejano dispara primero). Delays en **Q8** (1 LSB = 1/256 de
