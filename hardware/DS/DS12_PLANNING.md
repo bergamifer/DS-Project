@@ -98,6 +98,24 @@ que aunque se respetara λ/2 la resolución vertical sería peor.
 > (`Beam_InitTxGeometry` + `Beam_SetTxFocus`); lo que falla es que el array no
 > tiene resolución vertical a esa frecuencia.
 
+#### El experimento que decide entre las tres opciones: **modo 17** (2026-08-20)
+
+Antes de rediseñar el layout mecánico conviene saber **cuál de los dos límites
+manda**, porque piden cosas distintas y sólo uno se arregla bajando el pitch:
+
+- ¿el **aliasing** (pitch de 160 mm)? → bajar el pitch alcanza.
+- ¿la **apertura** (sólo 4 filas, 480 mm)? → hay que **agregar filas**, y bajar
+  el pitch sin agregarlas no cambiaría nada.
+
+El modo 17 los separa: barre el foco en vertical con un tono de **800 Hz**, donde
+el pitch de 160 mm son 0,37 λ — **sin lóbulos de rejilla en todo el rango de
+steering**. Si a 800 Hz se percibe movimiento vertical y a 2 kHz no, el limitante
+es el aliasing y el rediseño se justifica. Si tampoco se percibe, el limitante es
+la apertura: a 800 Hz son 1,12 λ → haz de ~51°, spot de ±45 cm a 1 m.
+
+**Es una medición de una tarde que decide gasto de hardware.** Pendiente de
+correr. Procedimiento en `docs/manual_modos.md`, sección "Modo 17".
+
 ## 🔴 Prioridad alta
 
 ### 1. Margen del buck a 24V — el TVS NO protege al MP2315S

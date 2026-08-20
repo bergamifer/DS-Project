@@ -63,14 +63,17 @@
  * de las filas 3 y 4 no se podían tocar desde el ESP32. */
 #define CFG_PAYLOAD_SIZE    102
 #define CFG_NUM_CHANNELS    32
-#define PROTO_VERSION       6   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION       7   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
                                  * v6: + cpu_fills_x10 — el presupuesto de CPU
                                  * del pipeline sólo se veía por el serie, así
                                  * que diagnosticar "este modo no entra" pedía
-                                 * un cable. Ahora sale por /status. */
+                                 * un cable. Ahora sale por /status.
+                                 * v7: + mic_live_mask / cal_progress /
+                                 * cal_ok_count — el AUTOFOCUS se puede correr
+                                 * y juzgar desde la página, sin serie. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -132,7 +135,14 @@ typedef struct __attribute__((packed)) {
     uint8_t  state_flags;    /* v4: ver STATE_F_* */
     uint32_t uptime_ms;      /* v5: uptime del STM32 (HAL_GetTick) */
     uint16_t cpu_fills_x10;  /* v6: % de CPU en los 4 fills, ×10 (263 = 26,3%) */
-} ds_status_t;               /* 68 + 2 = 70 bytes */
+    /* v7 — los tres existen para que el AUTOFOCUS se pueda correr SIN una
+     * terminal serie abierta. Hasta ahora el scan sólo se contaba por UART:
+     * desde la página no había forma de saber si el micrófono estaba vivo, por
+     * qué parlante iba, ni si el resultado servía. */
+    uint8_t  mic_live_mask;  /* v7: bit N = entrada N con señal (no sólo ruido) */
+    uint8_t  cal_progress;   /* v7: parlantes ya medidos, 0..CAL_NUM_CH */
+    uint8_t  cal_ok_count;   /* v7: de esos, cuántos con calidad suficiente */
+} ds_status_t;               /* 70 + 3 = 73 bytes */
 
 /* Estado REAL, no el nominal.
  *
@@ -153,7 +163,7 @@ typedef struct __attribute__((packed)) {
  * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18
  * midiendo underruns, cuando el contador BAJÓ de 6 a 0 — un contador monótono
  * que retrocede es un reboot, y no había con qué confirmarlo. */
-_Static_assert(sizeof(ds_status_t) == 70, "ds_status_t must be 70 bytes");
+_Static_assert(sizeof(ds_status_t) == 73, "ds_status_t must be 73 bytes");
 /* ⚠️ Un payload por encima de PROTO_MAX_PAYLOAD hace que el ESP32 descarte la
  * trama por larga y el endpoint quede mudo SIN dar error — de ahí los asserts. */
 _Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,

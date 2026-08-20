@@ -79,6 +79,7 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 | 14 | `MULTIFOCUS 4 tonos @1m` | 4 tonos internos (1.3/1.6/1.9/2.1 kHz) | Cada tono enfocado en su propio punto | Precuela de la intervención 8-in |
 | 15 | `MULTIFOCUS 8 entradas @1m` | Las 8 entradas analógicas | Cada entrada enfocada en su propio punto | **La intervención**: 8 señales, 8 lugares |
 | 16 | `TX 2k BARRIDO izq<->der @1m` | Tono interno 2 kHz | Foco barriendo ±700 mm, ciclo de 5 s | **Demuestra el steering sin caminar** |
+| 17 | `BARRIDO VERTICAL 800Hz arriba<->abajo @1m` | Tono interno **800 Hz** | Foco barriendo ±600 mm en Y, ciclo de 5 s | **Es un experimento**, no una demo — decide un gasto de hardware en DS12 |
 
 **IMPORTANTE (append-only)**: los índices están espejados en el ESP32, la web y
 la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
@@ -97,9 +98,51 @@ cuando se va**.
 - Usa `Beam_SetTxFocus()`, la versión **silenciosa**: la que imprime la tabla de
   delays por fila sería inviable 20 veces por segundo.
 
-> ⚠️ **El barrido es horizontal a propósito.** En vertical el array no enfoca a
-> 2 kHz — las filas están a 160 mm = 0,93 λ, por encima del límite λ/2, así que
-> produce lóbulos de rejilla en vez de un foco. Ver `DS12_PLANNING.md` §0.5.
+> ⚠️ **El barrido del modo 16 es horizontal a propósito.** En vertical el array
+> no enfoca a 2 kHz — las filas están a 160 mm = 0,93 λ, por encima del límite
+> λ/2, así que produce lóbulos de rejilla en vez de un foco. Para probar el eje
+> vertical hay que bajar la frecuencia: eso es el modo 17.
+
+---
+
+## Modo 17 — BARRIDO VERTICAL: un experimento, no una demo
+
+**Este modo existe para responder una pregunta de hardware, y la frecuencia ES
+la pregunta.** No lo uses para mostrarle el equipo a alguien; usá el 16.
+
+El 2026-08-19 Fernando reportó que el eje vertical del modo 15 no se percibe.
+La causa es geométrica y **no se arregla por firmware**:
+
+| eje | apertura | paso | a 2 kHz (λ=172 mm) | techo sin lóbulos |
+|-----|----------|------|--------------------|-------------------|
+| horizontal (8 columnas) | 600 mm | 80 mm | 0,47 λ ✅ | **2144 Hz** |
+| vertical (4 filas) | 480 mm | **160 mm** | **0,93 λ** ❌ | **1072 Hz** |
+
+A 2 kHz el array vertical está **aliaseado**: en vez de un foco produce lóbulos
+de rejilla. A 800 Hz (con el dither de ±5 %, 840 Hz máximo) el paso vertical es
+0,37 λ — **dentro del límite en todo el rango de steering**.
+
+### Cómo se lee el resultado
+
+Parate quieto a ~1 m y escuchá el ciclo de 5 s. Hay **dos respuestas posibles y
+las dos deciden plata**:
+
+- **Se percibe movimiento vertical** → la causa era el aliasing. Bajar el paso
+  de filas a ≤86 mm en la DS12 **se justifica**.
+- **No se percibe** → el limitante son las 4 filas, no el paso. La apertura
+  vertical de 480 mm son 1,12 λ a 800 Hz: haz de ~51°, spot de ±45 cm a 1 m.
+  Achicar el paso **no alcanza** — hay que agregar filas.
+
+Compará contra el modo 16 (mismo barrido, eje horizontal, 2 kHz), que es donde
+el array sí tiene resolución: esa es la referencia de "así se siente cuando
+funciona".
+
+> La amplitud vertical es ±600 mm y no ±700 como en el 16, porque el haz
+> vertical es mucho más ancho: barrer más sacaría el foco fuera de la zona donde
+> el array todavía puede formarlo, y el recorrido se percibiría como un simple
+> subir y bajar de volumen.
+
+Detalle de la decisión de producto: `hardware/DS/DS12_PLANNING.md` §0.5.
 
 ---
 
@@ -340,6 +383,46 @@ heartbeat = nivel en el foco. Para re-escanear, salir y volver a entrar.
 - Salir del modo aborta cualquier scan en curso.
 - **No se restaura al boot** (ver Persistencia arriba).
 - `cal_state` (0=idle … 5=done) se reporta en la telemetría `CMD_STATUS`.
+
+### Se corre desde la página, sin cable serie (2026-08-20)
+
+Hasta ahora el scan sólo se podía seguir por UART, y **terminaba diciendo
+`done` aunque no hubiera medido nada**. Con el micrófono desenchufado o los
+amplificadores apagados, la correlación elegía el máximo del *ruido*, el equipo
+se quedaba con 32 retardos arbitrarios, pisaba un foco anterior que sí servía, y
+después "reproducía un tono enfocado en el micrófono" que no estaba enfocado en
+ningún lado. **El fallo era indistinguible del éxito.**
+
+En `http://domosonica.local` hay una tarjeta **AUTOFOCUS** con cinco filas que
+se pintan solas — rojo por defecto, porque "todavía no se comprobó" y "está mal"
+se atienden igual:
+
+| fila | verde cuando | de dónde sale |
+|------|--------------|---------------|
+| amplificadores | están encendidos | `state_flags` bit 0 |
+| micrófono en la entrada 1 | c0 tiene señal, no sólo ruido | `mic_live_mask` bit 0 |
+| nivel del micrófono | entre el umbral y −6 dBFS | `adc_pk[0]`, en dBFS |
+| scan | terminó (ámbar mientras corre, con `N/32`) | `cal_state` + `cal_progress` |
+| resultado | ≥16/32 parlantes medidos con confianza | `cal_ok_count` |
+
+**Y ahora un scan malo NO se aplica.** Con menos de la mitad de los parlantes
+por encima de `CAL_Q_MIN`, los retardos anteriores quedan **intactos** y el
+serie dice qué revisar. Verificado el 2026-08-20 en el peor caso —sin micrófono
+y con los amplificadores apagados—: **4/32**, descartado.
+
+El botón *Iniciar scan* entra al modo 11; volver a entrar **relanza** el scan,
+así que sirve igual para arrancar y para repetir después de corregir una fila.
+
+> **Detección de micrófono**: pico de 1 s sobre *todas* las muestras ≥ 2000
+> cuentas (escala 24 bits), con 3 s de histéresis para que una pausa al hablar
+> no cuente como desconexión. El piso de ruido con las entradas al aire, medido
+> el 2026-08-20, es de 437 cuentas máximo → el umbral queda 13 dB arriba. Un
+> micrófono con preamplificador captando una sala en silencio lo cruza de sobra
+> (−40 dBFS son 83886 cuentas).
+>
+> ⚠️ Los números de piso de ruido "43–224" que aparecen en comentarios viejos
+> son de cuando el pico se calculaba sobre una ventana de 10 ms: **subestiman el
+> piso real por un factor de ~2.**
 
 ## Modos 12–13 — TX tone (validación de direccionalidad sin mic)
 

@@ -232,11 +232,38 @@ curl -X POST http://<IP>/mode -d '{"mode":15}'
 - [ ] Con una sola fuente conectada ya se prueba: una voz situada en un punto
       del aire. Las entradas libres sólo aportan piso de ruido.
 
+## 4.6 Modo 17 — BARRIDO VERTICAL: la medición que decide la DS12
+
+**No es una demo, es un experimento.** Parado quieto a ~1 m, escuchá el ciclo de
+5 s y anotá cuál de las dos cosas pasa:
+
+- [ ] **Se percibe el foco subiendo y bajando** → el problema del eje vertical
+      era el *aliasing* (filas a 0,93 λ a 2 kHz). Bajar el pitch de filas a
+      ≤86 mm en la DS12 se justifica.
+- [ ] **No se percibe nada, o sólo sube y baja el volumen** → el limitante es la
+      *apertura* (sólo 4 filas). Bajar el pitch no alcanza: hay que agregar filas.
+
+Referencia de "así se siente cuando funciona": el modo 16, mismo barrido pero
+horizontal, donde el array sí tiene resolución. Correr los dos seguidos.
+
+Fundamento y consecuencias: `hardware/DS/DS12_PLANNING.md` §0.5.
+
+---
+
 ## 5. Cuando llegue el preamp (ECM8000 + Focusrite 2i2)
 
+- [ ] **Antes de escanear, mirar la tarjeta AUTOFOCUS** en
+      `http://domosonica.local`: las cinco filas tienen que estar en verde hasta
+      "nivel del micrófono". Si el micrófono no da señal o los amps están
+      apagados, el scan mide ruido — y desde el 2026-08-20 lo **descarta** en vez
+      de aplicar 32 retardos de basura (verificado: 4/32 en el peor caso).
 - [ ] AUTOFOCUS (modo 11) — ahora escanea **los 32 parlantes, ~8 s**. El mic
       no se mueve durante todo el barrido. Guía completa en
       `autofocus_setup.md`.
+- [ ] La fila "resultado" tiene que decir **≥16/32 parlantes medidos con
+      confianza**. Con menos, el scan queda descartado: revisar nivel del preamp
+      y posición del micrófono antes de repetir (el botón *Iniciar scan*
+      relanza).
 - [ ] Revisar los `sign=` del log: cualquier `-` es un parlante con polaridad
       invertida. La doble inversión de los canales impares es **deliberada**
       y debería dar `+` en todos; un `-` inesperado es un dato de hardware.

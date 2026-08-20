@@ -110,8 +110,11 @@ typedef struct __attribute__((packed)) {
     uint8_t  state_flags;     // v4: bit0 amps encendidos, bit1 beam custom activo
     uint32_t uptime_ms;       // v5: uptime DEL STM32 (el otro uptime es de este chip)
     uint16_t cpu_fills_x10;   // v6: % de CPU en los 4 fills, x10 (263 = 26,3%)
+    uint8_t  mic_live_mask;   // v7: bit N = entrada N con senal (no solo ruido)
+    uint8_t  cal_progress;    // v7: parlantes ya medidos por el AUTOFOCUS
+    uint8_t  cal_ok_count;    // v7: de esos, cuantos con calidad suficiente
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 70, "ds_status_t debe ser 70 bytes");
+_Static_assert(sizeof(ds_status_t) == 73, "ds_status_t debe ser 73 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 
@@ -135,6 +138,7 @@ static const char *MODE_NAMES[] = {
     "MULTIFOCUS 4 tonos @1m",
     "MULTIFOCUS 8 entradas @1m",
     "TX 2k BARRIDO izq<->der @1m",
+    "BARRIDO VERTICAL 800Hz arriba<->abajo @1m",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 
@@ -605,6 +609,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"adc_ovf\":%lu,\"out_clip\":%lu,"
             "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
             "\"cpu_fills_pct\":%u.%u,"
+            "\"mic_live\":%u,\"cal_prog\":%u,\"cal_ok\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
@@ -621,6 +626,7 @@ static esp_err_t status_handler(httpd_req_t *req)
              * chip y se leia como si fuera el de la placa, asi que un reinicio
              * del STM32 resultaba INVISIBLE desde la red. */
             s->cpu_fills_x10 / 10, s->cpu_fills_x10 % 10,
+            s->mic_live_mask, s->cal_progress, s->cal_ok_count,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
     } else {
@@ -875,6 +881,14 @@ static const char INDEX_HTML[] =
 ".meter{display:flex;gap:3px;height:36px;align-items:flex-end;margin-top:6px}"
 ".bar{flex:1;background:#2a6;min-height:2px;border-radius:2px 2px 0 0}"
 "#st{font-size:.8em;color:#888;white-space:pre-wrap}"
+/* Checklist del AUTOFOCUS: un punto por fila, rojo por defecto. El default es
+ * rojo a proposito — "todavia no se comprobo" y "esta mal" se atienden igual, y
+ * un verde por omision seria una mentira que cuesta 8 segundos de scan. */
+".chk{list-style:none;padding:0;margin:6px 0;font-size:.85em}"
+".chk li{padding:4px 0 4px 22px;position:relative;color:#bbb}"
+".chk li:before{content:'';position:absolute;left:4px;top:9px;width:9px;"
+"height:9px;border-radius:50%;background:#a33}"
+".chk li.ok:before{background:#2a6}.chk li.warn:before{background:#c82}"
 ".row{display:flex;gap:8px;align-items:center}.row button{flex:0 0 auto}"
 "</style></head><body>"
 "<h1>DS Beamformer <span id=link style='font-size:.6em;color:#888'>...</span></h1>"
@@ -919,7 +933,10 @@ static const char INDEX_HTML[] =
  * vertical, el array abajo. Se arrastran los puntos. */
 "<div class=card><h2>MULTIFOCUS &mdash; d&oacute;nde suena cada entrada</h2>"
 "<svg id=pad viewBox='0 0 300 215' "
-"style='width:100%;height:215px;background:#111;border-radius:6px;touch-action:none'>"
+/* height:auto (no 215px fijos) para que la caja tome el aspecto del viewBox: el
+ * dibujo pasa a ocupar TODO el ancho en vez de 300 px centrados, que es el
+ * doble de superficie para agarrar los puntos. */
+"style='width:100%;height:auto;background:#111;border-radius:6px;touch-action:none'>"
 "<rect x=122 y=203 width=56 height=7 fill=#2a6 rx=2></rect>"
 "<text x=150 y=199 fill=#666 font-size=7 text-anchor=middle>array</text>"
 "<line x1=150 y1=12 x2=150 y2=203 stroke=#222 stroke-width=1></line>"
@@ -932,6 +949,25 @@ static const char INDEX_HTML[] =
 "<span class=val id=fyvv>0</span></div>"
 "<div style='font-size:.75em;color:#888;margin-top:6px'>Arrastr&aacute; cada punto. "
 "Aplica al modo MULTIFOCUS activo (14 tonos / 15 entradas).</div></div>"
+/* AUTOFOCUS: el modo mide con un microfono y hasta ahora solo se contaba por el
+ * cable serie. Sin terminal no habia forma de saber si el microfono estaba
+ * vivo, por que parlante iba el scan ni si el resultado servia — y el scan
+ * terminaba diciendo "done" igual. Estas cinco filas son las cinco cosas que
+ * pueden salir mal, en el orden en que hay que resolverlas. */
+"<div class=card><h2>AUTOFOCUS &mdash; calibrar con micr&oacute;fono</h2>"
+"<ol class=chk>"
+"<li id=k1>amplificadores</li>"
+"<li id=k2>micr&oacute;fono en la entrada 1</li>"
+"<li id=k3>nivel del micr&oacute;fono</li>"
+"<li id=k4>scan</li>"
+"<li id=k5>resultado</li></ol>"
+"<div class=row><button onclick=startAF()>Iniciar scan (modo 11)</button></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>El micr&oacute;fono va "
+"<b>en el punto donde quer&eacute;s el foco</b>, enchufado a la entrada 1 (c0), "
+"y no se mueve durante los ~8 s del barrido. J9 no da alimentaci&oacute;n: "
+"hace falta un preamplificador. Al terminar, el equipo reproduce un tono "
+"enfocado ah&iacute;. Si el resultado sale en rojo, los focos anteriores "
+"quedan intactos.</div></div>"
 "<div class=card><h2>Entradas ADC (peak)</h2><div class=meter id=meter></div>"
 "<div id=st>esperando estado...</div></div>"
 "<div class=card><h2>Volver a cero</h2>"
@@ -998,9 +1034,19 @@ static const char INDEX_HTML[] =
 "fetch('/mode',{method:'POST',body:JSON.stringify({mode:14})}).then(poll);}"
 "fetch('/beam',{method:'POST',body:JSON.stringify("
 "{type:'mf',src:i,fx:src[i].x,fy:src[i].y,fz:src[i].z})});}"
-"pad.onpointermove=e=>{if(drag<0)return;const r=pad.getBoundingClientRect();"
-"const px=(e.clientX-r.left)*300/r.width,py=(e.clientY-r.top)*215/r.height;"
-"src[drag].x=IX(px);src[drag].z=IZ(py);drawDots();"
+/* De pixeles de pantalla a unidades del viewBox, con la matriz del PROPIO SVG.
+ * La cuenta a mano —(clientX-r.left)*300/r.width— asume que el viewBox se
+ * estira hasta ocupar la caja, y NO es lo que pasa: con preserveAspectRatio por
+ * defecto el contenido se escala UNIFORME y se centra. El viewBox es 300x215 y
+ * la caja en un escritorio son ~608x215, asi que el dibujo ocupa los 300 px del
+ * medio con 154 px de aire a cada lado. El factor quedaba en 300/608 = 0,49: el
+ * punto seguia al mouse a la MITAD de velocidad en X — y exacto en Y, porque la
+ * altura si coincidia. getScreenCTM() contempla el centrado, el zoom de pagina
+ * y cualquier aspecto, asi que tambien vale en un telefono angosto. */
+"function toPad(e){const p=pad.createSVGPoint();p.x=e.clientX;p.y=e.clientY;"
+"return p.matrixTransform(pad.getScreenCTM().inverse());}"
+"pad.onpointermove=e=>{if(drag<0)return;const q=toPad(e);"
+"src[drag].x=IX(q.x);src[drag].z=IZ(q.y);drawDots();"
 /* Throttle: arrastrar genera decenas de eventos por segundo y cada POST espera
  * el ACK del STM32 por UART a 115200. Sin esto se encola y la UI se traba. */
 "if(Date.now()-padT>150){padT=Date.now();sendSrc(drag);}};"
@@ -1018,6 +1064,12 @@ static const char INDEX_HTML[] =
 "for(let i=0;i<8;i++){src[i]={x:-700+200*i,y:0,z:1000};}sel=0;drawDots();"
 "fyv2.value=0;fyvv.textContent=0;igTouch=0;volTouch=0;poll();"
 "setTimeout(()=>rstv.textContent='',3000);});}"
+/* 0 = rojo (mal o sin comprobar), 1 = ambar (en curso o al limite), 2 = verde. */
+"function chk(n,st,txt){const e=document.getElementById('k'+n);"
+"e.className=st==2?'ok':(st==1?'warn':'');e.textContent=txt;}"
+/* Volver a entrar al modo 11 relanza el scan — por eso el boton sirve tanto
+ * para arrancar como para repetir tras corregir algo del checklist. */
+"function startAF(){fetch('/mode',{method:'POST',body:JSON.stringify({mode:11})}).then(poll);}"
 "function setRx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'rx',az:+az.value})});}"
 "function setTx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'tx',fx:+fx.value,fy:+fy.value,fz:+fz.value})});}"
 "function poll(){fetch('/status').then(r=>r.json()).then(s=>{"
@@ -1041,6 +1093,24 @@ static const char INDEX_HTML[] =
 "lastClip={c:s.out_clip,v:s.adc_ovf};}"
 "const pk=s.adc_pk||[];for(let i=0;i<8;i++){const v=Math.max(2,Math.min(36,Math.log10((pk[i]||1)+1)/7*36));"
 "document.getElementById('b'+i).style.height=v+'px';}"
+/* ===== Checklist del AUTOFOCUS =====
+ * Cada fila dice el estado Y el numero que lo respalda, para que un rojo se
+ * pueda discutir en vez de solo creer. */
+"chk(1,s.amps?2:0,s.amps?'amplificadores encendidos':'amplificadores APAGADOS \\u2014 no va a salir sonido');"
+"const mlive=(s.mic_live&1)!=0;"
+"chk(2,mlive?2:0,mlive?'micr\\u00f3fono con se\\u00f1al en la entrada 1 (c0)':'sin se\\u00f1al en la entrada 1 (c0)');"
+"const p0=pk[0]||0,db=p0>0?Math.round(20*Math.log10(p0/8388607)):-99;"
+/* El techo en -6 dBFS no es el clipeo del ADC sino el margen que necesitan los
+ * picos entre dos lecturas: si el pico de 1 s ya llega ahi, el chirp del scan
+ * puede recortar y la correlacion mide una onda deformada. */
+"chk(3,p0<2000?0:(db>-6?1:2),'nivel c0: '+db+' dBFS'+(p0<2000?' \\u2014 demasiado bajo':(db>-6?' \\u2014 muy caliente, baj\\u00e1 el preamp':' \\u2014 bien')));"
+"const CS=['en reposo','estabilizando sala','preparando','capturando','correlacionando','terminado'];"
+"const cs=s.cal_state|0,cp=s.cal_prog|0,ck=s.cal_ok|0;"
+"chk(4,cs==0?0:(cs==5?2:1),cs>0&&cs<5?('midiendo parlante '+(cp+1)+'/32 \\u2014 no muevas el micr\\u00f3fono')"
+":'scan '+CS[cs]);"
+"chk(5,cs!=5?0:(ck>=16?2:0),cs!=5?'sin resultado todav\\u00eda'"
+":(ck>=16?('foco aplicado \\u2014 '+ck+'/32 parlantes medidos con confianza')"
+":('DESCARTADO \\u2014 solo '+ck+'/32 parlantes \\u00fatiles; focos anteriores intactos')));"
 "document.getElementById('st').textContent="
 "'modo: '+s.mode_name+'  |  vol: '+(s.vol_db<=-64?'MUTE':s.vol_db+'dB')+'  |  foco: ('+s.focus.fx+','+s.focus.fy+','+s.focus.fz+')mm'"
 "+'\\nunderruns: '+s.underruns+'  errores SAI: '+s.sai_errors+'  OVF: '+s.ovf+'  cal: '+s.cal_state;"

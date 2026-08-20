@@ -277,13 +277,53 @@ static inline int32_t Apply_In_Gain(int32_t s) {
  * dos contadores son MONOTÓNICOS y se publican en /status — el heartbeat
  * imprime su delta. */
 static volatile int32_t  adc_peak_hold[ADC_CHANNELS];
+/* DOS peak-holds, no uno, porque tienen dos consumidores que se pisaban.
+ *
+ * El serie drena adc_peak_hold una vez por segundo. /status (telemetría, lo que
+ * ve la página) NO podía leer el mismo: el que llegara primero se comía el pico
+ * y el otro veía cero. La solución que había era recalcular el pico en el
+ * handler de status sobre el buffer DMA vivo — o sea sobre UNA ventana de 10 ms
+ * de cada intervalo de sondeo. Es exactamente el muestreo al 1% que en agosto
+ * hizo concluir "al ADC le sobran 45 dB" mientras el equipo saturaba de forma
+ * audible: se arregló para el serie y quedó sin arreglar para la red.
+ *
+ * Importa ahora porque el detector de micrófono cuelga de esto: con ventanas de
+ * 10 ms un micrófono captando una sala parpadearía entre "vivo" y "muerto". */
+static volatile int32_t  adc_peak_net[ADC_CHANNELS];
 static volatile uint32_t adc_ovf_latch = 0;
 static volatile uint32_t out_clip_count = 0;
+
+/* ===== Detección de micrófono / señal de entrada =====
+ * Nace del AUTOFOCUS: el scan mide con un micrófono en la entrada 1, y hasta
+ * ahora la única forma de saber si ese micrófono estaba vivo era mirar los
+ * números del serie. Si no lo estaba, el scan igual "terminaba" y dejaba 32
+ * retardos de basura enfocando nada — un fallo silencioso.
+ *
+ * Piso de ruido MEDIDO con las entradas al aire, 12 muestras del pico de 1 s
+ * sobre todas las muestras (2026-08-19): máximo 437 cuentas en escala de 24
+ * bits. Ojo con los números viejos de 43-224 que andan por los comentarios: son
+ * de cuando el pico se calculaba sobre una ventana de 10 ms, o sea el 1% del
+ * tiempo — subestiman el piso por un factor de ~2.
+ *
+ * El umbral queda ~13 dB por encima de ese máximo: no lo dispara el ruido
+ * propio, y cualquier micrófono con preamplificador captando una sala en
+ * silencio lo cruza de sobra (−40 dBFS son 83886 cuentas, 40× el umbral).
+ *
+ * La histéresis existe porque una fuente real tiene pausas: alguien deja de
+ * hablar y el micrófono no se desenchufó. */
+#define MIC_LIVE_THRESH   2000      /* pico de 1 s que cuenta como "hay señal" */
+#define MIC_LIVE_HOLD_S   3         /* segundos que sigue "vivo" tras la última */
+static volatile uint8_t mic_live_mask = 0;    /* bit N = entrada N con señal */
 
 /* ===== Operating states — cycled with user button K2 (PA4, press = LOW) =====
  * Flat list: each press advances one state and prints the new one on UART7.
  *   0 ADC monitor  → 1 channel walker → 2..6 RX beam at preset azimuths → wrap
  * Exactly one of adc_monitor_enabled / walker_enabled / beam_enabled is set. */
+/* Eje del barrido automático (campo .sweep). Los valores viven acá arriba
+ * porque la tabla ui_states[] los usa; la mecánica está más abajo, en el
+ * bloque BARRIDO. */
+#define SWEEP_AXIS_X    1
+#define SWEEP_AXIS_Y    2
 typedef struct {
   const char *name;
   uint8_t monitor, walker, beam;
@@ -295,7 +335,7 @@ typedef struct {
   uint16_t tone_hz;               // tone frequency (keep ≤2140: d=λ/2 limit)
   uint8_t mf;                     // 1 = MULTIFOCUS tonos (N fuentes internas)
   uint8_t mfin;                   // 1 = MULTIFOCUS de ENTRADAS (8 ADC → 8 focos)
-  uint8_t sweep;                  // 1 = el foco X barre solo, izquierda↔derecha
+  uint8_t sweep;                  // eje del barrido automático: 0 no, 1 = X, 2 = Y
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor",                  .monitor = 1 },
@@ -365,7 +405,28 @@ static const ui_state_t ui_states[] = {
   // en un punto fijo, el nivel sube cuando el foco pasa por vos y baja cuando se
   // va. Mismo tono ondulante de 2 kHz que los presets.
   { .name = "TX 2k BARRIDO izq<->der @1m", .beam = 1, .tx = 1, .tone = 1,
-    .tone_hz = 2000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000, .sweep = 1 },
+    .tone_hz = 2000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000, .sweep = SWEEP_AXIS_X },
+  // BARRIDO VERTICAL — NO es "el 16 pero en Y": es un EXPERIMENTO, y la
+  // frecuencia es el experimento.
+  //
+  // El 2026-08-19 Fernando reportó que el eje vertical del modo 15 no se
+  // percibe. La causa es geométrica: las filas están a 160 mm, que a 2 kHz son
+  // 0,93 λ — muy por encima del límite de muestreo espacial d ≤ λ/2. El array
+  // vertical está ALIASEADO a esa frecuencia: en vez de un foco produce lóbulos
+  // de rejilla. El techo vertical es c/2d = 1072 Hz, contra 2144 Hz del
+  // horizontal (columnas a 80 mm).
+  //
+  // A 800 Hz (±5% de dither → 840 Hz máx) el paso vertical es 0,37 λ: DENTRO
+  // del límite, sin lóbulos de rejilla, en todo el rango de steering. Si acá se
+  // percibe movimiento vertical y a 2 kHz no, la causa está confirmada como
+  // aliasing y bajar el paso de filas en la DS12 se justifica. Si tampoco se
+  // percibe, el limitante son las 4 filas (apertura 480 mm = 1,12 λ a 800 Hz →
+  // haz de ~51°, spot de ±45 cm a 1 m) y achicar el paso NO alcanza: hay que
+  // agregar filas. Las dos respuestas deciden gasto de hardware — ver
+  // hardware/DS/DS12_PLANNING.md §0.5.
+  { .name = "BARRIDO VERTICAL 800Hz arriba<->abajo @1m", .beam = 1, .tx = 1,
+    .tone = 1, .tone_hz = 800, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000,
+    .sweep = SWEEP_AXIS_Y },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 static volatile uint8_t ui_state_idx = 0;
@@ -448,7 +509,7 @@ static float spk_center_x_mm = 0, spk_center_y_mm = 0;
 // Last TX focal point — reported in CMD_STATUS telemetry
 static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
 
-/* ===== BARRIDO (modo 16) — el foco recorre la sala solo =====
+/* ===== BARRIDO (modos 16 y 17) — el foco recorre la sala solo =====
  * Los presets 8/9 prueban el steering, pero exigen pararse en un punto
  * descentrado y comparar dos modos de memoria. Acá el foco se mueve solo: parado
  * donde sea, el nivel sube cuando el foco pasa por vos y baja cuando se va. Es
@@ -459,9 +520,16 @@ static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
  * de foco por actualización es de ~14 mm = 0,04 muestras de delay, así que no
  * hay salto audible al reapuntar. */
 #define SWEEP_X_MM      700     /* amplitud a cada lado del centro */
+/* Amplitud vertical menor que la horizontal, y no por gusto: la apertura en Y
+ * son 480 mm contra 600 mm en X, y a 800 Hz el haz vertical es MUCHO más ancho
+ * (±45 cm a 1 m). Barrer ±700 mm sacaría el foco fuera de la zona donde el
+ * array todavía puede formarlo, y el recorrido se percibiría como un simple
+ * subir y bajar de volumen. ±600 mm es poco más de un ancho de haz a cada
+ * lado: el máximo recorrido que sigue siendo un foco moviéndose. */
+#define SWEEP_Y_MM      600
 #define SWEEP_HALF_MS   2500    /* medio recorrido → ciclo completo de 5 s */
 #define SWEEP_STEP_MS   50      /* 20 actualizaciones por segundo */
-static volatile uint8_t sweep_enabled = 0;
+static volatile uint8_t sweep_axis = 0;   /* 0 = quieto, SWEEP_AXIS_X / _Y */
 
 /* ===== MULTIFOCUS (modo 14) — N fuentes internas, cada una con su foco =====
  * Precuela de la intervención de 8 entradas analógicas: la infraestructura
@@ -542,7 +610,16 @@ static int64_t  cal_mag_sum = 0;                // for the peak/avg quality rati
 // Per-speaker results
 static int32_t  cal_tof_q8[BEAM_NUM_CHANNELS];  // time of flight, Q8 samples
 static int8_t   cal_meas_sign[BEAM_NUM_CHANNELS];
-static uint16_t cal_quality[BEAM_NUM_CHANNELS]; // peak/avg ×10 (≥~50 = solid)
+static uint16_t cal_quality[BEAM_NUM_CHANNELS]; // peak/avg ×10 (≥CAL_Q_MIN = solid)
+/* Umbral de calidad, ahora con nombre: era un 50 suelto dentro de un printf.
+ * Es peak/avg de la correlación ×10 — o sea "cuánto sobresale el eco del
+ * parlante por encima del resto de la ventana". Por debajo, el máximo elegido
+ * puede ser ruido y el retardo medido no significa nada. */
+#define CAL_Q_MIN 50
+/* Progreso y resultado del scan, publicados en /status (v7). Sin esto, correr
+ * el AUTOFOCUS exigía tener el cable serie enchufado para saber si sirvió. */
+static volatile uint8_t cal_progress = 0;   // parlantes medidos, 0..CAL_NUM_CH
+static volatile uint8_t cal_ok_count = 0;   // de esos, con q ≥ CAL_Q_MIN
 
 /* Extra right-shift applied to the -6dBFS sine table.
  * Now 0: the PAM8302A clipping headroom is handled by the PCM1690's own
@@ -1312,11 +1389,12 @@ int main(void)
     if (autofocus_enabled) Cal_Process();
 
     /* ===== BARRIDO: mover el foco, 20 veces por segundo =====
-     * Triángulo entre −SWEEP_X_MM y +SWEEP_X_MM. Va acá y no en el fill porque
-     * Beam_SetTxFocus usa floats y escribe tx_delay_q8[], que el fill lee: en el
-     * main loop el peor caso es que un fill agarre la tabla a mitad de
-     * actualización, y como el paso son ~14 mm (0,04 muestras) eso no se oye. */
-    if (sweep_enabled) {
+     * Triángulo entre −amp y +amp sobre el eje elegido. Va acá y no en el fill
+     * porque Beam_SetTxFocus usa floats y escribe tx_delay_q8[], que el fill
+     * lee: en el main loop el peor caso es que un fill agarre la tabla a mitad
+     * de actualización, y como el paso son ~14 mm (0,04 muestras) eso no se
+     * oye. */
+    if (sweep_axis) {
       static uint32_t sweep_last_ms = 0;
       uint32_t now_ms = HAL_GetTick();
       if (now_ms - sweep_last_ms >= SWEEP_STEP_MS) {
@@ -1325,9 +1403,11 @@ int main(void)
         int32_t tri = (ph < SWEEP_HALF_MS)                    /* 0→half→0 */
                       ? (int32_t)ph
                       : (int32_t)(2u * SWEEP_HALF_MS - ph);
-        /* tri: 0..SWEEP_HALF_MS  →  x: −SWEEP_X_MM..+SWEEP_X_MM */
-        int32_t x = (2 * SWEEP_X_MM * tri) / (int32_t)SWEEP_HALF_MS - SWEEP_X_MM;
-        Beam_SetTxFocus((int16_t)x, 0, 1000);
+        int32_t amp = (sweep_axis == SWEEP_AXIS_Y) ? SWEEP_Y_MM : SWEEP_X_MM;
+        /* tri: 0..SWEEP_HALF_MS  →  v: −amp..+amp */
+        int32_t v = (2 * amp * tri) / (int32_t)SWEEP_HALF_MS - amp;
+        if (sweep_axis == SWEEP_AXIS_Y) Beam_SetTxFocus(0, (int16_t)v, 1000);
+        else                            Beam_SetTxFocus((int16_t)v, 0, 1000);
       }
     }
 
@@ -1453,14 +1533,15 @@ int main(void)
                        | (custom_beam_active ? STATE_F_CUSTOM : 0);
         st.uptime_ms = HAL_GetTick();
         st.cpu_fills_x10 = cpu_fills_x10;
+        st.mic_live_mask = mic_live_mask;
+        st.cal_progress  = cal_progress;
+        st.cal_ok_count  = cal_ok_count;
+        /* Pico REAL sobre todas las muestras desde el sondeo anterior, drenado
+         * al leerlo. Acá se recalculaba sobre el buffer DMA vivo, o sea 10 ms
+         * de cada intervalo — ver el comentario de adc_peak_net. */
         for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
-          int32_t pk = 0;
-          for (uint32_t f = 0; f < ADC_BUFFER_SAMPLES; f++) {
-            int32_t v = audio_buffer_3b_rx[f * ADC_CHANNELS + ch] >> 8;
-            if (v < 0) v = -v;
-            if (v > pk) pk = v;
-          }
-          st.adc_pk[ch] = pk;
+          st.adc_pk[ch] = adc_peak_net[ch];
+          adc_peak_net[ch] = 0;
         }
         UART_Protocol_SendStatus(&st);
       }
@@ -1612,6 +1693,27 @@ int main(void)
           pk[ch] = adc_peak_hold[ch];
           adc_peak_hold[ch] = 0;
         }
+
+        /* ===== ¿Hay un micrófono vivo en cada entrada? =====
+         * Se calcula acá y no en el handler de /status porque acá la cadencia
+         * es de 1 Hz exacto: pk[] ES el pico del último segundo sobre todas las
+         * muestras. En el handler la cadencia la fija el sondeo del ESP32 y la
+         * histéresis en segundos no significaría nada.
+         *
+         * Arranca en "callado" a propósito: inicializado en cero, un equipo
+         * recién encendido sin nada enchufado habría mostrado la casilla del
+         * micrófono en verde durante los primeros MIC_LIVE_HOLD_S segundos. */
+        _Static_assert(ADC_CHANNELS == 8, "el inicializador de mic_quiet_s asume 8");
+        static uint8_t mic_quiet_s[ADC_CHANNELS] = {
+          MIC_LIVE_HOLD_S, MIC_LIVE_HOLD_S, MIC_LIVE_HOLD_S, MIC_LIVE_HOLD_S,
+          MIC_LIVE_HOLD_S, MIC_LIVE_HOLD_S, MIC_LIVE_HOLD_S, MIC_LIVE_HOLD_S };
+        uint8_t live = 0;
+        for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
+          if (pk[ch] >= MIC_LIVE_THRESH)              mic_quiet_s[ch] = 0;
+          else if (mic_quiet_s[ch] < MIC_LIVE_HOLD_S) mic_quiet_s[ch]++;
+          if (mic_quiet_s[ch] < MIC_LIVE_HOLD_S)      live |= (uint8_t)(1u << ch);
+        }
+        mic_live_mask = live;
         /* Los contadores son MONOTÓNICOS y acá se imprime el delta contra la
          * impresión anterior. Antes se ponían en cero al imprimir, lo que
          * hacía imposible exponerlos por telemetría: el que leyera primero se
@@ -2916,9 +3018,21 @@ static void Cal_StartScan(void) {
   cal_ch = 0;
   cal_capturing = 0;
   cal_cap_count = 0;
+  cal_progress = 0;
+  cal_ok_count = 0;
   cal_settle = CAL_SETTLE_HALVES;
   cal_state = CAL_SETTLE;
   UART_Print("AUTOFOCUS: mic at the focal point -> ADC input 1 (c0). Scanning...\r\n");
+  /* Las dos formas de tirar 8 segundos de scan a la basura, dichas ANTES y no
+   * después. Sin amplificadores no sale sonido y la correlación mide ruido; sin
+   * señal en c0 no hay nada que correlacionar. En los dos casos el scan
+   * terminaba igual, anunciaba "done" y dejaba 32 retardos sin sentido. */
+  if (!amps_enabled) {
+    UART_Print("  !! AMPS APAGADOS — no va a salir sonido. Encendelos y volve a entrar al modo.\r\n");
+  }
+  if (!(mic_live_mask & (1u << CAL_MIC_CH))) {
+    UART_Print("  !! SIN SENAL en la entrada 1 (c0) — revisa el microfono y su preamp.\r\n");
+  }
 }
 
 /** Cross-correlation of the capture at one lag against the chirp reference. */
@@ -2994,17 +3108,41 @@ static void Cal_Process(void) {
   sprintf(uart_buf, "  CAL ch%u: tof=%ld.%02ld smp sign=%c q=%lu%s\r\n",
           (unsigned)cal_ch, (long)(tq >> 8), (long)((tq & 0xFF) * 100 / 256),
           (cal_best_sign < 0) ? '-' : '+', (unsigned long)q10,
-          (q10 < 50) ? "  (LOW — mic signal?)" : "");
+          (q10 < CAL_Q_MIN) ? "  (LOW — mic signal?)" : "");
   UART_Print(uart_buf);
 
+  if (q10 >= CAL_Q_MIN) cal_ok_count++;
   cal_ch++;
+  cal_progress = cal_ch;      /* lo lee /status: la página muestra "12/32" */
   if (cal_ch < CAL_NUM_CH) {                 // next speaker
     cal_settle = CAL_SETTLE_HALVES;
     cal_state = CAL_SETTLE;
     return;
   }
 
-  // All speakers measured: focal delays = max(tof) − tof_k, signs applied
+  // All speakers measured.
+  /* Un scan malo NO se aplica. Antes se aplicaba siempre: con el micrófono
+   * desconectado o los amplificadores apagados, la correlación elegía el máximo
+   * del RUIDO, el equipo se quedaba con 32 retardos arbitrarios y después
+   * "reproducía un tono enfocado en el micrófono" que no estaba enfocado en
+   * ningún lado. Y encima pisaba un foco anterior que sí servía. El fallo era
+   * indistinguible del éxito salvo leyendo 32 líneas de serie.
+   *
+   * El criterio es la mitad: con menos de la mitad de los parlantes medidos con
+   * confianza, los retardos relativos ya no describen un frente de onda. Los
+   * anteriores quedan intactos y el mensaje dice qué revisar. */
+  if (cal_ok_count < CAL_NUM_CH / 2) {
+    sprintf(uart_buf,
+            "AUTOFOCUS DESCARTADO: solo %u/%u parlantes con senal utilizable "
+            "(q>=%u).\r\n", cal_ok_count, (unsigned)CAL_NUM_CH, CAL_Q_MIN);
+    UART_Print(uart_buf);
+    UART_Print("  Revisa: amps encendidos / microfono en la entrada 1 (c0) / "
+               "volumen maestro. Los focos anteriores NO se tocaron.\r\n");
+    cal_state = CAL_DONE;
+    return;
+  }
+
+  // Focal delays = max(tof) − tof_k, signs applied
   int32_t tmax = 0;
   for (uint32_t k = 0; k < CAL_NUM_CH; k++) {
     if (cal_tof_q8[k] > tmax) tmax = cal_tof_q8[k];
@@ -3016,6 +3154,9 @@ static void Cal_Process(void) {
     tx_delay_q8[k] = (uint16_t)dq;
     speaker_sign[k] = cal_meas_sign[k];
   }
+  sprintf(uart_buf, "AUTOFOCUS OK: %u/%u parlantes con senal utilizable "
+          "(q>=%u).\r\n", cal_ok_count, (unsigned)CAL_NUM_CH, CAL_Q_MIN);
+  UART_Print(uart_buf);
   UART_Print("AUTOFOCUS done — measured delays (samples.frac / sign):\r\n");
   for (uint32_t k = 0; k < CAL_NUM_CH; k++) {
     sprintf(uart_buf, "  ch%lu: %u.%02u %c q=%u\r\n", (unsigned long)k,
@@ -3135,7 +3276,7 @@ static void UI_ApplyState(uint8_t idx) {
   }
   mfocus_in_enabled = st->mfin;
   if (st->mfin) MFocusIn_ApplyDefaults();
-  sweep_enabled = st->sweep;
+  sweep_axis = st->sweep;
   /* Tone source is -6dBFS: el boost que levanta el beam débil del ADC lo
    * saturaría contra los PAM (plan §3.1). Con fuente de ADC, el beam usa la
    * MISMA ganancia de entrada que el resto — un ajuste, una cadena. */
@@ -3199,8 +3340,11 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
    * en vez de discusión. Ambos se limpian al imprimirlos. */
   if (HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN)) adc_ovf_latch++;
 
-  int32_t pk[ADC_CHANNELS];
-  for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) pk[ch] = adc_peak_hold[ch];
+  /* pk[] es el pico de ESTA ventana (arranca en cero) y después se funde en los
+   * dos peak-holds. Antes arrancaba desde adc_peak_hold, lo que ataba el
+   * acumulador a un único consumidor. Los 16 max() del final son despreciables
+   * frente al lazo de 480×8 muestras que ya corre acá. */
+  int32_t pk[ADC_CHANNELS] = {0};
   for (uint32_t i = 0; i < samples; i++) {
     for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
       int32_t v = rx_buf[i * ADC_CHANNELS + ch];
@@ -3210,7 +3354,10 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
       if (v > pk[ch]) pk[ch] = v;
     }
   }
-  for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) adc_peak_hold[ch] = pk[ch];
+  for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
+    if (pk[ch] > adc_peak_hold[ch]) adc_peak_hold[ch] = pk[ch];   /* → serie */
+    if (pk[ch] > adc_peak_net[ch])  adc_peak_net[ch]  = pk[ch];   /* → /status */
+  }
 
   /* AUTOFOCUS capture: append the measurement mic (24-bit) until the window
    * is full. Started in the same loop pass as the chirp emission, so the
