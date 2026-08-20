@@ -407,8 +407,44 @@ se atienden igual:
 
 **Y ahora un scan malo NO se aplica.** Con menos de la mitad de los parlantes
 por encima de `CAL_Q_MIN`, los retardos anteriores quedan **intactos** y el
-serie dice qué revisar. Verificado el 2026-08-20 en el peor caso —sin micrófono
-y con los amplificadores apagados—: **4/32**, descartado.
+serie dice qué revisar.
+
+### El umbral de calidad era exactamente el valor del ruido
+
+Primera versión de esta guarda: sin micrófono daba **4/32** una vez y **7/32**
+otra. Fernando preguntó lo obvio —*¿no es raro que encuentre micrófonos si no
+hay ninguno?*— y tenía razón: no era casual, era la **mediana de la distribución
+del ruido**.
+
+`cal_quality` es `peak/avg × 10` de la correlación. Correlacionando ruido blanco
+contra el chirp, `|c|` es media-normal:
+
+```
+promedio  = σ·√(2/π)                        = 0,798 σ
+máximo sobre N = CAL_MAX_LAG = 4320 lags
+          ≈ σ·√(2·ln N) = σ·√(2·8,371)      = 4,09 σ
+peak/avg  ≈ 5,13                            →  q10 ≈ 51
+```
+
+El umbral estaba en **50**. Cada canal era una moneda al aire y 4-7 de 32 caían
+del lado bueno. **Un cociente siempre encuentra un máximo**: en cualquier
+ventana de ruido hay un lag que sobresale.
+
+Dos correcciones:
+
+1. **`CAL_Q_MIN` 50 → 100.** Exige un máximo de ~8σ, cuya probabilidad sobre
+   4320 lags es del orden de 5·10⁻¹²: nunca. Una detección real tiene ganancia
+   de proceso de √480 ≈ 22 en amplitud, así que queda muy por encima.
+2. **Gate absoluto sobre el pico de la captura** (`cal_cap_peak`), porque un
+   cociente **no distingue señal de ruido fuerte**: si subís el preamp, el ruido
+   crece arriba y abajo y el cociente ni se entera. Si en los 100 ms de captura
+   el micrófono no pasó de `MIC_LIVE_THRESH`, la calidad se anula sin mirar la
+   correlación.
+
+**Verificado 2026-08-20**: tres scans seguidos sin micrófono → **0/32, 0/32,
+0/32**. Determinístico, no lotería. El log por canal ahora imprime también
+`cap=` (el pico de la captura) y distingue `(SIN SENAL en el mic)` de
+`(BAJA — ruido de sala?)`, que son dos problemas distintos.
 
 El botón *Iniciar scan* entra al modo 11; volver a entrar **relanza** el scan,
 así que sirve igual para arrancar y para repetir después de corregir una fila.
@@ -505,6 +541,26 @@ lugares distintos, simultáneamente.
   mismo `POST /beam type:"mf"` de abajo, con throttle de 150 ms mientras se
   arrastra — cada POST espera el ACK del STM32 por UART a 115200, así que sin
   throttle la UI se traba encolando tramas.
+
+  > ⚠️ **El "arrastre fantasma" (encontrado y corregido 2026-08-20).** Síntoma:
+  > el equipo estaba en modo 0 y *"después de un rato empezaba a tirar un tono
+  > solo"*, con `MFOCUS src0: ...` en el serie y `CPU fills` saltando a 61%. No
+  > era el STM32: era la página mandando `POST /beam type=mf`, y **ese comando
+  > apaga el monitor y enciende MULTIFOCUS**.
+  >
+  > Causa: si un `pointerup` se perdía —soltar fuera de la ventana, cambiar de
+  > pestaña a mitad de arrastre, un gesto del trackpad— la variable `drag`
+  > quedaba en ≥0 **para siempre**, y desde ahí **cualquier paso del mouse por
+  > encima del pad re-apuntaba una fuente y cambiaba el modo, sin hacer clic**.
+  > Se volvió frecuente justo cuando el pad pasó a ocupar todo el ancho: el
+  > cursor lo cruza mucho más seguido, sobre todo al scrollear.
+  >
+  > Arreglo: en `pointermove`, `e.buttons == 0` significa que no hay ningún
+  > botón apretado → el arrastre terminó. Más `pointerup` a nivel ventana,
+  > `lostpointercapture` y `blur` como redes de seguridad.
+  >
+  > **Lección**: un comando que cambia el modo de operación no puede colgar de
+  > una variable de estado de UI que sólo se limpia por el camino feliz.
 - **Mover una entrada de lugar** (en vivo, equivalente por comando):
   `POST /beam {"type":"mf","src":5,"fx":200,"fy":0,"fz":800}` — en este
   modo `src` va de 0 a 7 y re-apunta esa entrada sin tocar las demás.

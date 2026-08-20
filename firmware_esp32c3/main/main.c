@@ -1045,13 +1045,38 @@ static const char INDEX_HTML[] =
  * y cualquier aspecto, asi que tambien vale en un telefono angosto. */
 "function toPad(e){const p=pad.createSVGPoint();p.x=e.clientX;p.y=e.clientY;"
 "return p.matrixTransform(pad.getScreenCTM().inverse());}"
-"pad.onpointermove=e=>{if(drag<0)return;const q=toPad(e);"
+/* ⚠️ `e.buttons` NO es opcional: es lo que evita el ARRASTRE FANTASMA.
+ *
+ * Sintoma reportado el 2026-08-20: el equipo estaba en modo 0 y "despues de un
+ * rato empezaba a tirar un tono solo", con `MFOCUS src0: ...` en el serie. No
+ * era el STM32: era ESTA pagina mandando POST /beam type=mf, y ese comando
+ * apaga el monitor y enciende MULTIFOCUS.
+ *
+ * Si un pointerup se pierde —soltar fuera de la ventana, cambiar de pestania a
+ * mitad de arrastre, un gesto del trackpad— `drag` se quedaba en >=0 para
+ * siempre, y a partir de ahi CUALQUIER paso del mouse por encima del pad
+ * reapuntaba una fuente y cambiaba el modo. Sin hacer clic.
+ *
+ * Empeoro justo ahora porque el pad paso a ocupar todo el ancho (height:auto):
+ * el cursor lo cruza mucho mas seguido, sobre todo al scrollear.
+ *
+ * En un pointermove, `buttons` vale 0 si no hay ningun boton apretado. Un
+ * arrastre real nunca tiene buttons==0, asi que esto no cuesta nada y mata la
+ * clase entera de fallas. */
+"pad.onpointermove=e=>{if(drag<0)return;"
+"if(!e.buttons){drag=-1;return;}"
+"const q=toPad(e);"
 "src[drag].x=IX(q.x);src[drag].z=IZ(q.y);drawDots();"
 /* Throttle: arrastrar genera decenas de eventos por segundo y cada POST espera
  * el ACK del STM32 por UART a 115200. Sin esto se encola y la UI se traba. */
 "if(Date.now()-padT>150){padT=Date.now();sendSrc(drag);}};"
 "pad.onpointerup=()=>{if(drag>=0){sendSrc(drag);drag=-1;}};"
 "pad.onpointercancel=()=>{drag=-1;};"
+/* Redes de seguridad para los pointerup que nunca llegan al pad: soltar fuera
+ * de la ventana, perder la captura del puntero, o irse a otra pestania. */
+"addEventListener('pointerup',()=>{drag=-1;});"
+"pad.addEventListener('lostpointercapture',()=>{drag=-1;});"
+"addEventListener('blur',()=>{drag=-1;});"
 "fyv2.oninput=()=>{src[sel].y=+fyv2.value;fyvv.textContent=fyv2.value;};"
 "fyv2.onchange=()=>sendSrc(sel);"
 "drawDots();"

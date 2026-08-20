@@ -611,11 +611,30 @@ static int64_t  cal_mag_sum = 0;                // for the peak/avg quality rati
 static int32_t  cal_tof_q8[BEAM_NUM_CHANNELS];  // time of flight, Q8 samples
 static int8_t   cal_meas_sign[BEAM_NUM_CHANNELS];
 static uint16_t cal_quality[BEAM_NUM_CHANNELS]; // peak/avg ×10 (≥CAL_Q_MIN = solid)
-/* Umbral de calidad, ahora con nombre: era un 50 suelto dentro de un printf.
- * Es peak/avg de la correlación ×10 — o sea "cuánto sobresale el eco del
- * parlante por encima del resto de la ventana". Por debajo, el máximo elegido
- * puede ser ruido y el retardo medido no significa nada. */
-#define CAL_Q_MIN 50
+/* Umbral de calidad = peak/avg de la correlación ×10, o sea "cuánto sobresale
+ * el eco del parlante por encima del resto de la ventana".
+ *
+ * ⚠️ EL 50 QUE HABÍA ERA EXACTAMENTE EL VALOR DEL RUIDO. Fernando lo detectó el
+ * 2026-08-20: con el micrófono DESCONECTADO el scan reportaba "4/32 útiles" una
+ * vez y "7/32" otra. No era casual, y la cuenta lo confirma. Correlacionando
+ * ruido blanco contra el chirp, |c| es media-normal:
+ *
+ *   promedio  = σ·√(2/π)          = 0,798 σ
+ *   máximo sobre N = CAL_MAX_LAG = 4320 lags
+ *             ≈ σ·√(2·ln N)       = 4,09 σ
+ *   peak/avg  ≈ 5,13  →  q10 ≈ 51
+ *
+ * O sea que el umbral estaba clavado en la MEDIANA de la distribución del
+ * ruido: cada canal era una moneda al aire, y 4-7 de 32 caían del lado bueno.
+ *
+ * Con 100 hace falta un máximo de ~8σ, cuya probabilidad sobre 4320 lags es del
+ * orden de 5·10⁻¹²: nunca. Una detección real tiene ganancia de proceso de
+ * √480 ≈ 22 en amplitud, así que queda muy por encima. */
+#define CAL_Q_MIN 100
+/* Pico absoluto de la captura, porque peak/avg es un cociente y NO distingue
+ * "señal" de "ruido fuerte": si al micrófono le subís el preamp, el ruido crece
+ * arriba y abajo y el cociente no se entera. Este gate sí. */
+static volatile int32_t cal_cap_peak = 0;
 /* Progreso y resultado del scan, publicados en /status (v7). Sin esto, correr
  * el AUTOFOCUS exigía tener el cable serie enchufado para saber si sirvió. */
 static volatile uint8_t cal_progress = 0;   // parlantes medidos, 0..CAL_NUM_CH
@@ -3099,16 +3118,24 @@ static void Cal_Process(void) {
   int64_t avg = cal_mag_sum / (int64_t)CAL_MAX_LAG;
   uint32_t q10 = (avg > 0) ? (uint32_t)(cal_best_mag * 10 / avg) : 0;
   if (q10 > 9999) q10 = 9999;
+  /* Gate absoluto ANTES del cociente: si en 100 ms el micrófono no pasó del
+   * piso de ruido, no hubo chirp que medir y el peak/avg da igual — hay un
+   * máximo en cualquier ventana de ruido, siempre. Anular la calidad acá es lo
+   * que hace que "sin micrófono" dé 0/32 y no la lotería de 4-7/32. */
+  uint8_t no_signal = (cal_cap_peak < MIC_LIVE_THRESH);
+  if (no_signal) q10 = 0;
 
   cal_tof_q8[cal_ch] = (cal_best_lag << 8) + (int32_t)(frac * 256.0f);
   cal_meas_sign[cal_ch] = cal_best_sign;
   cal_quality[cal_ch] = (uint16_t)q10;
 
   int32_t tq = cal_tof_q8[cal_ch];
-  sprintf(uart_buf, "  CAL ch%u: tof=%ld.%02ld smp sign=%c q=%lu%s\r\n",
+  sprintf(uart_buf, "  CAL ch%u: tof=%ld.%02ld smp sign=%c q=%lu cap=%ld%s\r\n",
           (unsigned)cal_ch, (long)(tq >> 8), (long)((tq & 0xFF) * 100 / 256),
           (cal_best_sign < 0) ? '-' : '+', (unsigned long)q10,
-          (q10 < CAL_Q_MIN) ? "  (LOW — mic signal?)" : "");
+          (long)cal_cap_peak,
+          no_signal ? "  (SIN SENAL en el mic)"
+                    : ((q10 < CAL_Q_MIN) ? "  (BAJA — ruido de sala?)" : ""));
   UART_Print(uart_buf);
 
   if (q10 >= CAL_Q_MIN) cal_ok_count++;
@@ -3364,9 +3391,14 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
    * emission→capture offset is constant for every speaker and cancels in
    * the relative TOFs. */
   if (cal_capturing) {
+    int32_t cpk = cal_cap_peak;
     for (uint32_t i = 0; i < samples && cal_cap_count < CAL_CAPTURE_LEN; i++) {
-      cal_capture[cal_cap_count++] = rx_buf[i * ADC_CHANNELS + CAL_MIC_CH] >> 8;
+      int32_t v = rx_buf[i * ADC_CHANNELS + CAL_MIC_CH] >> 8;
+      cal_capture[cal_cap_count++] = v;
+      if (v < 0) v = -v;
+      if (v > cpk) cpk = v;          /* gate absoluto: ¿hubo ALGO en el mic? */
     }
+    cal_cap_peak = cpk;
     if (cal_cap_count >= CAL_CAPTURE_LEN) cal_capturing = 0;
   }
 
@@ -3470,6 +3502,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
         }
       }
       cal_cap_count = 0;
+      cal_cap_peak = 0;
       cal_capturing = 1;
       cal_state = CAL_CAPT;
       return;
