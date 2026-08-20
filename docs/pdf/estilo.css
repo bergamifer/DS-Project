@@ -1,0 +1,195 @@
+/* Hoja de estilo para el PDF de la guía de operación.
+ *
+ * Pensada para IMPRIMIR y para leer en un teléfono parado al lado del equipo,
+ * no para una pantalla grande: cuerpo grande, avisos que saltan a la vista, y
+ * tablas que no se parten al medio. Se asume que puede terminar fotocopiada en
+ * blanco y negro, así que ningún dato depende SOLO del color. */
+
+@page {
+  size: A4;
+  margin: 18mm 16mm 16mm 16mm;
+}
+
+:root {
+  --tinta:    #16181d;
+  --suave:    #5a616e;
+  --linea:    #d4d8e0;
+  --acento:   #1d5fa8;
+  --peligro:  #a4331f;
+  --ok:       #1d6b45;
+  --fondo-cd: #f4f5f8;
+}
+
+html { font-size: 10.8pt; }
+
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: var(--tinta);
+  line-height: 1.5;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------- portada */
+.portada {
+  page-break-after: always;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 235mm;
+}
+.portada .marca {
+  font-size: 9pt;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--suave);
+  margin-bottom: 10mm;
+}
+.portada h1 {
+  font-size: 30pt;
+  line-height: 1.12;
+  margin: 0 0 6mm;
+  border: 0;
+  padding: 0;
+}
+.portada .bajada {
+  font-size: 13pt;
+  color: var(--suave);
+  line-height: 1.45;
+  max-width: 125mm;
+  margin: 0 0 14mm;
+}
+.portada .pie {
+  border-top: 2px solid var(--tinta);
+  padding-top: 4mm;
+  font-size: 9.5pt;
+  color: var(--suave);
+}
+.portada .pie b { color: var(--tinta); }
+
+/* -------------------------------------------------------------- contenido */
+/* Sin salto forzado: la §1 ya arranca en página propia por su cuenta, y con el
+ * salto acá el párrafo de introducción que sigue al índice se quedaba SOLO en
+ * una página entera. Debajo del índice sobra lugar y es donde corresponde. */
+nav#TOC {
+  padding-top: 4mm;
+  margin-bottom: 8mm;
+}
+nav#TOC::before {
+  content: "Contenido";
+  display: block;
+  font-size: 17pt;
+  font-weight: 700;
+  margin-bottom: 6mm;
+}
+nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+nav#TOC > ul > li {
+  padding: 2.2mm 0;
+  border-bottom: 1px solid var(--linea);
+}
+nav#TOC > ul > li > ul { display: none; }   /* sólo el primer nivel */
+nav#TOC a { color: var(--tinta); text-decoration: none; font-size: 11pt; }
+
+/* --------------------------------------------------------------- títulos */
+h1, h2, h3 {
+  line-height: 1.2;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+h2 {
+  font-size: 17pt;
+  margin: 9mm 0 3.5mm;
+  padding-bottom: 2mm;
+  border-bottom: 2px solid var(--tinta);
+  page-break-before: always;   /* cada sección arranca en página propia */
+}
+nav#TOC + h2, .portada + h2 { page-break-before: avoid; }
+h3 {
+  font-size: 12.5pt;
+  margin: 6mm 0 2mm;
+  color: var(--acento);
+}
+
+p { margin: 0 0 3mm; orphans: 3; widows: 3; }
+
+strong { font-weight: 700; }
+
+ul, ol { margin: 0 0 3.5mm; padding-left: 6mm; }
+li { margin-bottom: 1.6mm; }
+
+hr { display: none; }   /* los separadores ya los da el salto de página */
+
+/* --------------------------------------------------------------- tablas */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 3mm 0 5mm;
+  font-size: 10pt;
+  page-break-inside: avoid;
+}
+th {
+  background: var(--tinta);
+  color: #fff;
+  text-align: left;
+  padding: 2mm 2.5mm;
+  font-size: 9.5pt;
+  letter-spacing: .02em;
+}
+td {
+  padding: 2mm 2.5mm;
+  border-bottom: 1px solid var(--linea);
+  vertical-align: top;
+}
+tbody tr:nth-child(even) td { background: #fafbfc; }
+tr { page-break-inside: avoid; }
+
+/* ------------------------------------------------------- codigo y avisos */
+code {
+  /* Menlo PRIMERO, no SF Mono: los diagramas de la guía se dibujan con
+   * caracteres de caja (┌ ─ │ └). SF Mono no los trae, el navegador cae a otra
+   * fuente que los dibuja MÁS ANGOSTOS, y las cajas salen descuadradas — el
+   * borde derecho terminaba en medio del texto. Menlo los tiene al mismo ancho
+   * que el resto. */
+  font-family: Menlo, "SF Mono", Consolas, "DejaVu Sans Mono", monospace;
+  font-size: .87em;
+  background: var(--fondo-cd);
+  padding: .5mm 1.2mm;
+  border-radius: 2px;
+}
+pre {
+  background: var(--fondo-cd);
+  border-left: 3px solid var(--suave);
+  padding: 3mm 3.5mm;
+  margin: 3mm 0 4mm;
+  overflow-x: auto;
+  page-break-inside: avoid;
+  /* Interlineado ajustado para que los trazos verticales de los diagramas de
+   * caja se toquen entre renglones en vez de quedar como una fila de guiones. */
+  line-height: 1.18;
+}
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 9pt;
+  white-space: pre;
+}
+
+/* Las citas del documento son avisos: se marcan con barra y fondo para que
+ * se vean incluso hojeando el papel rápido. */
+blockquote {
+  margin: 4mm 0;
+  padding: 3mm 4mm;
+  background: #f7f8fa;
+  border-left: 4px solid var(--acento);
+  page-break-inside: avoid;
+}
+blockquote p:last-child { margin-bottom: 0; }
+
+/* El emoji no siempre sobrevive una fotocopia: el color del borde es
+ * redundante con el simbolo, nunca la unica pista. */
+blockquote:has(> p:first-child) { }
+
+a { color: var(--acento); text-decoration: none; }
+
+/* Evitar que un titulo quede solo al pie de una pagina. */
+h2 + p, h3 + p, h3 + table, h3 + ul, h3 + ol, h3 + pre { page-break-before: avoid; }

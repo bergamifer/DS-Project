@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>$title$</title>
+$for(header-includes)$
+$header-includes$
+$endfor$
+</head>
+<body>
+
+<div class="portada">
+  <div class="marca">Domosonica &middot; DS11</div>
+  <h1>$title$</h1>
+  <p class="bajada">$subtitulo$</p>
+  <div class="pie">
+    <b>Versión del $fecha$</b><br>
+    Prototipo de 32 canales &middot; 4 filas &times; 8 columnas<br>
+    Ante cualquier duda, parar y preguntar antes de forzar.
+  </div>
+</div>
+
+$if(toc)$
+<!-- Con plantilla propia, $toc$ trae la <ul> pelada: el <nav id="TOC"> que pone
+     la plantilla por defecto de pandoc hay que escribirlo acá o el CSS no
+     engancha con nada. -->
+<nav id="TOC">
+$toc$
+</nav>
+$endif$
+
+$body$
+
+</body>
+</html>
