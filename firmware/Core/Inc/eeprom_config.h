@@ -13,13 +13,22 @@
 #include <stdint.h>
 
 #define EEPROM_CFG_MAGIC       0xD509BEEF
-#define EEPROM_CFG_VERSION     4   /* v2: += master_vol_db; v3: += last_mode;
-                                    * v4: += in_gain_db (ganancia de entrada).
+#define EEPROM_CFG_VERSION     5   /* v2: += master_vol_db; v3: += last_mode;
+                                    * v4: += in_gain_db (ganancia de entrada);
+                                    * v5: += la calibración del AUTOFOCUS
+                                    * (polaridades + foco medido), que antes se
+                                    * perdía en cada reinicio.
                                     * Un bump descarta lo guardado y vuelve a
                                     * los defaults — es una vez y a propósito:
                                     * leer bytes viejos con layout nuevo daría
                                     * un volumen o un modo arbitrarios. */
 #define EEPROM_CFG_BASE_ADDR   0x0000   /* Start of EEPROM */
+/* Techo del buffer de verificación (cfg_scratch). Una config más grande que
+ * esto hace que EEPROM_SaveConfig devuelva EEPROM_ERR_SIZE — o sea que el
+ * guardado deja de funcionar, y como es diferido el error aparecería como
+ * "los ajustes no se recuerdan" mucho después de haber agregado el campo.
+ * Está acá para poder chequearlo en COMPILACIÓN desde main.c. */
+#define EEPROM_CFG_MAX_SIZE    256
 
 /* Result codes */
 typedef enum {

@@ -117,6 +117,7 @@ typedef struct __attribute__((packed)) {
 _Static_assert(sizeof(ds_status_t) == 73, "ds_status_t debe ser 73 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
+#define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
 
 // Espejo de ui_states[] del STM32 — actualizar junto con el firmware STM32.
 // El indice es lo que viaja en CMD_SET_MODE; el nombre es solo para la UI.
@@ -139,6 +140,7 @@ static const char *MODE_NAMES[] = {
     "MULTIFOCUS 8 entradas @1m",
     "TX 2k BARRIDO izq<->der @1m",
     "BARRIDO VERTICAL 800Hz arriba<->abajo @1m",
+    "TX foco CALIBRADO (AUTOFOCUS guardado)",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 
@@ -609,7 +611,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"adc_ovf\":%lu,\"out_clip\":%lu,"
             "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
             "\"cpu_fills_pct\":%u.%u,"
-            "\"mic_live\":%u,\"cal_prog\":%u,\"cal_ok\":%u,"
+            "\"mic_live\":%u,\"cal_prog\":%u,\"cal_ok\":%u,\"cal_saved\":%s,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
@@ -627,6 +629,7 @@ static esp_err_t status_handler(httpd_req_t *req)
              * del STM32 resultaba INVISIBLE desde la red. */
             s->cpu_fills_x10 / 10, s->cpu_fills_x10 % 10,
             s->mic_live_mask, s->cal_progress, s->cal_ok_count,
+            (s->state_flags & STATE_F_CALIB) ? "true" : "false",
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
     } else {
@@ -960,7 +963,8 @@ static const char INDEX_HTML[] =
 "<li id=k2>micr&oacute;fono en la entrada 1</li>"
 "<li id=k3>nivel del micr&oacute;fono</li>"
 "<li id=k4>scan</li>"
-"<li id=k5>resultado</li></ol>"
+"<li id=k5>resultado</li>"
+"<li id=k6>calibraci&oacute;n guardada</li></ol>"
 "<div class=row><button onclick=startAF()>Iniciar scan (modo 11)</button></div>"
 "<div style='font-size:.75em;color:#888;margin-top:6px'>El micr&oacute;fono va "
 "<b>en el punto donde quer&eacute;s el foco</b>, enchufado a la entrada 1 (c0), "
@@ -976,7 +980,11 @@ static const char INDEX_HTML[] =
 "<div style='font-size:.75em;color:#888;margin-top:6px'>Volumen &minus;24 dB, "
 "ganancia 0 dB, modo 0 y focos por defecto. No toca los amplificadores.</div></div>"
 "<script>"
-"const N=17,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. LEJOS 2m','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','TX 2k ondul. centro','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in','TX 2k BARRIDO izq-der'];"
+/* ⚠️ N y names[] son el ESPEJO de ui_states[] del STM32 y de MODE_NAMES de
+ * arriba. Agregar un modo y olvidarse de esta linea deja el modo SIN BOTON: el
+ * 17 quedo invisible en la pagina hasta que se noto. Al agregar un modo se
+ * tocan TRES lugares. */
+"const N=19,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. LEJOS 2m','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','TX 2k ondul. centro','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in','TX 2k BARRIDO izq-der','BARRIDO VERTICAL 800Hz','TX foco CALIBRADO'];"
 "const md=document.getElementById('modes');"
 /* El numero adelante: es lo que se usa para referenciar el modo en los comandos
  * (POST /mode {"mode":N}), en los logs y al hablar del equipo. */
@@ -1136,6 +1144,12 @@ static const char INDEX_HTML[] =
 "chk(5,cs!=5?0:(ck>=16?2:0),cs!=5?'sin resultado todav\\u00eda'"
 ":(ck>=16?('foco aplicado \\u2014 '+ck+'/32 parlantes medidos con confianza')"
 ":('DESCARTADO \\u2014 solo '+ck+'/32 parlantes \\u00fatiles; focos anteriores intactos')));"
+/* La calibracion vive en la EEPROM y sobrevive al reinicio. Las POLARIDADES se
+ * aplican a todos los modos; el FOCO medido es de un punto y se recupera con
+ * el modo 18. */
+"chk(6,s.cal_saved?2:0,s.cal_saved"
+"?'en EEPROM \\u2014 polaridades activas en todos los modos; foco medido en el modo 18'"
+":'ninguna guardada \\u2014 el equipo usa la geometr\\u00eda nominal');"
 "document.getElementById('st').textContent="
 "'modo: '+s.mode_name+'  |  vol: '+(s.vol_db<=-64?'MUTE':s.vol_db+'dB')+'  |  foco: ('+s.focus.fx+','+s.focus.fy+','+s.focus.fz+')mm'"
 "+'\\nunderruns: '+s.underruns+'  errores SAI: '+s.sai_errors+'  OVF: '+s.ovf+'  cal: '+s.cal_state;"

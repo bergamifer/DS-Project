@@ -43,7 +43,7 @@ __weak void EEPROM_Yield(void) { }
  * entonces se copia al destino. 256 basta de sobra para beam_config_t (108 B) y
  * deja margen; si algún día no alcanza, LoadConfig devuelve EEPROM_ERR_SIZE en
  * vez de desbordar. */
-static uint8_t cfg_scratch[256];
+static uint8_t cfg_scratch[EEPROM_CFG_MAX_SIZE];
 
 /* I2C4 handle (local to this module) */
 static I2C_HandleTypeDef hi2c4;

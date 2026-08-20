@@ -158,6 +158,10 @@ typedef struct __attribute__((packed)) {
  * o con el K2 largo. */
 #define STATE_F_AMPS    0x01    /* banco de 32 PAM8302A habilitado */
 #define STATE_F_CUSTOM  0x02    /* beam custom: mode_idx NO describe lo que suena */
+/* v7: hay una calibración de AUTOFOCUS guardada en EEPROM. Sin esto, la única
+ * forma de saber si el equipo arrancó con las polaridades medidas o con las
+ * nominales era leer el log de arranque — que se pierde al reiniciar. */
+#define STATE_F_CALIB   0x04
 
 /* El `uptime_ms` que publicaba /status era el del ESP32, no el del STM32: un
  * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18

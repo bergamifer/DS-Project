@@ -135,7 +135,34 @@ typedef struct {
     int8_t   master_vol_db;                 // PCM1690 attenuation, dB (0..-63, ≤-64 mute)
     uint8_t  last_mode;                     // ui_states index restored at boot
     uint8_t  in_gain_db;                    // ganancia de ENTRADA, dB (0..36)
+    /* ===== Calibración del AUTOFOCUS, persistida (v5) =====
+     * Hasta ahora el scan medía bien y el resultado se EVAPORABA: los retardos
+     * se pisaban al cambiar de modo y las polaridades no sobrevivían al
+     * reinicio. O sea que la calibración había que rehacerla, con el micrófono
+     * en su lugar, cada vez que se encendía el equipo — que es exactamente lo
+     * que no se puede pedir en una instalación.
+     *
+     * Persistirla es viable porque el SYNC entre bancos mide 4 µs y es
+     * REPRODUCIBLE arranque tras arranque (medido 2026-08-13): si variara por
+     * encendido, una calibración dejaría de valer tras un ciclo de
+     * alimentación. Ese era el "no se puede" que ya no aplica.
+     *
+     * Son dos cosas distintas y se usan distinto:
+     *  - cal_sign: propiedad del HARDWARE (cableado/polaridad del parlante). No
+     *    depende de dónde esté el foco → se aplica SIEMPRE, en todos los modos.
+     *  - cal_delay_q8: es UN foco, el del punto donde estaba el micrófono. NO
+     *    generaliza a otros puntos → se recupera a pedido (modo 18), nunca solo.
+     */
+    int8_t   cal_sign[BEAM_NUM_CHANNELS];   // polaridad medida (+1/−1)
+    uint16_t cal_delay_q8[BEAM_NUM_CHANNELS]; // foco medido en el punto del mic
+    uint8_t  cal_valid;                     // 1 = hay una calibración guardada
 } beam_config_t;
+/* La calibración llevó la config de 108 a 208 bytes. Sin este chequeo, cruzar
+ * el techo se manifestaría como "el equipo dejó de recordar los ajustes",
+ * mucho después y lejos del campo que lo causó — el guardado es diferido y
+ * falla en silencio salvo por una línea del serie. */
+_Static_assert(sizeof(beam_config_t) <= EEPROM_CFG_MAX_SIZE,
+               "beam_config_t no entra en el buffer de la EEPROM");
 
 /* Private variables ---------------------------------------------------------*/
 
@@ -336,6 +363,7 @@ typedef struct {
   uint8_t mf;                     // 1 = MULTIFOCUS tonos (N fuentes internas)
   uint8_t mfin;                   // 1 = MULTIFOCUS de ENTRADAS (8 ADC → 8 focos)
   uint8_t sweep;                  // eje del barrido automático: 0 no, 1 = X, 2 = Y
+  uint8_t calfoc;                 // 1 = usa el foco MEDIDO por AUTOFOCUS, no el geométrico
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor",                  .monitor = 1 },
@@ -427,6 +455,22 @@ static const ui_state_t ui_states[] = {
   { .name = "BARRIDO VERTICAL 800Hz arriba<->abajo @1m", .beam = 1, .tx = 1,
     .tone = 1, .tone_hz = 800, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000,
     .sweep = SWEEP_AXIS_Y },
+  // FOCO CALIBRADO — recupera de la EEPROM los retardos MEDIDOS por el último
+  // AUTOFOCUS, en vez de calcularlos con la geometría nominal. Absorbe error de
+  // geometría, de mapeo de canales y de polaridad: es el foco real en el punto
+  // donde estaba el micrófono.
+  //
+  // Existe como modo aparte, y no aplicándose solo al arrancar, porque
+  // cal_delay_q8 NO es una corrección general: es UN foco, el de ese punto.
+  // Aplicarlo por defecto pisaría el foco de cualquier otro modo con el de un
+  // micrófono que ya no está ahí. Las POLARIDADES sí se aplican siempre (son
+  // del hardware, no del punto) y se restauran en el boot.
+  //
+  // Si no hay calibración guardada, el modo lo dice y cae al foco geométrico
+  // de 1 m — no se queda mudo ni miente.
+  { .name = "TX foco CALIBRADO (AUTOFOCUS guardado)", .beam = 1, .tx = 1,
+    .tone = 1, .tone_hz = 2000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000,
+    .calfoc = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 static volatile uint8_t ui_state_idx = 0;
@@ -1077,6 +1121,22 @@ int main(void)
         sprintf(uart_buf, "  master_gain=%u mute=%u mutes=0x%08lX\r\n",
                 beam_config.master_gain, beam_config.mute_global, beam_config.mutes);
         UART_Print(uart_buf);
+        /* Las POLARIDADES medidas se restauran SIEMPRE: son del cableado, no
+         * del punto donde estaba el micrófono, así que valen para todos los
+         * modos. Los RETARDOS no — esos son un foco, y se recuperan a pedido
+         * con el modo 18. Distinguirlos es la razón de que la calibración se
+         * pueda persistir sin que arruine el resto de los modos. */
+        if (beam_config.cal_valid) {
+          uint32_t invertidos = 0;
+          for (uint32_t k = 0; k < BEAM_NUM_CHANNELS; k++) {
+            speaker_sign[k] = beam_config.cal_sign[k];
+            if (speaker_sign[k] < 0) invertidos++;
+          }
+          sprintf(uart_buf, "  AUTOFOCUS: calibracion guardada restaurada "
+                  "(%lu parlantes con polaridad invertida). Foco medido "
+                  "disponible en el modo 18.\r\n", (unsigned long)invertidos);
+          UART_Print(uart_buf);
+        }
       } else if (eep_status == EEPROM_ERR_MAGIC) {
         UART_Print("EEPROM: No saved config (first boot) — using defaults\r\n");
       } else if (eep_status == EEPROM_ERR_CRC) {
@@ -1549,7 +1609,8 @@ int main(void)
         st.adc_ovf_count = adc_ovf_latch;
         st.out_clip_count = out_clip_count;
         st.state_flags = (amps_enabled ? STATE_F_AMPS : 0)
-                       | (custom_beam_active ? STATE_F_CUSTOM : 0);
+                       | (custom_beam_active ? STATE_F_CUSTOM : 0)
+                       | (beam_config.cal_valid ? STATE_F_CALIB : 0);
         st.uptime_ms = HAL_GetTick();
         st.cpu_fills_x10 = cpu_fills_x10;
         st.mic_live_mask = mic_live_mask;
@@ -3184,6 +3245,21 @@ static void Cal_Process(void) {
   sprintf(uart_buf, "AUTOFOCUS OK: %u/%u parlantes con senal utilizable "
           "(q>=%u).\r\n", cal_ok_count, (unsigned)CAL_NUM_CH, CAL_Q_MIN);
   UART_Print(uart_buf);
+
+  /* Persistir. Sólo llega acá un scan que pasó el umbral de calidad, así que la
+   * EEPROM nunca guarda una calibración de ruido — que es justo lo que haría
+   * inservible guardarla. Diferido por la bandera: el guardado bloquea decenas
+   * de ms y desde el main loop no se come deadlines de fill. */
+  for (uint32_t k = 0; k < BEAM_NUM_CHANNELS; k++) {
+    beam_config.cal_sign[k]     = speaker_sign[k];
+    beam_config.cal_delay_q8[k] = tx_delay_q8[k];
+  }
+  beam_config.cal_valid = 1;
+  Arm_Config_Save();
+  UART_Print("AUTOFOCUS: calibracion guardada — sobrevive al reinicio.\r\n"
+             "  Las POLARIDADES se aplican a todos los modos.\r\n"
+             "  El FOCO medido se recupera con el modo 18 (es el punto donde "
+             "estaba el microfono, no generaliza a otros).\r\n");
   UART_Print("AUTOFOCUS done — measured delays (samples.frac / sign):\r\n");
   for (uint32_t k = 0; k < CAL_NUM_CH; k++) {
     sprintf(uart_buf, "  ch%lu: %u.%02u %c q=%u\r\n", (unsigned long)k,
@@ -3210,6 +3286,13 @@ static void Config_LoadDefaults(void) {
   beam_config.master_vol_db = -24;   // igual al default del init del PCM1690
   beam_config.last_mode = 0;         // monitor
   beam_config.in_gain_db = IN_GAIN_DB_LINE;  // las entradas de la DS11 son de línea
+  /* Sin calibración: polaridades en +1, que es lo que corresponde en DS11 (la
+   * doble inversión de los impares es deliberada y se cancela en el JST). El
+   * reset de fábrica DEBE borrar esto: una calibración vieja sobreviviendo a un
+   * "volver a cero" es justo el estado raro del que no se puede salir. */
+  for (uint32_t k = 0; k < BEAM_NUM_CHANNELS; k++) beam_config.cal_sign[k] = 1;
+  memset(beam_config.cal_delay_q8, 0, sizeof(beam_config.cal_delay_q8));
+  beam_config.cal_valid = 0;
 }
 
 /** @brief Reset de fábrica: defaults + focos + volumen + modo, y persiste.
@@ -3314,6 +3397,21 @@ static void UI_ApplyState(uint8_t idx) {
   }
   if (st->beam) Beam_UpdateDelays(st->az_deg);
   if (st->tx) Beam_UpdateTxFocus(st->fx_mm, st->fy_mm, st->fz_mm);
+  /* DESPUÉS del foco geométrico, a propósito: lo pisa. Así, si no hay
+   * calibración guardada, el modo igual suena con el foco nominal de 1 m en vez
+   * de quedar mudo — y lo dice. */
+  if (st->calfoc) {
+    if (beam_config.cal_valid) {
+      for (uint32_t k = 0; k < BEAM_NUM_CHANNELS; k++) {
+        tx_delay_q8[k]  = beam_config.cal_delay_q8[k];
+        speaker_sign[k] = beam_config.cal_sign[k];
+      }
+      UART_Print("  foco MEDIDO restaurado desde la EEPROM (AUTOFOCUS)\r\n");
+    } else {
+      UART_Print("  !! no hay calibracion guardada — corre el modo 11 con el "
+                 "microfono. Suena con el foco geometrico de 1 m.\r\n");
+    }
+  }
   if (st->walker) walker_frame = 0;
   /* Persist the mode, debounced: a real change arms the deadline; the boot
    * restore re-applies the same idx so it doesn't (idx == last_mode). */

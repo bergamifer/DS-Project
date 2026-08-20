@@ -80,6 +80,7 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 | 15 | `MULTIFOCUS 8 entradas @1m` | Las 8 entradas analógicas | Cada entrada enfocada en su propio punto | **La intervención**: 8 señales, 8 lugares |
 | 16 | `TX 2k BARRIDO izq<->der @1m` | Tono interno 2 kHz | Foco barriendo ±700 mm, ciclo de 5 s | **Demuestra el steering sin caminar** |
 | 17 | `BARRIDO VERTICAL 800Hz arriba<->abajo @1m` | Tono interno **800 Hz** | Foco barriendo ±600 mm en Y, ciclo de 5 s | **Es un experimento**, no una demo — decide un gasto de hardware en DS12 |
+| 18 | `TX foco CALIBRADO (AUTOFOCUS guardado)` | Tono interno 2 kHz | Retardos **medidos** recuperados de la EEPROM | Recupera el foco del punto donde estaba el micrófono; sin calibración cae al foco geométrico de 1 m |
 
 **IMPORTANTE (append-only)**: los índices están espejados en el ESP32, la web y
 la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
@@ -445,6 +446,39 @@ Dos correcciones:
 0/32**. Determinístico, no lotería. El log por canal ahora imprime también
 `cap=` (el pico de la captura) y distingue `(SIN SENAL en el mic)` de
 `(BAJA — ruido de sala?)`, que son dos problemas distintos.
+
+### La calibración ahora SOBREVIVE al reinicio (2026-08-20)
+
+Antes el scan medía bien y el resultado **se evaporaba**: los retardos se
+pisaban al cambiar de modo y las polaridades no pasaban el reinicio. O sea que
+había que rehacer la calibración, con el micrófono en su lugar, cada vez que se
+encendía el equipo — exactamente lo que no se le puede pedir a una instalación.
+
+Persistirla es viable porque el **SYNC entre bancos mide 4 µs y es reproducible
+arranque tras arranque** (medido 2026-08-13). Si variara por encendido, una
+calibración dejaría de valer tras un ciclo de alimentación; ese era el "no se
+puede" que ya no aplica.
+
+Se guardan **dos cosas distintas, y se usan distinto**:
+
+| qué | qué es | cuándo se aplica |
+|---|---|---|
+| **polaridades** (`cal_sign`) | propiedad del **hardware** (cableado del parlante) — no depende de dónde esté el foco | **siempre**, en todos los modos, restaurada en el arranque |
+| **retardos** (`cal_delay_q8`) | **un** foco: el del punto donde estaba el micrófono | **a pedido**, con el **modo 18** |
+
+Distinguirlas es lo que permite persistir sin romper nada. Aplicar los retardos
+por defecto pisaría el foco de cualquier otro modo con el de un micrófono que ya
+no está ahí.
+
+- Sólo se guarda un scan que **pasó** el umbral de calidad → la EEPROM nunca
+  guarda una calibración de ruido.
+- El **reset de fábrica la borra** (una calibración vieja sobreviviendo a un
+  "volver a cero" es justo el estado raro del que no se puede salir).
+- La fila **"calibración guardada"** del checklist lo muestra, y `/status`
+  publica `cal_saved` (`STATE_F_CALIB`).
+- EEPROM v4 → **v5**; la config pasó de 108 a **208 bytes** (techo 256, con
+  `_Static_assert` para que crecerla no rompa el guardado en silencio).
+  Verificado el round-trip con reinicio real.
 
 El botón *Iniciar scan* entra al modo 11; volver a entrar **relanza** el scan,
 así que sirve igual para arrancar y para repetir después de corregir una fila.
