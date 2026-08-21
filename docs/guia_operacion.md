@@ -301,7 +301,7 @@ dejás en 30 con una computadora enchufada, **rompe**. Ante la duda: `0`.
 
 ### Cambiar de modo
 
-El equipo tiene **19 modos** de funcionamiento, numerados del **0 al 18** (tonos
+El equipo tiene **20 modos** de funcionamiento, numerados del **0 al 19** (tonos
 de prueba, recorridos, distintos tipos de enfoque). Se cambian tocando el botón
 correspondiente en la página —cada uno lleva su número adelante— o así:
 
@@ -391,6 +391,7 @@ Son 19, pero en la práctica se usan cinco. El resto son pruebas.
 | **Mostrar el enfoque a alguien** | **16** | El punto se mueve solo, izquierda↔derecha |
 | **La intervención: 8 sonidos en 8 lugares** | **15** | Cada entrada de audio suena en su propio punto de la sala (§9) |
 | **Recuperar un enfoque calibrado** | **18** | Usa la medición hecha con micrófono (§10) |
+| *(banco)* **Medir el equipo por cable** | **19** | LOOPBACK: no suena. Necesita adaptadores; ver `loopback_debug.md` |
 
 Los demás son enfoques fijos en puntos distintos (7 a 13), un mapa de tonos de
 prueba (14), la calibración (11) y un experimento vertical (17). Están
@@ -595,7 +596,7 @@ el ESP32 — pedírselo a Fernando.
 
 | Documento | Qué tiene |
 |---|---|
-| [manual_modos.md](manual_modos.md) | Los 19 modos, uno por uno |
+| [manual_modos.md](manual_modos.md) | Los 20 modos, uno por uno |
 | [ds11_bringup_checklist.md](ds11_bringup_checklist.md) | Checklist de primer encendido |
 | [ds11_errata.md](ds11_errata.md) | Fallas conocidas de esta tirada de placas |
 | [protocolo_medicion.md](protocolo_medicion.md) | Cómo medir el enfoque en serio |
