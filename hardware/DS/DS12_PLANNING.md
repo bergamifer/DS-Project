@@ -116,11 +116,17 @@ la apertura: a 800 Hz son 1,12 λ → haz de ~51°, spot de ±45 cm a 1 m.
 **Es una medición de una tarde que decide gasto de hardware.** Pendiente de
 correr. Procedimiento en `docs/manual_modos.md`, sección "Modo 17".
 
-### 0.6. 🔴 Los siete puntos de prueba de la DS11 no existen eléctricamente
+### 0.6. 🔴 Seis de los siete puntos de prueba de la DS11 no existen eléctricamente
+
+> **Corregido el 2026-08-21**: la versión anterior decía "los siete". **J13 sí
+> tiene cobre**: 16 segmentos en F.Cu que llegan a R82 y a los pines VOUT1± de
+> U4 (PCM1690, DAC3) — o sea la salida del canal 24 antes del amplificador. Lo
+> que no tiene es **red asignada** (`net -1`), y por eso no aparece en el
+> netlist. El pad 2 sí está suelto. Detalle en `docs/loopback_debug.md` §1.
 
 **Verificado sobre `DS.kicad_pcb` el 2026-08-20.** La placa tiene siete huellas
-pensadas para debug —**J13** (header 1x02) y **TP1 a TP6** (pads de 1,5 mm)— y
-las siete están en el mismo estado:
+pensadas para debug —**J13** (header 1x02) y **TP1 a TP6** (pads de 1,5 mm)—.
+**TP1 a TP6** están todos en el mismo estado:
 
 - marcadas `dnp` + `exclude_from_bom` + `exclude_from_pos_files`
 - **pads sin red asignada**

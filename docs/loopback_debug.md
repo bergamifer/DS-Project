@@ -3,58 +3,71 @@
 > Análisis pedido el 2026-08-20: *"¿podemos conectar una salida a la entrada
 > desde J13 y analizar fase y nivel?"*
 >
-> **Respuesta corta: la idea es muy buena y vale la pena, pero J13 no sirve —
-> no existe eléctricamente en la placa.** Acá está qué es J13 realmente, qué se
-> puede usar en su lugar, y qué mediciones habilita.
+> **Respuesta corta: la idea es buena y J13 sirve a medias.** Su pin 1 llega por
+> cobre a la salida del DAC del canal 24 (antes del amplificador); el pin 2 está
+> suelto. Alcanza para medir un canal; para lo que más valor tiene —el skew entre
+> los cuatro bancos— hacen falta los adaptadores de la §4.
 
 ---
 
-## 1. J13 no está conectado a nada
+## 1. J13: el pin 1 SÍ sirve, el pin 2 no
 
-En el esquemático (`ALL_AMPS.kicad_sch`) J13 es un header de 2 pines cableado a
-**VD.P1 / VD.N1** — la salida diferencial del DAC que alimenta la entrada 1 del
-banco de amplificadores A12. Como punto de prueba estaría perfecto: es la señal
-de línea *antes* del amplificador.
+> **⚠️ Corrección del 2026-08-21.** La primera versión de este documento decía
+> que J13 no estaba conectado a nada. **Estaba mal.** Fernando corrigió que el
+> conector existe en la placa (sin poblar) y al rehacer el análisis apareció el
+> error: mi primer barrido de cobre usaba una expresión regular que exigía capa
+> y red en un orden fijo dentro de cada `(segment ...)`, y **se salteaba los
+> segmentos que no matcheaban ese formato**. Un rebarrido exhaustivo —incluyendo
+> vías y recorriendo la isla de cobre nodo por nodo— encontró 16 segmentos que
+> el primero no había visto. La conclusión se invierte.
 
-**Pero en el PCB no llegó nada de eso.** Del `DS.kicad_pcb`:
+### Lo que hay realmente
 
-```
-J13   PinHeader_1x02_P2.54mm_Vertical   F.Cu  @(176.947, 95.928)
-      attr: through_hole exclude_from_pos_files exclude_from_bom dnp
-      pad 1: *** SIN RED ***
-      pad 2: *** SIN RED ***
-```
-
-Tres cosas, y cada una sola ya alcanzaría:
-
-| evidencia | qué significa |
+| | |
 |---|---|
-| `dnp` | *do not populate*: no se suelda header |
-| `exclude_from_bom` + `exclude_from_pos_files` | no está en la lista de materiales ni en el archivo de posiciones — la fábrica ni se enteró |
-| pads **sin red asignada** | el ruteador nunca le llevó cobre |
+| **Pad 1** | **16 segmentos de cobre en F.Cu**, que llegan hasta **R82** (1 kΩ, SMD, **poblada**) y de ahí a los pines VOUT1± de **U4 (PCM1690)** |
+| **Pad 2** | sin cobre |
 
-Y se verificó geométricamente: **ninguna pista de cobre termina a menos de
-0,6 mm de sus pads.** Son dos agujeros metalizados aislados.
+**U4 es DAC3 = canales lógicos 24-31** (`SAI2_B`, ver `pin_map.md`), así que
+`VOUT1` de ese chip es el **canal 24**.
 
-### No es sólo J13: la DS11 no tiene NINGÚN punto de prueba usable
+O sea: **J13 pin 1 es una toma de la salida del DAC del canal 24, antes del
+amplificador.** Es exactamente la señal que uno querría medir: nivel de línea,
+limpia, sin la portadora de clase D.
 
-El PCB tiene además **seis test points, TP1 a TP6** — y están exactamente en la
-misma situación:
+### Por qué no aparecía en el netlist
 
-```
-TP1 @(145.705,  89.959)   sin red
-TP2 @(145.705,  98.341)   sin red
-TP3 @(145.705,  92.753)   sin red
-TP4 @(145.705,  95.547)   sin red
-TP5 @(200.315, 120.947)   sin red
-TP6 @(197.521, 120.947)   sin red
-```
+Todo ese cobre tiene **`net -1`** — sin red asignada. Se dibujó en el editor de
+PCB pero nunca quedó ligado al netlist del esquemático, y por eso `DS.txt` no
+menciona J13. El footprint además está marcado `dnp` + `exclude_from_bom` +
+`exclude_from_pos_files`: la fábrica no soldó el header, pero **el cobre está**.
 
-Los siete footprints (J13 + TP1-6) están marcados DNP y ninguno tiene red. Son
-huellas que quedaron en el diseño sin llegar a conectarse.
+### Cómo se usa
 
-> **Esto es un requisito para la DS12**, no una curiosidad. Ver
-> `hardware/DS/DS12_PLANNING.md`.
+1. Soldar un header de 2 pines (o directamente un cable) en J13.
+2. **Pin 1 = señal.** El pin 2 no sirve: hay que tomar masa de otro lado (un
+   punto de GND cercano, o el blindaje del RJ45).
+3. Entra a una entrada del ADC: pata + al pin 1, pata − a masa.
+
+Queda una medición **single-ended** de una de las dos patas del par
+diferencial. Se pierden 6 dB de nivel y el rechazo de modo común, pero para
+medir **retardo, polaridad y respuesta** eso no importa: son medidas relativas.
+
+⚠️ **Antes de soldar, confirmalo con un multímetro**: continuidad entre J13 pin 1
+y un extremo de R82. Es lo que cierra la discusión, porque acá se está leyendo
+un archivo de diseño, no la placa que tenés en la mano — y ya vimos en esta
+misma placa que los dos pueden no coincidir (los cortos de fábrica de agosto
+salieron justo de eso).
+
+### Lo que sigue siendo cierto: los TP1-TP6 no sirven
+
+Los seis test points **sí** están como decía la versión anterior: `dnp`, sin red
+y **sin un solo segmento de cobre** — el rebarrido exhaustivo tampoco encontró
+nada. Ésos son huellas sueltas de verdad.
+
+Y J13 da **un** canal, el 24. Para lo que más valor tiene —medir el skew entre
+los cuatro bancos— hacen falta cuatro tomas, así que el adaptador de la §4 sigue
+siendo necesario para los otros tres.
 
 ---
 
@@ -143,9 +156,16 @@ Que una derivación de esquemático y una elección auditiva independiente caiga
 
 ## 4. El lazo cerrado que SÍ se puede hacer
 
-No hay punto de prueba en la placa, pero **no hace falta tocar la placa**: las
-salidas de parlante son conectores JST accesibles y las entradas son RJ45. Con
-un adaptador de seis componentes se cierra el lazo.
+J13 da **un solo canal** (el 24) y hay que soldarle un header. Para los otros
+tres bancos —y para medir la cadena COMPLETA, amplificador incluido, que J13 no
+ve porque toma antes— **no hace falta tocar la placa**: las salidas de parlante
+son conectores JST accesibles y las entradas son RJ45. Con un adaptador de seis
+componentes se cierra el lazo.
+
+> Las dos tomas son complementarias, no alternativas. **J13 mide el DAC**
+> (limpio, sin clase D). **El adaptador mide todo**, incluido el amplificador y
+> su pasaalto de 723 Hz. Comparar las dos sobre el mismo canal aislaría qué
+> aporta cada etapa.
 
 ### 4.1 Por qué no se puede conectar directo
 
