@@ -1,7 +1,7 @@
 # Manual de modos de operación — DS11 (firmware STM32)
 
-> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (17 modos, índices 0–16).
-> Última actualización: 2026-08-16.
+> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (**20 modos, índices 0–19**).
+> Última actualización: 2026-08-21.
 >
 > **¿Primera vez con el equipo?** Empezá por [guia_operacion.md](guia_operacion.md),
 > que explica el conexionado y el encendido en lenguaje llano. Este manual asume
@@ -34,7 +34,7 @@ todo el pipeline —SAI, DMA, beamforming, los 4 bancos— en silencio absoluto.
 
 | Vía | Mecanismo |
 |-----|-----------|
-| **Botón K2** (PA4, presionar = LOW) | **Corto** (al soltar): avanza un modo, con wrap 15→0. **Largo** (≥1 s, actúa sin soltar): toggle de los amps. Debounce de 30 ms. |
+| **Botón K2** (PA4, presionar = LOW) | **Corto** (al soltar): avanza un modo, con wrap 19→0. **Largo** (≥1 s, actúa sin soltar): toggle de los amps. Debounce de 30 ms. |
 
 > El K2 largo es lo que hace al instrumento **operable sin red**: los amps arrancan
 > apagados y hasta ahora solo se encendían por HTTP, así que sin WiFi la placa
@@ -45,7 +45,7 @@ todo el pipeline —SAI, DMA, beamforming, los 4 bancos— en silencio absoluto.
 | **HTTP** (web/app vía ESP32) | `POST /mode` con `{"mode":N}` → trama `CMD_SET_MODE` por UART4. |
 | **UART4 directo** | Trama binaria `CMD_SET_MODE` (0x02), payload = 1 byte con el índice. |
 
-Cada cambio imprime en UART7: `MODE [n/16]: <nombre>`.
+Cada cambio imprime en UART7: `MODE [n/20]: <nombre>`.
 
 **Persistencia**: el último modo se guarda en EEPROM con debounce de 3 s
 (`CFG_SAVE_DEBOUNCE_MS`, compartido con volumen y config) — ciclar rápido con
@@ -81,6 +81,7 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 | 16 | `TX 2k BARRIDO izq<->der @1m` | Tono interno 2 kHz | Foco barriendo ±700 mm, ciclo de 5 s | **Demuestra el steering sin caminar** |
 | 17 | `BARRIDO VERTICAL 800Hz arriba<->abajo @1m` | Tono interno **800 Hz** | Foco barriendo ±600 mm en Y, ciclo de 5 s | **Es un experimento**, no una demo — decide un gasto de hardware en DS12 |
 | 18 | `TX foco CALIBRADO (AUTOFOCUS guardado)` | Tono interno 2 kHz | Retardos **medidos** recuperados de la EEPROM | Recupera el foco del punto donde estaba el micrófono; sin calibración cae al foco geométrico de 1 m |
+| 19 | `LOOPBACK electrico` | Chirp interno | Un canal de **cada banco** (0/8/16/24) a la vez | **Modo de banco**: mide el camino de salida por cable, no por la sala. Requiere adaptadores pasivos |
 
 **IMPORTANTE (append-only)**: los índices están espejados en el ESP32, la web y
 la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
@@ -700,3 +701,64 @@ funcionó y el riesgo está cerrado. Como el offset es reproducible, una calibra
 de AUTOFOCUS **sí sobreviviría** un ciclo de alimentación.
 
 En DS10 esto era invisible porque sólo estaba poblado un banco (U2).
+
+
+---
+
+## Modo 19 — LOOPBACK eléctrico: medir el equipo, no la sala
+
+**No suena para nadie.** Es un modo de banco: emite un chirp por un canal de
+cada banco y mide lo que vuelve por el ADC a través de **adaptadores pasivos**
+(divisor + pasabajos) que van de una salida de parlante a una entrada RJ45.
+Receta, valores y fundamento en [loopback_debug.md](loopback_debug.md).
+
+La diferencia con el AUTOFOCUS es qué hay en el medio: el AUTOFOCUS mide **a
+través de la sala** —con eco, reverberación y la posición del micrófono—; esto
+mide **el equipo**, con un cable. Sin sala, el pico de correlación es limpio y
+el resultado es del instrumento.
+
+### Para qué existe
+
+Para medir el **SYNC entre bancos del lado ANALÓGICO**. El número de 4 µs que
+publica el heartbeat sale de comparar marcas de `DWT->CYCCNT` en los callbacks
+de DMA: mide **cuándo se entera el software**, no cuándo sale la señal. SAI1_A y
+SAI2_A son masters asíncronos entre sí, su offset queda fijo al arrancar los
+streams, y hasta ahora nunca se verificó por fuera del microcontrolador.
+
+El chirp sale por los cuatro bancos **a la vez** y la captura es simultánea (el
+ADC muestrea sus 8 entradas en la misma trama TDM, así que no aporta skew).
+Cualquier diferencia entre los retardos medidos es **skew real de la salida**.
+
+### Cómo se lee
+
+Informa por el serie cada 2 s:
+
+```
+LOOPBACK ---------------------------------------------------
+  sonda0  ch0   t=812.43 smp (16925 us)  skew=+0.0 us  pol=+  q=1840  pico=148233
+  sonda1  ch8   t=812.62 smp (16929 us)  skew=+4.0 us  pol=+  q=1795  pico=151002
+  sonda2  ch16  SIN SENAL (pico=87, q=0)
+  sonda3  ch24  SIN SENAL (pico=91, q=0)
+  (skew relativo a la sonda0; + = sale DESPUES)
+```
+
+- **`t=`** retardo absoluto: la ida y vuelta completa DAC→adaptador→ADC.
+- **`skew=`** lo que importa: diferencia entre bancos, en décimas de µs.
+- **`pol=`** polaridad medida del canal.
+- **`q=`** calidad (pico/promedio ×10). Mismo umbral que el AUTOFOCUS: bajo
+  `CAL_Q_MIN` = 100 se informa *SIN SENAL* en vez de un número inventado.
+
+**La referencia es la primera sonda con señal, no la sonda 0.** Con un solo
+adaptador puesto en otro banco, anclar en la 0 daría todo "sin señal".
+
+### Detalles
+
+- Resolución **sub-muestra** por interpolación parabólica sobre el pico. Sin eso
+  la resolución sería una muestra = 20,8 µs, y no se podría hablar de un skew de
+  4 µs.
+- La correlación va **en trozos** de 128 lags por pasada del main loop: son ~2M
+  multiplicaciones por sonda y de una sola vez se comería varios deadlines.
+- `lb_capture` (38,4 kB) queda en **DTCM**, que a 0 wait states es justo lo que
+  quiere un lazo de correlación.
+- Con los adaptadores desconectados el modo corre igual, informa *SIN SENAL* en
+  las cuatro sondas y no molesta: **2,5 % de CPU, 0 underruns**.

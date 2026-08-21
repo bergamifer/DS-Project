@@ -364,6 +364,7 @@ typedef struct {
   uint8_t mfin;                   // 1 = MULTIFOCUS de ENTRADAS (8 ADC → 8 focos)
   uint8_t sweep;                  // eje del barrido automático: 0 no, 1 = X, 2 = Y
   uint8_t calfoc;                 // 1 = usa el foco MEDIDO por AUTOFOCUS, no el geométrico
+  uint8_t loopb;                  // 1 = LOOPBACK: medición eléctrica del camino de salida
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor",                  .monitor = 1 },
@@ -471,6 +472,11 @@ static const ui_state_t ui_states[] = {
   { .name = "TX foco CALIBRADO (AUTOFOCUS guardado)", .beam = 1, .tx = 1,
     .tone = 1, .tone_hz = 2000, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000,
     .calfoc = 1 },
+  // LOOPBACK: no suena para nadie — es un modo de banco. Emite el chirp por un
+  // canal de cada banco y mide lo que vuelve por el ADC a través de los
+  // adaptadores pasivos (docs/loopback_debug.md). Informa por el serie cada 2 s.
+  // Sin adaptadores conectados dice "sin senal" y no hace nada más.
+  { .name = "LOOPBACK electrico (bancos 0/8/16/24 -> ADC 0-3)", .loopb = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 static volatile uint8_t ui_state_idx = 0;
@@ -642,6 +648,9 @@ static volatile cal_state_t cal_state = CAL_IDLE;
 static volatile uint8_t  cal_ch = 0;            // speaker being measured
 static volatile uint16_t cal_settle = 0;        // settle halves remaining
 static volatile uint8_t  cal_capturing = 0;
+/* Posición dentro del chirp: existe porque el chirp (480) es más largo que una
+ * ventana de fill (240) y hay que emitirlo a lo largo de varias. */
+static volatile uint16_t cal_chirp_pos = 0;
 static volatile uint16_t cal_cap_count = 0;
 static int32_t cal_chirp[CAL_CHIRP_LEN];        // 24-bit chirp ref (Cal_Init)
 static int32_t cal_capture[CAL_CAPTURE_LEN];    // mic capture, 24-bit
@@ -683,6 +692,62 @@ static volatile int32_t cal_cap_peak = 0;
  * el AUTOFOCUS exigía tener el cable serie enchufado para saber si sirvió. */
 static volatile uint8_t cal_progress = 0;   // parlantes medidos, 0..CAL_NUM_CH
 static volatile uint8_t cal_ok_count = 0;   // de esos, con q ≥ CAL_Q_MIN
+
+/* ===== LOOPBACK — medir el camino de salida por vía ELÉCTRICA =====
+ *
+ * El AUTOFOCUS mide a través de la sala: lo que devuelve incluye eco,
+ * reverberación y la posición del micrófono. Este modo mide el EQUIPO, con un
+ * cable: se realimentan salidas de parlante a entradas del ADC a través de un
+ * adaptador pasivo (divisor + pasabajos, ver docs/loopback_debug.md §4.2).
+ *
+ * Lo que habilita, y no se puede medir de ninguna otra forma hoy:
+ *
+ *   El SYNC entre bancos MEDIDO DEL LADO ANALÓGICO. El número de 4 µs que
+ *   publica el heartbeat sale de comparar marcas de DWT->CYCCNT en los
+ *   callbacks de DMA: mide cuándo se entera el SOFTWARE, no cuándo sale la
+ *   señal. SAI1_A y SAI2_A son masters asíncronos entre sí y su offset queda
+ *   fijo al arrancar los streams — es un dato de hardware que nunca se
+ *   verificó por fuera del micro.
+ *
+ * Por eso se emite en los cuatro bancos A LA VEZ y se captura en la misma
+ * ventana: el ADC muestrea sus 8 entradas en la misma trama TDM, así que es
+ * perfectamente síncrono. Cualquier diferencia entre los retardos medidos es
+ * skew REAL de la salida.
+ *
+ * La correlación es la del AUTOFOCUS. La diferencia es que acá no hay sala en
+ * el medio: sin eco, el pico es limpio y el resultado es del equipo. */
+#define LB_NUM_PROBES   4      /* un canal por banco: 0, 8, 16, 24 */
+/* 50 ms de ventana. La ida y vuelta DAC→adaptador→ADC son unos pocos buffers
+ * (~15-20 ms); 50 ms deja margen de sobra y el retardo absoluto se imprime,
+ * así que si alguna vez cayera cerca del borde se vería. */
+#define LB_CAPTURE_LEN  2400
+#define LB_MAX_LAG      (LB_CAPTURE_LEN - CAL_CHIRP_LEN)
+#define LB_CORR_CHUNK   128    /* lags por pasada — mismo criterio que el scan */
+#define LB_PERIOD_MS    2000   /* repetir la medición cada 2 s */
+/* Canal de salida de cada sonda → se realimenta a la ENTRADA del mismo índice.
+ * Uno por banco a propósito: es la configuración que mide el skew entre los
+ * cuatro SAI. Con un solo adaptador, la sonda 0 mide y el resto informa
+ * "sin señal" — el modo no exige tener los cuatro. */
+static const uint8_t lb_probe_ch[LB_NUM_PROBES] = { 0, 8, 16, 24 };
+typedef enum { LB_IDLE = 0, LB_ARM, LB_CAPT, LB_CORR, LB_WAIT } lb_state_t;
+static volatile uint8_t   lb_enabled = 0;
+static volatile lb_state_t lb_state = LB_IDLE;
+static int32_t  lb_capture[LB_NUM_PROBES][LB_CAPTURE_LEN];
+static volatile uint16_t lb_cap_count = 0;
+static volatile uint8_t  lb_capturing = 0;
+static volatile uint16_t lb_chirp_pos = 0;
+static volatile uint32_t lb_next_ms = 0;
+/* Estado de la correlación, persistente entre pasadas (igual que el scan) */
+static uint8_t  lb_probe = 0;
+static uint32_t lb_corr_lag = 0;
+static int64_t  lb_best_mag = 0, lb_mag_sum = 0;
+static int32_t  lb_best_lag = 0;
+static int8_t   lb_best_sign = 1;
+/* Resultados por sonda */
+static int32_t  lb_lag_q8[LB_NUM_PROBES];
+static int8_t   lb_sign[LB_NUM_PROBES];
+static uint16_t lb_q10[LB_NUM_PROBES];
+static int32_t  lb_peak[LB_NUM_PROBES];
 
 /* Extra right-shift applied to the -6dBFS sine table.
  * Now 0: the PAM8302A clipping headroom is handled by the PCM1690's own
@@ -862,6 +927,7 @@ static void UI_ApplyCustomBeam(const ds_beam_req_t *req);
 static void Cal_Init(void);
 static void Cal_StartScan(void);
 static void Cal_Process(void);
+static void LB_Process(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -1466,6 +1532,9 @@ int main(void)
 
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
     if (autofocus_enabled) Cal_Process();
+
+    // ===== LOOPBACK driver — misma disciplina: correlación en trozos =====
+    if (lb_enabled) LB_Process();
 
     /* ===== BARRIDO: mover el foco, 20 veces por segundo =====
      * Triángulo entre −amp y +amp sobre el eje elegido. Va acá y no en el fill
@@ -3098,6 +3167,7 @@ static void Cal_StartScan(void) {
   cal_ch = 0;
   cal_capturing = 0;
   cal_cap_count = 0;
+  cal_chirp_pos = 0;
   cal_progress = 0;
   cal_ok_count = 0;
   cal_settle = CAL_SETTLE_HALVES;
@@ -3115,15 +3185,18 @@ static void Cal_StartScan(void) {
   }
 }
 
-/** Cross-correlation of the capture at one lag against the chirp reference. */
-static int64_t Cal_CorrAt(uint32_t lag) {
+/** Correlación cruzada de una captura contra la referencia del chirp, a un lag.
+ *  Compartida por el AUTOFOCUS y el LOOPBACK: es la misma cuenta sobre buffers
+ *  distintos, y duplicarla sería duplicar también cualquier corrección futura. */
+static int64_t Corr_At(const int32_t *cap_base, uint32_t lag) {
   int64_t acc = 0;
-  const int32_t *cap = &cal_capture[lag];
+  const int32_t *cap = &cap_base[lag];
   for (uint32_t n = 0; n < CAL_CHIRP_LEN; n++) {
     acc += (int64_t)cap[n] * (int64_t)cal_chirp[n];
   }
   return acc;
 }
+static int64_t Cal_CorrAt(uint32_t lag) { return Corr_At(cal_capture, lag); }
 
 /**
  * @brief AUTOFOCUS driver, called every main-loop pass while the mode is on.
@@ -3271,6 +3344,135 @@ static void Cal_Process(void) {
   cal_state = CAL_DONE;
 }
 
+/**
+ * @brief Driver del LOOPBACK, llamado en cada pasada del main loop.
+ *
+ * Misma estructura que Cal_Process y por el mismo motivo: la correlación
+ * completa son ~2M multiplicaciones por sonda y bloquearía varios deadlines de
+ * fill. Se hace de a LB_CORR_CHUNK lags por pasada, y de a una sonda por vez —
+ * lo que tiene que ser simultáneo es la CAPTURA, no la cuenta posterior.
+ */
+static void LB_Process(void) {
+  if (lb_state == LB_WAIT) {
+    if ((int32_t)(HAL_GetTick() - lb_next_ms) >= 0) {
+      lb_chirp_pos = 0;
+      lb_state = LB_ARM;
+    }
+    return;
+  }
+  if (lb_state == LB_CAPT && !lb_capturing && lb_cap_count >= LB_CAPTURE_LEN) {
+    lb_probe = 0;
+    lb_corr_lag = 0; lb_best_mag = 0; lb_mag_sum = 0;
+    lb_best_lag = 0; lb_best_sign = 1;
+    lb_state = LB_CORR;
+    return;
+  }
+  if (lb_state != LB_CORR) return;
+
+  uint32_t end = lb_corr_lag + LB_CORR_CHUNK;
+  if (end > LB_MAX_LAG) end = LB_MAX_LAG;
+  const int32_t *cap = lb_capture[lb_probe];
+  for (; lb_corr_lag < end; lb_corr_lag++) {
+    int64_t c = Corr_At(cap, lb_corr_lag);
+    int64_t m = (c < 0) ? -c : c;
+    lb_mag_sum += m;
+    if (m > lb_best_mag) {
+      lb_best_mag = m;
+      lb_best_lag = (int32_t)lb_corr_lag;
+      lb_best_sign = (c < 0) ? -1 : 1;
+    }
+  }
+  if (lb_corr_lag < LB_MAX_LAG) return;         // sigue en la próxima pasada
+
+  /* Refinamiento sub-muestra: parábola sobre |corr| en el pico ±1. Es lo que
+   * da resolución mucho mejor que una muestra (20,8 µs) — sin esto no se
+   * podría hablar de un skew de 4 µs entre bancos. */
+  float frac = 0.0f;
+  if (lb_best_lag > 0 && lb_best_lag < (int32_t)LB_MAX_LAG - 1) {
+    int64_t cm = Corr_At(cap, (uint32_t)lb_best_lag - 1);
+    int64_t cp = Corr_At(cap, (uint32_t)lb_best_lag + 1);
+    float mm1 = (float)((cm < 0) ? -cm : cm);
+    float mp1 = (float)((cp < 0) ? -cp : cp);
+    float den = mm1 - 2.0f * (float)lb_best_mag + mp1;
+    if (den < -1.0f) {
+      frac = 0.5f * (mm1 - mp1) / den;
+      if (frac > 0.5f) frac = 0.5f; else if (frac < -0.5f) frac = -0.5f;
+    }
+  }
+  int64_t avg = lb_mag_sum / (int64_t)LB_MAX_LAG;
+  uint32_t q10 = (avg > 0) ? (uint32_t)(lb_best_mag * 10 / avg) : 0;
+  if (q10 > 9999) q10 = 9999;
+
+  /* Pico absoluto de la captura: mismo gate que el AUTOFOCUS. Un cociente
+   * siempre encuentra un máximo, incluso sobre ruido — sin piso absoluto, una
+   * sonda desconectada informaría un retardo. */
+  int32_t pk = 0;
+  for (uint32_t n = 0; n < LB_CAPTURE_LEN; n++) {
+    int32_t v = cap[n]; if (v < 0) v = -v;
+    if (v > pk) pk = v;
+  }
+  if (pk < MIC_LIVE_THRESH) q10 = 0;
+
+  lb_lag_q8[lb_probe] = (lb_best_lag << 8) + (int32_t)(frac * 256.0f);
+  lb_sign[lb_probe]   = lb_best_sign;
+  lb_q10[lb_probe]    = (uint16_t)q10;
+  lb_peak[lb_probe]   = pk;
+
+  lb_probe++;
+  if (lb_probe < LB_NUM_PROBES) {               // siguiente sonda
+    lb_corr_lag = 0; lb_best_mag = 0; lb_mag_sum = 0;
+    lb_best_lag = 0; lb_best_sign = 1;
+    return;
+  }
+
+  /* ===== Informe ===== */
+  UART_Print("\r\nLOOPBACK ---------------------------------------------------\r\n");
+  /* La referencia es la primera sonda CON señal, no la sonda 0: con un solo
+   * adaptador puesto en otro banco, anclar en la 0 daría todo "sin señal". */
+  int32_t ref_q8 = 0; int8_t have_ref = 0; uint8_t ref_i = 0;
+  for (uint8_t p = 0; p < LB_NUM_PROBES; p++) {
+    if (lb_q10[p] >= CAL_Q_MIN) { ref_q8 = lb_lag_q8[p]; have_ref = 1; ref_i = p; break; }
+  }
+  for (uint8_t p = 0; p < LB_NUM_PROBES; p++) {
+    if (lb_q10[p] < CAL_Q_MIN) {
+      sprintf(uart_buf, "  sonda%u  ch%-2u  SIN SENAL (pico=%ld, q=%u)\r\n",
+              (unsigned)p, (unsigned)lb_probe_ch[p], (long)lb_peak[p],
+              (unsigned)lb_q10[p]);
+      UART_Print(uart_buf);
+      continue;
+    }
+    int32_t lag = lb_lag_q8[p];
+    /* Retardo absoluto en µs: (lag/256) muestras × 1e6/48000. Se hace en
+     * enteros — nano.specs no imprime %f. */
+    int32_t abs_us = (int32_t)(((int64_t)lag * 1000000) / (256 * AUDIO_SAMPLE_RATE));
+    int32_t d_q8   = lag - ref_q8;
+    int32_t d_us   = (int32_t)(((int64_t)d_q8 * 1000000) / (256 * AUDIO_SAMPLE_RATE));
+    /* Décimas de µs para el skew: el número interesante son unos pocos µs y
+     * redondear a µs enteros tiraría justo la parte que importa. */
+    int32_t d_us10 = (int32_t)(((int64_t)d_q8 * 10000000) / (256 * AUDIO_SAMPLE_RATE));
+    sprintf(uart_buf,
+            "  sonda%u  ch%-2u  t=%ld.%02ld smp (%ld us)  skew=%+ld.%01ld us  "
+            "pol=%c  q=%u  pico=%ld\r\n",
+            (unsigned)p, (unsigned)lb_probe_ch[p],
+            (long)(lag >> 8), (long)((lag & 0xFF) * 100 / 256), (long)abs_us,
+            (long)(d_us10 / 10), (long)(d_us10 < 0 ? -d_us10 % 10 : d_us10 % 10),
+            (lb_sign[p] < 0) ? '-' : '+', (unsigned)lb_q10[p], (long)lb_peak[p]);
+    UART_Print(uart_buf);
+    (void)d_us;
+  }
+  if (have_ref) {
+    sprintf(uart_buf, "  (skew relativo a la sonda%u; + = sale DESPUES)\r\n",
+            (unsigned)ref_i);
+    UART_Print(uart_buf);
+  } else {
+    UART_Print("  ninguna sonda con senal — revisa los adaptadores "
+               "(docs/loopback_debug.md) y que los amps esten encendidos\r\n");
+  }
+
+  lb_next_ms = HAL_GetTick() + LB_PERIOD_MS;
+  lb_state = LB_WAIT;
+}
+
 /** @brief Deja beam_config en valores de fábrica (sin tocar la EEPROM).
  *
  * Una sola definición de "default", usada tanto en el boot como en el reset de
@@ -3283,7 +3485,20 @@ static void Config_LoadDefaults(void) {
   memset(beam_config.delays, 0, sizeof(beam_config.delays));
   memset(beam_config.gains, 255, sizeof(beam_config.gains));  // 0xFF = unity gain
   beam_config.mutes = 0;
-  beam_config.master_vol_db = -24;   // igual al default del init del PCM1690
+  /* −40 dB, no −24. El −24 venía de igualar el default del init del PCM1690 y
+   * NO sale de la cadena de ganancia: el PAM8302A está configurado con
+   * R_I = 1 kΩ, o sea A_V = 2·(142k/1k) = 284 = +49 dB. Para que no recorte, su
+   * entrada tiene que quedar en ~11 mV_rms, y el PCM1690 entrega ~1,4 V_rms a
+   * fondo de escala → hacen falta ≈ −42 dB de atenuación digital.
+   *
+   * Con −24 dB y los modos de tono (−6 dBFS) el amplificador quedaba 12 dB
+   * DENTRO del recorte: el equipo arrancaba de fábrica en un punto donde
+   * distorsiona. Es el fondo del lío de estructura de ganancia de agosto.
+   *
+   * Corroboración independiente: Fernando venía operando a −46 dB por oído.
+   * Una derivación de esquemático y una elección auditiva que caen a 4 dB una
+   * de otra. Detalle en docs/loopback_debug.md §3. */
+  beam_config.master_vol_db = -40;
   beam_config.last_mode = 0;         // monitor
   beam_config.in_gain_db = IN_GAIN_DB_LINE;  // las entradas de la DS11 son de línea
   /* Sin calibración: polaridades en +1, que es lo que corresponde en DS11 (la
@@ -3387,6 +3602,15 @@ static void UI_ApplyState(uint8_t idx) {
   mfocus_in_enabled = st->mfin;
   if (st->mfin) MFocusIn_ApplyDefaults();
   sweep_axis = st->sweep;
+  lb_enabled = st->loopb;
+  if (st->loopb) {                   // entrar al modo arranca una medición ya
+    lb_chirp_pos = 0;
+    lb_capturing = 0;
+    lb_state = LB_ARM;
+  } else {
+    lb_state = LB_IDLE;
+    lb_capturing = 0;
+  }
   /* Tone source is -6dBFS: el boost que levanta el beam débil del ADC lo
    * saturaría contra los PAM (plan §3.1). Con fuente de ADC, el beam usa la
    * MISMA ganancia de entrada que el resto — un ajuste, una cadena. */
@@ -3482,6 +3706,20 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
   for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
     if (pk[ch] > adc_peak_hold[ch]) adc_peak_hold[ch] = pk[ch];   /* → serie */
     if (pk[ch] > adc_peak_net[ch])  adc_peak_net[ch]  = pk[ch];   /* → /status */
+  }
+
+  /* LOOPBACK: capturar las LB_NUM_PROBES primeras entradas SIMULTÁNEAMENTE.
+   * Que sea la misma trama TDM para todas es justamente lo que hace válida la
+   * comparación de retardos: el lado del ADC no aporta skew. */
+  if (lb_capturing) {
+    uint32_t n = lb_cap_count;
+    for (uint32_t i = 0; i < samples && n < LB_CAPTURE_LEN; i++, n++) {
+      for (uint32_t p = 0; p < LB_NUM_PROBES; p++) {
+        lb_capture[p][n] = rx_buf[i * ADC_CHANNELS + p] >> 8;
+      }
+    }
+    lb_cap_count = (uint16_t)n;
+    if (n >= LB_CAPTURE_LEN) lb_capturing = 0;
   }
 
   /* AUTOFOCUS capture: append the measurement mic (24-bit) until the window
@@ -3581,28 +3819,83 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
     return;
   }
 
+  /* LOOPBACK: el chirp sale por UN canal de CADA banco, todos a la vez.
+   *
+   * Simultáneo a propósito: es lo único que permite medir el skew entre bancos.
+   * Si se emitiera de a uno, cada medida tendría su propio origen de tiempo y
+   * la diferencia entre ellas no significaría nada. */
+  if (lb_enabled) {
+    if (lb_state == LB_ARM) {
+      uint8_t local = 0xFF;                    /* canal local de este banco */
+      for (uint8_t p = 0; p < LB_NUM_PROBES; p++) {
+        if ((lb_probe_ch[p] & ~7u) == ch_offset) local = lb_probe_ch[p] & 7u;
+      }
+      for (uint32_t i = 0; i < samples; i++) {
+        uint32_t k = lb_chirp_pos + i;
+        int32_t sv = (k < CAL_CHIRP_LEN) ? cal_chirp[k] : 0;
+        for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+          buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? sv : 0;
+        }
+      }
+      /* ⚠️ El avance va en el ÚLTIMO banco (24), nunca en el primero.
+       * Service_Fills corre los cuatro en orden 0→8→16→24 dentro de la misma
+       * pasada. Avanzando en el banco 0, los otros tres leerían lb_chirp_pos ya
+       * adelantado y emitirían el trozo SIGUIENTE del chirp: los bancos
+       * quedarían desfasados una ventana entre sí — y este modo existe
+       * justamente para medir desfasajes entre bancos, así que se mediría el
+       * error introducido acá. Es el mismo error que tuvo mf_frame. */
+      if (ch_offset == 24) {
+        if (lb_chirp_pos == 0) { lb_cap_count = 0; lb_capturing = 1; }
+        lb_chirp_pos += samples;
+        if (lb_chirp_pos >= CAL_CHIRP_LEN) lb_state = LB_CAPT;
+      }
+      return;
+    }
+    for (uint32_t i = 0; i < samples * AUDIO_CHANNELS; i++) buffer[i] = 0;
+    return;
+  }
+
   /* AUTOFOCUS mode: during the scan, emit the chirp on one speaker at a time
    * (everything else silent); once done, play a 1kHz tone steered with the
    * MEASURED delays & polarities — audibly focused at the mic position. */
   if (autofocus_enabled) {
     // SETTLE countdown ticks on the always-firing SAI1_A fills
     if (ch_offset == 0 && cal_state == CAL_SETTLE && cal_settle > 0) {
-      if (--cal_settle == 0) cal_state = CAL_ARM;
+      if (--cal_settle == 0) { cal_chirp_pos = 0; cal_state = CAL_ARM; }
     }
 
     if (cal_state == CAL_ARM && ch_offset == (cal_ch & ~7u)) {
-      // Emit the 480-sample chirp on cal_ch (exactly one half-buffer) and
-      // start the mic capture in this same pass — constant offset per ch.
+      /* ⚠️ El chirp NO entra en una ventana. Son CAL_CHIRP_LEN = 480 muestras y
+       * el buffer pasó a AUDIO_BUFFER_SAMPLES = 240 el 2026-08-18: este lazo
+       * decía `cal_chirp[i]` con i < samples, o sea que emitía la PRIMERA MITAD
+       * del chirp (500 Hz → ~3,2 kHz) mientras la correlación seguía usando la
+       * referencia de 480 completa. El pico quedaba a la mitad y con más
+       * lóbulos laterales — o sea calidad degradada en todos los scans, sin
+       * ningún síntoma visible. Con CAL_Q_MIN en 100 eso pasaba de "peor" a
+       * "podría no llegar al umbral con un micrófono real".
+       *
+       * Es el mismo tipo de bug que el de la tabla de senos y el de mf_frame:
+       * el tercero que deja el cambio de 480→240 (ver ds11_perf.md §7).
+       *
+       * Ahora se emite a lo largo de las ventanas que hagan falta y la captura
+       * arranca con la PRIMERA, así el offset emisión→captura sigue siendo
+       * constante para todos los parlantes — que es lo que hace que las
+       * latencias fijas del pipeline se cancelen en los retardos relativos. */
       uint32_t local = cal_ch & 7u;
       for (uint32_t i = 0; i < samples; i++) {
+        uint32_t k = cal_chirp_pos + i;
+        int32_t s = (k < CAL_CHIRP_LEN) ? cal_chirp[k] : 0;
         for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
-          buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? cal_chirp[i] : 0;
+          buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? s : 0;
         }
       }
-      cal_cap_count = 0;
-      cal_cap_peak = 0;
-      cal_capturing = 1;
-      cal_state = CAL_CAPT;
+      if (cal_chirp_pos == 0) {          // arrancar la captura con la 1ª ventana
+        cal_cap_count = 0;
+        cal_cap_peak = 0;
+        cal_capturing = 1;
+      }
+      cal_chirp_pos += samples;
+      if (cal_chirp_pos >= CAL_CHIRP_LEN) cal_state = CAL_CAPT;
       return;
     }
 

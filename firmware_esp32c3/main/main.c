@@ -141,6 +141,7 @@ static const char *MODE_NAMES[] = {
     "TX 2k BARRIDO izq<->der @1m",
     "BARRIDO VERTICAL 800Hz arriba<->abajo @1m",
     "TX foco CALIBRADO (AUTOFOCUS guardado)",
+    "LOOPBACK electrico (bancos 0/8/16/24 -> ADC 0-3)",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 
@@ -984,7 +985,7 @@ static const char INDEX_HTML[] =
  * arriba. Agregar un modo y olvidarse de esta linea deja el modo SIN BOTON: el
  * 17 quedo invisible en la pagina hasta que se noto. Al agregar un modo se
  * tocan TRES lugares. */
-"const N=19,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. LEJOS 2m','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','TX 2k ondul. centro','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in','TX 2k BARRIDO izq-der','BARRIDO VERTICAL 800Hz','TX foco CALIBRADO'];"
+"const N=20,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. LEJOS 2m','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','TX 2k ondul. centro','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in','TX 2k BARRIDO izq-der','BARRIDO VERTICAL 800Hz','TX foco CALIBRADO','LOOPBACK electrico'];"
 "const md=document.getElementById('modes');"
 /* El numero adelante: es lo que se usa para referenciar el modo en los comandos
  * (POST /mode {"mode":N}), en los logs y al hablar del equipo. */
