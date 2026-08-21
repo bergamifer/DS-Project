@@ -116,6 +116,53 @@ la apertura: a 800 Hz son 1,12 λ → haz de ~51°, spot de ±45 cm a 1 m.
 **Es una medición de una tarde que decide gasto de hardware.** Pendiente de
 correr. Procedimiento en `docs/manual_modos.md`, sección "Modo 17".
 
+### 0.6. 🔴 Los siete puntos de prueba de la DS11 no existen eléctricamente
+
+**Verificado sobre `DS.kicad_pcb` el 2026-08-20.** La placa tiene siete huellas
+pensadas para debug —**J13** (header 1x02) y **TP1 a TP6** (pads de 1,5 mm)— y
+las siete están en el mismo estado:
+
+- marcadas `dnp` + `exclude_from_bom` + `exclude_from_pos_files`
+- **pads sin red asignada**
+- **ninguna pista de cobre termina a menos de 0,6 mm de ellos**
+
+O sea: se dibujaron, nunca se conectaron, y la fábrica ni se enteró de que
+existían. **La DS11 no tiene un solo punto donde pinchar una señal.**
+
+Duele especialmente en J13, que en el esquemático sí está cableado a
+`VD.P1/VD.N1` —la salida diferencial del DAC antes del amplificador—, que es
+exactamente la señal que uno querría medir.
+
+**Para la DS12:**
+
+1. **Verificar que cada TP tenga red y cobre antes de plotear.** Es el mismo
+   tipo de falla que los cortos de fábrica de la DS11: el diseño decía una cosa
+   y el archivo que fue a producción decía otra. Un DRC no lo marca porque un
+   footprint sin red no viola ninguna regla.
+2. **Un header de lazo cerrado de fábrica.** Un canal de cada uno de los 4
+   bancos, con divisor y pasabajos **en la placa**, llevado a un header junto a
+   las entradas. Convierte medir el SYNC entre bancos, los retardos
+   fraccionales y el mapeo de canales en "enchufar un cable plano".
+   Fundamento y valores en `docs/loopback_debug.md`.
+
+### 0.7. 🔴 La ganancia del PAM8302A obliga a tirar 42 dB de rango dinámico
+
+`R_I = 1 kΩ` da `A_V = 2·(142k/1k) = 284` = **+49 dB**. Para que el amplificador
+no recorte, la entrada tiene que quedar en ~11 mV<sub>rms</sub>, y como el
+PCM1690 entrega ~1,4 V<sub>rms</sub> a fondo de escala, hay que atenuar
+**≈ −42 dB en digital**. Son 42 dB de rango dinámico del DAC que se tiran.
+
+Corroboración independiente: Fernando venía operando a **−46 dB por oído**.
+
+Subir `R_I` a 20 kΩ (ganancia +23 dB) subiría el punto de operación digital
+~26 dB, con la mejora de señal-ruido correspondiente. **Y de paso corre el
+pasaalto de entrada de 723 Hz a 36 Hz**: hoy el modo 17 (barrido vertical,
+800 Hz) trabaja a media octava del borde de la banda, con −2,6 dB y 42° de fase.
+
+> Mientras tanto, en la DS11: el default de fábrica de −24 dB deja el
+> amplificador **12 dB dentro del recorte** con los modos de tono. Debería ser
+> −40 dB.
+
 ## 🔴 Prioridad alta
 
 ### 1. Margen del buck a 24V — el TVS NO protege al MP2315S
