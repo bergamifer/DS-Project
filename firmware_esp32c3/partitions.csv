@@ -1,0 +1,25 @@
+# Tabla de particiones — ESP32-C3-MINI-1 de la DS11, 4 MB
+#
+# Dos ranuras de aplicacion para poder actualizar por WiFi. El bootloader de
+# segunda etapa de ESP-IDF ya sabe elegir entre las dos: la que arranca la dice
+# `otadata`, y si la imagen nueva no confirma que arranco bien, vuelve sola a la
+# anterior (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE). Ver docs/ota_wifi.md §9.
+#
+# ⚠️ El modulo SIEMPRE tuvo 4 MB de flash (ESP32-C3-MINI-1, XMC 4MB) pero la
+# configuracion decia 2 MB: la mitad estaba sin usar y era invisible para el
+# sistema. Descubierto el 2026-08-23 justamente al ir a hacer lugar para la
+# segunda ranura. Con 4 MB entran dos ranuras de ~2 MB y la aplicacion (890 kB)
+# usa menos de la mitad de la suya.
+#
+# NO hay particion `factory`: se la comeria entera (1 MB) sin aportar nada. Con
+# dos ranuras OTA y vuelta atras automatica, la copia de rescate es la otra
+# ranura. La de verdad de ultima instancia sigue siendo el cable USB-C.
+#
+# Los offsets de una particion de tipo `app` tienen que estar alineados a 64 kB.
+#
+# Name,     Type, SubType,  Offset,    Size
+nvs,        data, nvs,      0x9000,    0x4000
+otadata,    data, ota,      0xd000,    0x2000
+phy_init,   data, phy,      0xf000,    0x1000
+ota_0,      app,  ota_0,    0x10000,   0x1F0000
+ota_1,      app,  ota_1,    0x200000,  0x1F0000

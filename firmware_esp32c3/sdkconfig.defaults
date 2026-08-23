@@ -9,3 +9,21 @@ CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
 # WiFi
 CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
+
+# ===== Actualizacion por WiFi (OTA) — agregado 2026-08-23 =====
+# El modulo tiene 4 MB de flash; la config decia 2 MB y la mitad estaba sin
+# usar. Con 4 MB entran dos ranuras de aplicacion de ~2 MB (ver partitions.csv).
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Vuelta atras automatica. La imagen nueva arranca "a prueba": si no llama a
+# esp_ota_mark_app_valid_cancel_rollback(), el bootloader vuelve a la anterior
+# en el proximo reinicio. Esto es lo que hace que actualizar el chip que TIENE
+# LA RED no de miedo: una config de WiFi mal puesta se deshace sola.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# (La version del proyecto ya sale de git sin configurar nada: si no hay
+# PROJECT_VER ni version.txt, ESP-IDF usa `git describe --always --tags --dirty`
+# y queda en esp_app_get_description()->version.)

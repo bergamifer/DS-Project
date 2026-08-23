@@ -29,6 +29,9 @@
 #include "esp_netif.h"
 #include "esp_http_server.h"
 #include "nvs_flash.h"
+#include "esp_ota_ops.h"
+#include "esp_app_desc.h"
+#include "esp_partition.h"
 #include "mdns.h"
 #include "cJSON.h"
 
@@ -88,6 +91,13 @@
 // endpoint queda mudo SIN error visible.
 #define PROTO_MAX_PAYLOAD 128
 #define ESP_IP_PUSH_MS   10000  // reenvio periodico: si el STM32 resetea, recupera la IP
+
+// Version del protocolo con la que se compilo ESTE firmware. ESPEJO de
+// PROTO_VERSION en firmware/Core/Inc/uart_protocol.h — los dos chips tienen que
+// coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
+// reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
+// actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
+#define PROTO_VERSION    8
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -175,6 +185,7 @@ static SemaphoreHandle_t ack_sem;      // ACK/NACK recibido
 static SemaphoreHandle_t status_sem;   // CMD_STATUS recibido
 static volatile bool     last_ack_ok = false;
 static ds_status_t       last_status;  // valido tras tomar status_sem
+static uint16_t          last_status_len; // largo REAL de la trama (puede != sizeof)
 
 // Serializa las tramas hacia el STM32. Sin esto, el push periodico de la IP
 // (monitor task) puede intercalarse con la transaccion comando→ACK de un handler
@@ -325,11 +336,27 @@ static bool frame_feed(uint8_t b)
         if (fr_cmd == CMD_ACK || fr_cmd == CMD_NACK) {
             last_ack_ok = (fr_cmd == CMD_ACK);
             xSemaphoreGive(ack_sem);
-        } else if (fr_cmd == CMD_STATUS && fr_len == sizeof(ds_status_t)) {
+        } else if (fr_cmd == CMD_STATUS && fr_len >= 3 && fr_len <= PROTO_MAX_PAYLOAD) {
+            /* Se acepta CUALQUIER largo razonable, no solo el exacto.
+             *
+             * Antes se exigia fr_len == sizeof(ds_status_t) y la trama de un
+             * STM32 con otra version de protocolo se descartaba sin mas: la
+             * pagina mostraba "stm32: timeout", que es lo MISMO que muestra si
+             * la placa esta muerta. Un desajuste de firmwares —el caso normal
+             * mientras se actualiza uno de los dos— era indistinguible de una
+             * falla de hardware.
+             *
+             * El primer byte del status es proto_ver, asi que una trama de otro
+             * largo igual dice con que version fue hecha. Se copia el prefijo
+             * comun sobre un struct en cero y la pagina compara versiones y dice
+             * cual de los dos hay que actualizar. */
             uint8_t x = 0;
             for (uint16_t i = 0; i < fr_len; i++) x ^= fr_payload[i];
             if (x == fr_cksum) {
-                memcpy(&last_status, fr_payload, sizeof(ds_status_t));
+                uint16_t n = (fr_len < sizeof(ds_status_t)) ? fr_len : sizeof(ds_status_t);
+                memset(&last_status, 0, sizeof(ds_status_t));
+                memcpy(&last_status, fr_payload, n);
+                last_status_len = fr_len;
                 xSemaphoreGive(status_sem);
             }
         }
@@ -642,15 +669,49 @@ static esp_err_t command_handler(httpd_req_t *req)
 }
 
 // GET /status — pide CMD_GET_STATUS al STM32 y devuelve la telemetria real
+/* Identidad de ESTE chip, para el JSON de /status.
+ *
+ * Va en las DOS ramas del handler (con y sin respuesta del STM32) a proposito:
+ * cuando el STM32 esta callado es justamente cuando mas hace falta saber que
+ * firmware tiene el ESP32 y con que version de protocolo fue compilado — es la
+ * mitad del diagnostico de "por que no se hablan".
+ *
+ * La version sale de git sin configurar nada: si no hay PROJECT_VER ni
+ * version.txt, ESP-IDF usa `git describe --always --tags --dirty`. */
+static int esp_self_json(char *out, size_t n)
+{
+    const esp_app_desc_t  *d = esp_app_get_description();
+    const esp_partition_t *r = esp_ota_get_running_partition();
+    /* El identificador es el SHA-256 del ELF, no la fecha de compilacion.
+     *
+     * `d->date`/`d->time` NO se actualizan entre compilaciones: salen de
+     * __DATE__/__TIME__ de un archivo de ESP-IDF que no se recompila salvo que
+     * cambie el, y quedan congelados en la primera vez. Medido: dos binarios
+     * distintos reportaban la misma hora al segundo. Un identificador que a
+     * veces miente es peor que no tener ninguno.
+     *
+     * El SHA del ELF, en cambio, cambia con cada binario distinto — y NO cambia
+     * si el binario es el mismo, que es exactamente la propiedad que se quiere.
+     * ESP-IDF ya lo guarda (CONFIG_APP_RETRIEVE_LEN_ELF_SHA=9). */
+    return snprintf(out, n,
+        "\"esp_fw\":\"%s\",\"esp_sha\":\"%s\",\"esp_slot\":\"%s\","
+        "\"proto_esp\":%u",
+        d ? d->version : "?", esp_app_get_elf_sha256_str(),
+        r ? r->label : "?", PROTO_VERSION);
+}
+
 static esp_err_t status_handler(httpd_req_t *req)
 {
+    char self[192];
+    esp_self_json(self, sizeof(self));
+
     xSemaphoreTake(status_sem, 0);              // drenar status viejo
     uart_send_frame(CMD_GET_STATUS, NULL, 0);
 
     /* 768: el JSON ronda los 550 chars con los campos de la v8. snprintf trunca
      * en silencio, y un JSON truncado hace que la pagina entera se quede en
      * "sin conexion" sin decir por que — asi que conviene el margen. */
-    char buf[768];
+    char buf[960];
     /* 800 ms, no 400. El STM32 manda el status byte a byte sirviendo los fills
      * de audio entre medio (para no meter un pop de 6 ms), asi que en el modo
      * mas pesado —el 15, 8 fuentes x 32 salidas— la trama entera puede tardar
@@ -672,6 +733,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"cpu_fills_pct\":%u.%u,"
             "\"mic_live\":%u,\"cal_prog\":%u,\"cal_ok\":%u,\"cal_saved\":%s,"
             "\"fw_id\":\"%08lX\",\"fw_build\":%lu,\"ota_state\":%u,\"ota_pct\":%u,"
+            "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
@@ -692,6 +754,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             (s->state_flags & STATE_F_CALIB) ? "true" : "false",
             (unsigned long)s->fw_id, (unsigned long)s->fw_build,
             s->ota_state, s->ota_pct,
+            self, (unsigned)last_status_len,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
     } else {
@@ -699,7 +762,8 @@ static esp_err_t status_handler(httpd_req_t *req)
          * es el de este chip, y por eso lleva su nombre. */
         snprintf(buf, sizeof(buf),
             "{\"stm32\":\"timeout\",\"device_id\":\"" DEVICE_ID "\","
-            "\"uptime_ms\":%lu}",
+            "%s,\"uptime_ms\":%lu}",
+            self,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
     }
     httpd_resp_set_type(req, "application/json");
@@ -1084,6 +1148,170 @@ fail:
     return ESP_OK;
 }
 
+// ============== Confirmacion de arranque tras un OTA propio ==============
+//
+// Con la vuelta atras habilitada, una imagen recien instalada arranca en estado
+// "a prueba" (ESP_OTA_IMG_PENDING_VERIFY) y tiene que declararse buena. Si no lo
+// hace, el bootloader la descarta y vuelve a la anterior.
+//
+// El criterio de "buena" es el unico que importa para este chip: **se conecto a
+// la red**. Un firmware que compila, arranca y no encuentra el WiFi es
+// exactamente el que te deja sin equipo, y es el que hay que deshacer.
+//
+// Las dos ramas son deliberadas:
+//   - se conecto        → se confirma y a partir de ahi la imagen es la buena;
+//   - no se conecto en 90 s → se marca invalida y se reinicia A LA ANTERIOR, sin
+//     esperar a que alguien vaya a apretar un boton.
+//
+// Si no hay nada pendiente de confirmar (arranque normal, o flasheo por cable),
+// esto no hace absolutamente nada y la tarea se muere sola.
+static void ota_confirm_task(void *arg)
+{
+    const esp_partition_t *run = esp_ota_get_running_partition();
+    esp_ota_img_states_t st;
+
+    if (!run || esp_ota_get_state_partition(run, &st) != ESP_OK ||
+        st != ESP_OTA_IMG_PENDING_VERIFY) {
+        vTaskDelete(NULL);
+        return;
+    }
+
+    printf("[ESP32] Imagen A PRUEBA en %s: esperando conexion para confirmarla\n",
+           run->label);
+
+    /* Cinturon: si alguien vuelve a mover esta tarea antes de wifi_init(),
+     * esperar en vez de entrar en panico sobre un handle NULL. */
+    for (int i = 0; i < 100 && !wifi_event_group; i++)
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    if (!wifi_event_group) {
+        printf("[ESP32] No hay grupo de eventos de WiFi: no se puede confirmar\n");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    EventBits_t bits = xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT,
+                                           pdFALSE, pdFALSE,
+                                           90000 / portTICK_PERIOD_MS);
+
+    if (bits & WIFI_CONNECTED_BIT) {
+        esp_ota_mark_app_valid_cancel_rollback();
+        printf("[ESP32] Imagen confirmada: %s queda como la buena\n", run->label);
+    } else {
+        printf("[ESP32] La imagen nueva NO se conecto en 90 s. "
+               "Volviendo a la anterior.\n");
+        esp_ota_mark_app_invalid_rollback_and_reboot();   // no vuelve
+    }
+    vTaskDelete(NULL);
+}
+
+// ============== POST /firmware-esp — actualizar ESTE chip por WiFi ==============
+//
+// Mucho mas simple que el del STM32 porque ESP-IDF ya trae todo: el bootloader
+// de segunda etapa elige entre dos ranuras de aplicacion (ota_0 / ota_1) segun
+// lo que diga la particion `otadata`, y esp_ota_* escribe la ranura que NO se
+// esta ejecutando. No hay que escribir un bootloader ni tocar nada delicado.
+//
+// Y es mas SEGURO que el del STM32, que es lo que hace que valga la pena:
+// con CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE la imagen nueva arranca "a prueba"
+// y tiene que confirmar que anda (ota_confirm_task, abajo). Si no confirma, el
+// bootloader vuelve sola a la anterior. Actualizar el chip que TIENE LA RED
+// deja de ser un acto de fe: si la imagen nueva no se conecta al WiFi, se
+// deshace sola y volves a tener el equipo.
+
+static esp_err_t firmware_esp_handler(httpd_req_t *req)
+{
+    char resp[224];
+    int  total = req->content_len;
+
+    const esp_partition_t *upd = esp_ota_get_next_update_partition(NULL);
+    if (!upd) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"no hay segunda ranura: "
+                 "la tabla de particiones es la vieja, hace falta un flasheo por cable\"}");
+        goto fail;
+    }
+    if (total <= 0 || (uint32_t)total > upd->size) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"tamano invalido (%d bytes, la ranura son %lu)\"}",
+                 total, (unsigned long)upd->size);
+        goto fail;
+    }
+
+    printf("[ESP32] OTA propio: %d bytes -> particion %s @ 0x%lx\n",
+           total, upd->label, (unsigned long)upd->address);
+
+    esp_ota_handle_t h = 0;
+    esp_err_t e = esp_ota_begin(upd, total, &h);
+    if (e != ESP_OK) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"no se pudo abrir la ranura: %s\"}",
+                 esp_err_to_name(e));
+        goto fail;
+    }
+
+    char buf[1024];
+    int left = total;
+    while (left > 0) {
+        int want = (left < (int)sizeof(buf)) ? left : (int)sizeof(buf);
+        int got  = httpd_req_recv(req, buf, want);
+        if (got <= 0) {
+            esp_ota_abort(h);
+            snprintf(resp, sizeof(resp),
+                     "{\"status\":\"error\",\"message\":\"se corto la subida en el byte %d\"}",
+                     total - left);
+            goto fail;
+        }
+        e = esp_ota_write(h, buf, got);
+        if (e != ESP_OK) {
+            esp_ota_abort(h);
+            snprintf(resp, sizeof(resp),
+                     "{\"status\":\"error\",\"message\":\"fallo la escritura: %s\"}",
+                     esp_err_to_name(e));
+            goto fail;
+        }
+        left -= got;
+    }
+
+    // esp_ota_end verifica la firma y la cabecera de la imagen. Si el archivo no
+    // es un firmware de ESP32-C3, muere aca — antes de tocar otadata, o sea sin
+    // consecuencias: la ranura que se esta ejecutando no se toco.
+    e = esp_ota_end(h);
+    if (e != ESP_OK) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"la imagen no valida: %s\"}",
+                 esp_err_to_name(e));
+        goto fail;
+    }
+
+    e = esp_ota_set_boot_partition(upd);
+    if (e != ESP_OK) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"no se pudo marcar el arranque: %s\"}",
+                 esp_err_to_name(e));
+        goto fail;
+    }
+
+    printf("[ESP32] OTA propio: listo, reiniciando en %s\n", upd->label);
+    snprintf(resp, sizeof(resp),
+             "{\"status\":\"ok\",\"bytes\":%d,\"slot\":\"%s\","
+             "\"message\":\"imagen verificada; el ESP32 se reinicia (si no arranca bien vuelve sola a la anterior)\"}",
+             total, upd->label);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+
+    // Un respiro para que la respuesta llegue al navegador antes de irse.
+    vTaskDelay(1200 / portTICK_PERIOD_MS);
+    esp_restart();
+    return ESP_OK;
+
+fail:
+    printf("[ESP32] OTA propio FALLO: %s\n", resp);
+    httpd_resp_set_status(req, "500 Internal Server Error");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 // ============== UI web embebida (GET /) ==============
 // Pagina autocontenida (sin CDN): botones de modo + sliders de beam + telemetria.
 static const char INDEX_HTML[] =
@@ -1199,20 +1427,37 @@ static const char INDEX_HTML[] =
 "ganancia 0 dB, modo 0 y focos por defecto. No toca los amplificadores.</div></div>"
 /* Actualizacion del firmware del STM32 sin cable. Va al final de la pagina a
  * proposito: no es algo que uno haga durante una medicion. */
-"<div class=card><h2>Firmware del STM32</h2>"
-"<div class=row style='font-size:.85em'>corriendo: <span class=val id=fwid>&mdash;</span>"
+"<div class=card><h2>Firmware</h2>"
+/* El aviso de desajuste va PRIMERO y ocupa toda la fila: cuando aparece, es lo
+ * unico que importa de esta tarjeta. Dice cual actualizar y en que orden. */
+"<div id=fwsync style='display:none;font-size:.85em;padding:8px;border-radius:6px;"
+"margin-bottom:10px;background:#3a2a10;border:1px solid #a70'></div>"
+"<div class=row style='font-size:.85em'><b style='width:60px'>STM32</b>"
+"<span class=val id=fwid>&mdash;</span>"
 "<span class=val id=fwdate style='color:#888'></span></div>"
 "<div class=row><input type=file id=fwfile accept='.bin'>"
-"<button onclick=doFw()>Actualizar</button></div>"
+"<button onclick=doFw()>Actualizar STM32</button></div>"
 "<div id=fwbarw style='display:none;background:#223;border-radius:4px;height:6px;margin-top:8px'>"
 "<div id=fwbar style='background:#4c8;height:6px;width:0%;border-radius:4px'></div></div>"
 "<div id=fwmsg style='font-size:.8em;margin-top:6px;color:#888'></div>"
-"<div style='font-size:.75em;color:#888;margin-top:6px'>Sub&iacute; "
-"<b>firmware/build/ds11_beamforming.bin</b>. Durante la carga (~15 s) el equipo "
-"queda <b>mudo</b> y despu&eacute;s se reinicia solo con los amplificadores "
-"apagados. La imagen se escribe en un banco de flash que no se est&aacute; "
-"ejecutando: si algo falla a mitad de camino no pasa nada y se puede reintentar."
-"</div></div>"
+"<div style='font-size:.75em;color:#888;margin:6px 0 14px'>"
+"<b>firmware/build/ds11_beamforming.bin</b> &mdash; durante la carga (~11 s) el "
+"equipo queda <b>mudo</b> y despu&eacute;s se reinicia con los amplificadores "
+"apagados. Se escribe en un banco de flash que no se est&aacute; ejecutando: si "
+"algo falla a mitad de camino no pasa nada.</div>"
+"<div class=row style='font-size:.85em'><b style='width:60px'>ESP32</b>"
+"<span class=val id=efwid>&mdash;</span>"
+"<span class=val id=efwdate style='color:#888'></span></div>"
+"<div class=row><input type=file id=efwfile accept='.bin'>"
+"<button onclick=doFwEsp()>Actualizar ESP32</button></div>"
+"<div id=efwbarw style='display:none;background:#223;border-radius:4px;height:6px;margin-top:8px'>"
+"<div id=efwbar style='background:#4c8;height:6px;width:0%;border-radius:4px'></div></div>"
+"<div id=efwmsg style='font-size:.8em;margin-top:6px;color:#888'></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>"
+"<b>firmware_esp32c3/build/ds11_beamform_c3.bin</b> &mdash; se escribe en la "
+"ranura que no se est&aacute; usando y el chip se reinicia. <b>Si la imagen "
+"nueva no logra conectarse al WiFi en 90 s, vuelve sola a la anterior.</b> "
+"Perd&eacute;s la p&aacute;gina unos 15 s mientras rearranca.</div></div>"
 "<script>"
 /* ⚠️ N y names[] son el ESPEJO de ui_states[] del STM32 y de MODE_NAMES de
  * arriba. Agregar un modo y olvidarse de esta linea deja el modo SIN BOTON: el
@@ -1369,8 +1614,58 @@ static const char INDEX_HTML[] =
 "x.onerror=()=>{m.style.color='#f84';m.textContent='\\u2717 se corto la conexion';fwBusy=false;};"
 "x.ontimeout=()=>{m.style.color='#f84';m.textContent='\\u2717 el equipo no contesto a tiempo';fwBusy=false;};"
 "x.send(f);}"
+/* Subida del firmware del ESP32. Igual que la del STM32 salvo dos cosas: no hay
+ * progreso posterior que mirar (el chip se va a reiniciar) y la pagina se cae
+ * unos segundos, asi que se avisa antes en vez de dejar al usuario mirando un
+ * error. */
+"function doFwEsp(){const f=document.getElementById('efwfile').files[0];"
+"const m=document.getElementById('efwmsg'),bw=document.getElementById('efwbarw'),b=document.getElementById('efwbar');"
+"if(!f){m.textContent='eleg\\u00ed un archivo .bin primero';return;}"
+"if(f.size<65536||f.size>2031616){m.textContent='ese archivo no parece un firmware de ESP32 ('+f.size+' bytes)';return;}"
+"if(!confirm('Actualizar el firmware del ESP32 con '+f.name+' ('+f.size+' bytes)?\\n\\n"
+"Se reinicia y vas a perder esta pagina unos 15 s.\\nSi la imagen nueva no se conecta al WiFi, vuelve sola a la anterior.'))return;"
+"fwBusy=true;bw.style.display='block';b.style.width='0%';"
+"m.style.color='#9cf';m.textContent='enviando...';"
+"const x=new XMLHttpRequest();x.open('POST','/firmware-esp');x.timeout=180000;"
+"x.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.round(e.loaded*100/e.total);"
+"b.style.width=p+'%';m.textContent='enviando... '+p+'%';}};"
+"x.onload=()=>{let r={};try{r=JSON.parse(x.responseText);}catch(e){}"
+"if(r.status=='ok'){b.style.width='100%';m.style.color='#6d6';"
+"m.textContent='\\u2713 '+r.message;"
+"setTimeout(()=>{fwBusy=false;location.reload();},18000);}"
+"else{m.style.color='#f84';m.textContent='\\u2717 '+(r.message||('error HTTP '+x.status));fwBusy=false;}};"
+"x.onerror=()=>{m.style.color='#f84';m.textContent='\\u2717 se corto la conexion';fwBusy=false;};"
+"x.ontimeout=()=>{m.style.color='#f84';m.textContent='\\u2717 el equipo no contesto a tiempo';fwBusy=false;};"
+"x.send(f);}"
 "function poll(){if(fwBusy)return;fetch('/status').then(r=>r.json()).then(s=>{"
 "document.getElementById('link').textContent=s.stm32=='ok'?'\\u25cf online':'\\u25cb '+s.stm32;"
+/* ===== Identidad del ESP32 y compatibilidad entre los dos firmwares =====
+ * Va ANTES del return de abajo a proposito: cuando el STM32 no contesta es
+ * justo cuando hace falta ver que tiene el ESP32 y que version espera. */
+"if(s.esp_fw){document.getElementById('efwid').textContent=(s.esp_sha||'?')+' ('+(s.esp_slot||'?')+')';"
+"document.getElementById('efwdate').textContent=s.esp_fw||'';}"
+/* El orden no es una regla que haya que acordarse: se deduce del estado y se
+ * dice acá. Los dos chips publican con que version de protocolo fueron
+ * compilados, y si no coinciden esto nombra CUAL falta.
+ *
+ * Cuando hay que actualizar los dos, el STM32 va PRIMERO: el ESP32 es el que
+ * transporta la carga hasta el STM32, asi que conviene tenerlo estable y
+ * conocido hasta el ultimo paso — y ademas el del ESP32 es el que se deshace
+ * solo si sale mal, o sea el que menos importa dejar para el final. */
+"{const g=document.getElementById('fwsync'),pv=s.proto_ver,pe=s.proto_esp;"
+"g.style.display='block';"
+"if(s.stm32!='ok'){g.style.background='#3a1414';g.style.borderColor='#a33';"
+"g.innerHTML='\\u26a0 <b>El STM32 no contesta.</b> Si reci\\u00e9n actualizaste el ESP32, esper\\u00e1 unos segundos. "
+"Si sigue as\\u00ed, revis\\u00e1 la alimentaci\\u00f3n o carg\\u00e1 el firmware por ST-Link.';}"
+"else if(pv==null||pe==null||pv==pe){g.style.background='#16281a';g.style.borderColor='#2a5';"
+"g.innerHTML='\\u2713 protocolo v'+pv+' en los dos chips. "
+"<span style=color:#8a8>Para actualizar ambos: primero el STM32, despu\\u00e9s el ESP32 \\u2014 el ESP32 es el que lleva la carga hasta el STM32.</span>';}"
+"else if(pv<pe){g.style.background='#3a2a10';g.style.borderColor='#a70';"
+"g.innerHTML='\\u26a0 <b>Firmwares desparejos.</b> El ESP32 ya est\\u00e1 en v'+pe+' y el STM32 sigue en v'+pv+'. "
+"<b>Falta actualizar el STM32</b> \\u2014 el bot\\u00f3n de arriba. Hasta entonces la telemetr\\u00eda puede venir incompleta.';}"
+"else{g.style.background='#3a2a10';g.style.borderColor='#a70';"
+"g.innerHTML='\\u26a0 <b>Firmwares desparejos.</b> El STM32 ya est\\u00e1 en v'+pv+' y el ESP32 sigue en v'+pe+'. "
+"<b>Falta actualizar el ESP32</b> \\u2014 el bot\\u00f3n de abajo.';}}"
 "if(s.stm32!='ok')return;"
 "curMode=s.mode;"
 "for(let i=0;i<N;i++)document.getElementById('m'+i).className=(i==s.mode)?'on':'';"
@@ -1473,6 +1768,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
             { .uri = "/ping",    .method = HTTP_GET,  .handler = ping_handler    },
             { .uri = "/firmware",.method = HTTP_POST, .handler = firmware_handler},
+            { .uri = "/firmware-esp", .method = HTTP_POST, .handler = firmware_esp_handler },
         };
         for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
             esp_err_t e = httpd_register_uri_handler(server, &uris[i]);
@@ -1680,6 +1976,19 @@ void app_main(void)
     // WiFi + HTTP
     wifi_init();
     start_webserver();
+
+    /* Confirma (o deshace) una imagen recien instalada por OTA.
+     *
+     * ⚠️ VA DESPUES de wifi_init(): `wifi_event_group` se crea ahi adentro. La
+     * primera version de esto lanzaba la tarea antes, con lo cual esperaba sobre
+     * un grupo de eventos NULL, entraba en panico y reiniciaba.
+     *
+     * Lo interesante es que ese bug NO se vio al flashear por cable —una imagen
+     * grabada por cable no esta "a prueba", asi que la tarea salia antes de
+     * tocar nada— y aparecio en la primera actualizacion por WiFi de verdad. La
+     * vuelta atras hizo justo lo que promete: la imagen nueva no confirmo, el
+     * bootloader restauro la anterior, y el equipo siguio en la red. */
+    xTaskCreate(ota_confirm_task, "ota_confirm", 3072, NULL, 4, NULL);
 
     printf("[ESP32] Sistema listo. Esperando comandos HTTP y output STM32...\n\n");
 

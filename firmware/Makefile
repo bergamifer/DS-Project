@@ -431,6 +431,26 @@ ota: all
 	@curl -sS --max-time 240 -X POST --data-binary @$(BUILD_DIR)/$(TARGET).bin \
 	  "http://$(OTA_HOST)/firmware?id=$(GIT_ID)&build=$(BUILD_EPOCH)" ; echo
 
+# Firmware del ESP32 por WiFi. Vive aca —y no en el proyecto de IDF— para que
+# los dos despliegues se hagan desde el mismo lugar y en el mismo orden.
+#
+# ⚠️ ORDEN: cuando hay que actualizar los DOS, primero `ota` y despues
+# `ota-esp`. El ESP32 es el que transporta la carga hasta el STM32, asi que
+# conviene tenerlo estable y conocido hasta el ultimo paso; y ademas el del
+# ESP32 es el que se deshace solo si sale mal. La pagina lo dice sola cuando
+# detecta que los protocolos no coinciden.
+ESP_DIR ?= ../firmware_esp32c3
+ESP_BIN  = $(ESP_DIR)/build/ds11_beamform_c3.bin
+
+ota-esp:
+	@test -f $(ESP_BIN) || { echo "No existe $(ESP_BIN)."; \
+	  echo "Compilalo primero:  cd $(ESP_DIR) && . ~/esp/esp-idf/export.sh && idf.py build"; exit 1; }
+	@echo "Subiendo $(ESP_BIN) a http://$(OTA_HOST) ..."
+	@curl -sS --max-time 240 -X POST --data-binary @$(ESP_BIN) \
+	  "http://$(OTA_HOST)/firmware-esp" ; echo
+
+.PHONY: ota ota-esp boot boot-flash flash-todo
+
 #######################################
 # dependencies
 #######################################

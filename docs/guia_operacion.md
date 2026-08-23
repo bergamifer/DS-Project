@@ -518,9 +518,11 @@ curl -X POST http://LA_IP/reset
 Sólo hace falta al actualizar el programa. Son **dos chips independientes** y cada
 uno se carga distinto.
 
-⚠️ **Los dos van juntos.** Se comunican con un formato que tiene número de versión;
-si se actualiza uno solo, el equipo responde a los comandos pero la información de
-estado deja de leerse.
+⚠️ **Los dos van juntos** cuando el cambio toca el formato con el que se hablan.
+No hace falta acordarse de cuándo: la tarjeta **Firmware** de la página compara
+las versiones de los dos y **avisa cuál falta actualizar**. Si hay que hacer los
+dos, el orden es **primero el STM32, después el ESP32** — el ESP32 es el que
+lleva la carga hasta el STM32, así que conviene dejarlo estable hasta el final.
 
 ### El STM32 (el chip grande) — por WiFi
 
@@ -567,10 +569,22 @@ cuando no hay forma de llegarle por WiFi.
 2. **Después de cargar, desconectar el ST-Link y reiniciar la placa.** Con el
    programador conectado, a veces el equipo se queda colgado al arrancar.
 
-### El ESP32 (el chiquito con antena)
+### El ESP32 (el chiquito con antena) — por WiFi
 
-Se carga por su propio **conector USB-C** (J3), sin programador. Éste todavía
-no se puede actualizar por WiFi.
+También se actualiza sin cable, desde la misma tarjeta **Firmware** de
+`http://domosonica.local`, o con `make ota-esp`. Tarda unos 5 segundos y el chip
+se reinicia; perdés la página unos 15 s mientras vuelve.
+
+**Si la imagen nueva no logra conectarse al WiFi en 90 segundos, el equipo
+vuelve solo a la anterior.** No hay forma de dejarlo sin red por una carga
+fallida.
+
+> Necesita la tabla de particiones nueva, que se instala una sola vez por cable
+> (ver [ota_wifi.md](ota_wifi.md) §9).
+
+### El ESP32 — por cable (primera vez)
+
+Se carga por su propio **conector USB-C** (J3), sin programador.
 
 ```bash
 cd ~/STM32CubeIDE/DS-Firmware/firmware_esp32c3

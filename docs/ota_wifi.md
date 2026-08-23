@@ -1,8 +1,9 @@
-# Actualizar el firmware del STM32 por WiFi
+# Actualizar el firmware por WiFi
 
-Subir un firmware nuevo desde el navegador, sin cable, sin desarmar nada.
-Se arrastra el `.bin` a la página de `domosonica.local`, se espera unos quince
-segundos y el equipo se reinicia con el firmware nuevo.
+Subir un firmware nuevo desde el navegador, sin cable, sin desarmar nada. Vale
+para **los dos chips**: el STM32 (~11 s) y el ESP32 (~5 s). Se elige el `.bin` en
+la página de `domosonica.local`, se aprieta *Actualizar* y el equipo se reinicia
+con el firmware nuevo.
 
 Este documento explica cómo funciona, **por qué no puede romper el
 microprocesador**, y qué es lo único que sigue necesitando el cable.
@@ -23,14 +24,26 @@ cd firmware
 make flash-todo        # bootloader + aplicación, en ese orden
 ```
 
-Eso es todo. A partir de ahí:
+El ESP32 también necesita **un** flasheo por cable (USB-C, J3) para instalar la
+tabla de particiones con dos ranuras — ver §9:
 
 ```bash
-make ota               # sube el firmware por WiFi, sin cable
+cd ../firmware_esp32c3
+idf.py -p /dev/cu.usbmodemXXXX erase-flash    # cambió la tabla de particiones
+idf.py -p /dev/cu.usbmodemXXXX flash
+```
+
+Eso es todo, y es la última vez que hace falta un cable. A partir de ahí:
+
+```bash
+cd firmware
+make ota        # STM32   (por WiFi)
+make ota-esp    # ESP32   (por WiFi)
 ```
 
 o desde el navegador: al final de `http://domosonica.local` hay una tarjeta
-**Firmware del STM32** con un selector de archivo.
+**Firmware** con un selector de archivo para cada chip, y un aviso que dice cuál
+hay que actualizar cuando los dos no coinciden (§10).
 
 > **Ojo con las direcciones.** Desde ahora la aplicación **no** empieza en
 > `0x08000000` sino en **`0x08020000`**. `make flash-stlink` ya lo hace solo.
@@ -163,8 +176,12 @@ Dos cosas para poner esto en perspectiva:
 Si alguna vez el equipo va a una instalación permanente sin acceso físico, la
 respuesta es una **vuelta atrás automática**: el bootloader guarda la imagen
 anterior y la restituye si el firmware nuevo no confirma que arrancó bien dentro
-de N segundos. Está pensado pero no implementado, porque hoy el ST-Link está
-siempre a mano y agregarlo ahora sería complejidad sin beneficio.
+de N segundos. Está pensado pero no implementado para el STM32, porque hoy el
+ST-Link está siempre a mano.
+
+**El ESP32 sí la tiene** — ver §9. La diferencia no es capricho: en el ESP32
+viene hecha con ESP-IDF, y además ese chip es el que tiene la red, así que
+perderlo cuesta mucho más.
 
 ---
 
@@ -301,9 +318,109 @@ silencioso ahí haría fallar *todas* las cargas con "el CRC no coincide" y
 ninguna pista de por qué. Es el mismo que calcula `zlib.crc32` en Python, así
 que una imagen se puede verificar a mano desde la PC.
 
+
+
 ---
 
-## 8. Archivos
+## 9. El otro chip: OTA del ESP32
+
+Es un mecanismo **distinto y más simple**, porque ESP-IDF ya lo trae hecho: su
+bootloader de segunda etapa elige entre dos ranuras de aplicación según lo que
+diga la partición `otadata`, y `esp_ota_*` escribe la que no se está ejecutando.
+No hubo que escribir ningún bootloader.
+
+```
+0x000000  bootloader de ESP-IDF
+0x008000  tabla de particiones
+0x00d000  otadata            ← dice cuál de las dos ranuras arranca
+0x010000  ota_0   1,95 MB    ┐ la aplicación (890 kB) usa menos de la mitad
+0x200000  ota_1   1,95 MB    ┘ de la suya
+```
+
+> **El módulo siempre tuvo 4 MB de flash y estaba configurado como si tuviera 2.**
+> La mitad estaba sin usar y era invisible para el sistema. Se descubrió el
+> 2026-08-23 justo al ir a hacer lugar para la segunda ranura — con 2 MB entraba
+> raspando, con 4 MB entra holgado.
+
+### Vuelta atrás automática, y por qué importa acá
+
+El ESP32 es el chip que **tiene la red**. Si se rompe, se pierde el acceso remoto
+a los dos. Por eso este OTA lleva `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`: la
+imagen nueva arranca *a prueba* y tiene que declararse buena. El criterio es el
+único que importa para este chip — **se conectó a la red**:
+
+- se conectó → se confirma y queda como la buena;
+- no se conectó en 90 s → se marca inválida y **se reinicia a la anterior**, sin
+  esperar a que nadie vaya a apretar un botón.
+
+Esto dejó de ser teórico en la primera prueba: la versión inicial lanzaba la
+tarea de confirmación *antes* de `wifi_init()`, o sea esperando sobre un grupo de
+eventos que todavía era `NULL`. Entró en pánico, reinició, y **el bootloader
+restauró la imagen anterior sola**. El equipo nunca salió de la red.
+
+Lo revelador es que ese bug **no aparecía al flashear por cable**: una imagen
+grabada por cable no está *a prueba*, así que la tarea salía antes de tocar nada.
+Sólo se manifestó en la primera actualización por WiFi de verdad — que es
+precisamente el escenario para el que existe la vuelta atrás.
+
+### Qué firmware corre
+
+`esp_sha` — los primeros 9 caracteres del SHA-256 del ELF. **No** la fecha de
+compilación: `esp_app_desc.date`/`.time` salen de `__DATE__`/`__TIME__` de un
+archivo de ESP-IDF que no se recompila salvo que cambie él, así que quedan
+congelados en la primera vez. Medido: dos binarios distintos reportaban la misma
+hora al segundo.
+
+El SHA del ELF cambia con cada binario distinto y **no** cambia si el binario es
+el mismo — que es exactamente la propiedad que se le pide a un identificador.
+Junto a él va `esp_fw`, el `git describe` del árbol.
+
+---
+
+## 10. Cuál actualizar, y en qué orden
+
+**No hace falta acordarse: la página lo dice.** Los dos chips publican con qué
+versión de protocolo fueron compilados —`proto_ver` el STM32, `proto_esp` el
+ESP32— y la tarjeta *Firmware* muestra un aviso según el caso:
+
+| situación | qué dice |
+|---|---|
+| las dos versiones coinciden | ✓ protocolo vN en los dos |
+| el ESP32 está más nuevo | ⚠ **falta actualizar el STM32** — botón de arriba |
+| el STM32 está más nuevo | ⚠ **falta actualizar el ESP32** — botón de abajo |
+| el STM32 no contesta | ⚠ revisá alimentación, o cargalo por ST-Link |
+
+Para que eso funcione hubo que arreglar algo que estaba de antes: el ESP32
+**descartaba** una trama de estado cuyo largo no fuera exactamente el suyo, y la
+página mostraba `stm32: timeout` — o sea **lo mismo que muestra si la placa está
+muerta**. Un desajuste de firmwares, que es el estado normal mientras se
+actualiza uno de los dos, era indistinguible de una falla de hardware. Ahora se
+acepta cualquier largo razonable, se copia el prefijo común y se compara: el
+primer byte del status es `proto_ver`, así que una trama de otro largo igual dice
+con qué versión fue hecha.
+
+### Cuando hay que actualizar los dos
+
+**Primero el STM32, después el ESP32.** Dos razones:
+
+1. El ESP32 es el que **transporta** la carga hasta el STM32. Conviene tenerlo
+   estable y conocido hasta el último paso: si lo actualizás primero y la imagen
+   nueva tiene un problema sutil con el enlace UART, te quedaste sin camino al
+   STM32.
+2. El del ESP32 es el que **se deshace solo** si sale mal. Es el mejor candidato
+   para dejar al final.
+
+Desde la consola es lo mismo, en ese orden:
+
+```bash
+cd firmware
+make ota        # STM32 primero
+make ota-esp    # ESP32 después
+```
+
+---
+
+## 11. Archivos
 
 | archivo | qué es |
 |---|---|
@@ -313,7 +430,8 @@ que una imagen se puede verificar a mano desde la PC.
 | `firmware/STM32H743XX_BOOT.ld` | linker del bootloader (0x08000000, 128 kB) |
 | `firmware/STM32H743XX_FLASH.ld` | linker de la aplicación (**0x08020000**, 896 kB) |
 | `firmware/Core/Src/fw_version.c` | identidad del binario; se recompila siempre |
-| `firmware_esp32c3/main/main.c` | endpoint `POST /firmware` + la tarjeta de la página |
+| `firmware_esp32c3/main/main.c` | endpoints `POST /firmware` y `/firmware-esp`, la tarjeta de la página y el aviso de desajuste |
+| `firmware_esp32c3/partitions.csv` | las dos ranuras del ESP32 (4 MB) |
 
 | comando de make | qué hace |
 |---|---|
@@ -321,4 +439,5 @@ que una imagen se puede verificar a mano desde la PC.
 | `make boot-flash` | lo graba con ST-Link en 0x08000000 |
 | `make flash-stlink` | graba la aplicación con ST-Link en **0x08020000** |
 | `make flash-todo` | los dos, en orden — instalación desde cero o rescate |
-| `make ota` | sube la aplicación por WiFi (`OTA_HOST=domosonica.local`) |
+| `make ota` | sube el firmware del **STM32** por WiFi (`OTA_HOST=domosonica.local`) |
+| `make ota-esp` | sube el firmware del **ESP32** por WiFi (compilarlo antes con `idf.py build`) |
