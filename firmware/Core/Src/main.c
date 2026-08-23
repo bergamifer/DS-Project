@@ -716,7 +716,15 @@ static volatile uint8_t cal_ok_count = 0;   // de esos, con q ≥ CAL_Q_MIN
  *
  * La correlación es la del AUTOFOCUS. La diferencia es que acá no hay sala en
  * el medio: sin eco, el pico es limpio y el resultado es del equipo. */
-#define LB_NUM_PROBES   4      /* un canal por banco: 0, 8, 16, 24 */
+#define LB_NUM_EMIT     4      /* se emite por un canal de cada banco: 0, 8, 16, 24 */
+/* Se miden las OCHO entradas, no cuatro.
+ *
+ * La primera versión capturaba las entradas 0-3 asumiendo que cada sonda iba a
+ * su índice. Eso obliga a cablear de una forma concreta y a acertarle — y el
+ * primer cable real (J13 → entrada 4) ya no encajaba. Midiendo las ocho, el
+ * firmware DESCUBRE dónde entró la señal en vez de exigir que se lo declaren:
+ * se conecta donde sea y el informe dice qué entrada la vio. */
+#define LB_NUM_IN       ADC_CHANNELS
 /* 50 ms de ventana. La ida y vuelta DAC→adaptador→ADC son unos pocos buffers
  * (~15-20 ms); 50 ms deja margen de sobra y el retardo absoluto se imprime,
  * así que si alguna vez cayera cerca del borde se vería. */
@@ -728,11 +736,17 @@ static volatile uint8_t cal_ok_count = 0;   // de esos, con q ≥ CAL_Q_MIN
  * Uno por banco a propósito: es la configuración que mide el skew entre los
  * cuatro SAI. Con un solo adaptador, la sonda 0 mide y el resto informa
  * "sin señal" — el modo no exige tener los cuatro. */
-static const uint8_t lb_probe_ch[LB_NUM_PROBES] = { 0, 8, 16, 24 };
+static const uint8_t lb_emit_ch[LB_NUM_EMIT] = { 0, 8, 16, 24 };
 typedef enum { LB_IDLE = 0, LB_ARM, LB_CAPT, LB_CORR, LB_WAIT } lb_state_t;
 static volatile uint8_t   lb_enabled = 0;
 static volatile lb_state_t lb_state = LB_IDLE;
-static int32_t  lb_capture[LB_NUM_PROBES][LB_CAPTURE_LEN];
+/* int16 y no int32: ocho entradas × 2400 muestras entrarían 76,8 kB en 32 bits y
+ * no hay tanto DTCM libre. A 16 bits son los mismos 38,4 kB que ocupaban cuatro
+ * canales en 32, y NO se pierde información útil: el piso de ruido del ADC son
+ * ~437 cuentas en escala de 24 bits, o sea ~1,7 después del >>16, contra 0,5 de
+ * paso de cuantización. El ruido propio ya dithera el bit menos significativo.
+ * Para correlacionar sobra: 480 muestras dan 21,9× de ganancia de proceso. */
+static int16_t  lb_capture[LB_NUM_IN][LB_CAPTURE_LEN];
 static volatile uint16_t lb_cap_count = 0;
 static volatile uint8_t  lb_capturing = 0;
 static volatile uint16_t lb_chirp_pos = 0;
@@ -743,11 +757,13 @@ static uint32_t lb_corr_lag = 0;
 static int64_t  lb_best_mag = 0, lb_mag_sum = 0;
 static int32_t  lb_best_lag = 0;
 static int8_t   lb_best_sign = 1;
-/* Resultados por sonda */
-static int32_t  lb_lag_q8[LB_NUM_PROBES];
-static int8_t   lb_sign[LB_NUM_PROBES];
-static uint16_t lb_q10[LB_NUM_PROBES];
-static int32_t  lb_peak[LB_NUM_PROBES];
+/* Resultados por ENTRADA */
+static int32_t  lb_lag_q8[LB_NUM_IN];
+static int8_t   lb_sign[LB_NUM_IN];
+static uint16_t lb_q10[LB_NUM_IN];
+static int32_t  lb_peak[LB_NUM_IN];
+/* Umbral de pico en escala de 16 bits: MIC_LIVE_THRESH está en 24 bits. */
+#define LB_PEAK_MIN   (MIC_LIVE_THRESH >> 8)
 
 /* Extra right-shift applied to the -6dBFS sine table.
  * Now 0: the PAM8302A clipping headroom is handled by the PCM1690's own
@@ -3197,6 +3213,15 @@ static int64_t Corr_At(const int32_t *cap_base, uint32_t lag) {
   return acc;
 }
 static int64_t Cal_CorrAt(uint32_t lag) { return Corr_At(cal_capture, lag); }
+/** Igual que Corr_At pero sobre las capturas de 16 bits del LOOPBACK. */
+static int64_t Corr_At16(const int16_t *cap_base, uint32_t lag) {
+  int64_t acc = 0;
+  const int16_t *cap = &cap_base[lag];
+  for (uint32_t n = 0; n < CAL_CHIRP_LEN; n++) {
+    acc += (int64_t)cap[n] * (int64_t)cal_chirp[n];
+  }
+  return acc;
+}
 
 /**
  * @brief AUTOFOCUS driver, called every main-loop pass while the mode is on.
@@ -3371,9 +3396,9 @@ static void LB_Process(void) {
 
   uint32_t end = lb_corr_lag + LB_CORR_CHUNK;
   if (end > LB_MAX_LAG) end = LB_MAX_LAG;
-  const int32_t *cap = lb_capture[lb_probe];
+  const int16_t *cap = lb_capture[lb_probe];
   for (; lb_corr_lag < end; lb_corr_lag++) {
-    int64_t c = Corr_At(cap, lb_corr_lag);
+    int64_t c = Corr_At16(cap, lb_corr_lag);
     int64_t m = (c < 0) ? -c : c;
     lb_mag_sum += m;
     if (m > lb_best_mag) {
@@ -3384,13 +3409,13 @@ static void LB_Process(void) {
   }
   if (lb_corr_lag < LB_MAX_LAG) return;         // sigue en la próxima pasada
 
-  /* Refinamiento sub-muestra: parábola sobre |corr| en el pico ±1. Es lo que
-   * da resolución mucho mejor que una muestra (20,8 µs) — sin esto no se
-   * podría hablar de un skew de 4 µs entre bancos. */
+  /* Refinamiento sub-muestra: parábola sobre |corr| en el pico ±1. Es lo que da
+   * resolución mucho mejor que una muestra (20,8 µs) — sin esto no se podría
+   * hablar de un skew de 4 µs entre bancos. */
   float frac = 0.0f;
   if (lb_best_lag > 0 && lb_best_lag < (int32_t)LB_MAX_LAG - 1) {
-    int64_t cm = Corr_At(cap, (uint32_t)lb_best_lag - 1);
-    int64_t cp = Corr_At(cap, (uint32_t)lb_best_lag + 1);
+    int64_t cm = Corr_At16(cap, (uint32_t)lb_best_lag - 1);
+    int64_t cp = Corr_At16(cap, (uint32_t)lb_best_lag + 1);
     float mm1 = (float)((cm < 0) ? -cm : cm);
     float mp1 = (float)((cp < 0) ? -cp : cp);
     float den = mm1 - 2.0f * (float)lb_best_mag + mp1;
@@ -3403,15 +3428,15 @@ static void LB_Process(void) {
   uint32_t q10 = (avg > 0) ? (uint32_t)(lb_best_mag * 10 / avg) : 0;
   if (q10 > 9999) q10 = 9999;
 
-  /* Pico absoluto de la captura: mismo gate que el AUTOFOCUS. Un cociente
-   * siempre encuentra un máximo, incluso sobre ruido — sin piso absoluto, una
-   * sonda desconectada informaría un retardo. */
+  /* Gate absoluto, mismo criterio que el AUTOFOCUS: un cociente siempre
+   * encuentra un máximo, incluso sobre ruido. Sin piso absoluto, una entrada
+   * al aire informaría un retardo inventado. */
   int32_t pk = 0;
   for (uint32_t n = 0; n < LB_CAPTURE_LEN; n++) {
     int32_t v = cap[n]; if (v < 0) v = -v;
     if (v > pk) pk = v;
   }
-  if (pk < MIC_LIVE_THRESH) q10 = 0;
+  if (pk < LB_PEAK_MIN) q10 = 0;
 
   lb_lag_q8[lb_probe] = (lb_best_lag << 8) + (int32_t)(frac * 256.0f);
   lb_sign[lb_probe]   = lb_best_sign;
@@ -3419,54 +3444,54 @@ static void LB_Process(void) {
   lb_peak[lb_probe]   = pk;
 
   lb_probe++;
-  if (lb_probe < LB_NUM_PROBES) {               // siguiente sonda
+  if (lb_probe < LB_NUM_IN) {                   // siguiente entrada
     lb_corr_lag = 0; lb_best_mag = 0; lb_mag_sum = 0;
     lb_best_lag = 0; lb_best_sign = 1;
     return;
   }
 
   /* ===== Informe ===== */
-  UART_Print("\r\nLOOPBACK ---------------------------------------------------\r\n");
-  /* La referencia es la primera sonda CON señal, no la sonda 0: con un solo
-   * adaptador puesto en otro banco, anclar en la 0 daría todo "sin señal". */
-  int32_t ref_q8 = 0; int8_t have_ref = 0; uint8_t ref_i = 0;
-  for (uint8_t p = 0; p < LB_NUM_PROBES; p++) {
-    if (lb_q10[p] >= CAL_Q_MIN) { ref_q8 = lb_lag_q8[p]; have_ref = 1; ref_i = p; break; }
-  }
-  for (uint8_t p = 0; p < LB_NUM_PROBES; p++) {
-    if (lb_q10[p] < CAL_Q_MIN) {
-      sprintf(uart_buf, "  sonda%u  ch%-2u  SIN SENAL (pico=%ld, q=%u)\r\n",
-              (unsigned)p, (unsigned)lb_probe_ch[p], (long)lb_peak[p],
-              (unsigned)lb_q10[p]);
-      UART_Print(uart_buf);
-      continue;
+  UART_Print("\r\nLOOPBACK (chirp por ch0/8/16/24) ---------------------------\r\n");
+  /* La referencia es la primera entrada CON señal, no la entrada 0: con un solo
+   * cable puesto en la entrada 4, anclar en la 0 dejaría todo sin referencia. */
+  int32_t ref_q8 = 0; uint8_t have_ref = 0, ref_i = 0, n_ok = 0;
+  for (uint8_t p = 0; p < LB_NUM_IN; p++) {
+    if (lb_q10[p] >= CAL_Q_MIN) {
+      n_ok++;
+      if (!have_ref) { ref_q8 = lb_lag_q8[p]; have_ref = 1; ref_i = p; }
     }
+  }
+  for (uint8_t p = 0; p < LB_NUM_IN; p++) {
+    if (lb_q10[p] < CAL_Q_MIN) continue;        /* las mudas se resumen abajo */
     int32_t lag = lb_lag_q8[p];
-    /* Retardo absoluto en µs: (lag/256) muestras × 1e6/48000. Se hace en
-     * enteros — nano.specs no imprime %f. */
     int32_t abs_us = (int32_t)(((int64_t)lag * 1000000) / (256 * AUDIO_SAMPLE_RATE));
     int32_t d_q8   = lag - ref_q8;
-    int32_t d_us   = (int32_t)(((int64_t)d_q8 * 1000000) / (256 * AUDIO_SAMPLE_RATE));
-    /* Décimas de µs para el skew: el número interesante son unos pocos µs y
-     * redondear a µs enteros tiraría justo la parte que importa. */
     int32_t d_us10 = (int32_t)(((int64_t)d_q8 * 10000000) / (256 * AUDIO_SAMPLE_RATE));
     sprintf(uart_buf,
-            "  sonda%u  ch%-2u  t=%ld.%02ld smp (%ld us)  skew=%+ld.%01ld us  "
+            "  entrada%u (c%u)  t=%ld.%02ld smp (%ld us)  skew=%+ld.%01ld us  "
             "pol=%c  q=%u  pico=%ld\r\n",
-            (unsigned)p, (unsigned)lb_probe_ch[p],
+            (unsigned)(p + 1), (unsigned)p,
             (long)(lag >> 8), (long)((lag & 0xFF) * 100 / 256), (long)abs_us,
             (long)(d_us10 / 10), (long)(d_us10 < 0 ? -d_us10 % 10 : d_us10 % 10),
             (lb_sign[p] < 0) ? '-' : '+', (unsigned)lb_q10[p], (long)lb_peak[p]);
     UART_Print(uart_buf);
-    (void)d_us;
   }
   if (have_ref) {
-    sprintf(uart_buf, "  (skew relativo a la sonda%u; + = sale DESPUES)\r\n",
-            (unsigned)ref_i);
+    sprintf(uart_buf, "  %u/%u entradas con senal; skew relativo a la entrada%u "
+            "(+ = llega DESPUES)\r\n",
+            (unsigned)n_ok, (unsigned)LB_NUM_IN, (unsigned)(ref_i + 1));
     UART_Print(uart_buf);
   } else {
-    UART_Print("  ninguna sonda con senal — revisa los adaptadores "
-               "(docs/loopback_debug.md) y que los amps esten encendidos\r\n");
+    /* Partido en dos: el mensaje entero no entra en uart_buf y el compilador
+     * lo marcó como format-overflow. */
+    UART_Print("  ninguna entrada vio el chirp. Revisa el cable; si medis por\r\n"
+               "  parlante, que los amps esten encendidos y el volumen arriba.\r\n"
+               "  Picos por entrada: ");
+    for (uint8_t p = 0; p < LB_NUM_IN; p++) {
+      sprintf(uart_buf, "c%u=%ld ", (unsigned)p, (long)lb_peak[p]);
+      UART_Print(uart_buf);
+    }
+    UART_Print("\r\n");
   }
 
   lb_next_ms = HAL_GetTick() + LB_PERIOD_MS;
@@ -3714,8 +3739,8 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
   if (lb_capturing) {
     uint32_t n = lb_cap_count;
     for (uint32_t i = 0; i < samples && n < LB_CAPTURE_LEN; i++, n++) {
-      for (uint32_t p = 0; p < LB_NUM_PROBES; p++) {
-        lb_capture[p][n] = rx_buf[i * ADC_CHANNELS + p] >> 8;
+      for (uint32_t p = 0; p < LB_NUM_IN; p++) {
+        lb_capture[p][n] = (int16_t)(rx_buf[i * ADC_CHANNELS + p] >> 16);
       }
     }
     lb_cap_count = (uint16_t)n;
@@ -3827,8 +3852,8 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
   if (lb_enabled) {
     if (lb_state == LB_ARM) {
       uint8_t local = 0xFF;                    /* canal local de este banco */
-      for (uint8_t p = 0; p < LB_NUM_PROBES; p++) {
-        if ((lb_probe_ch[p] & ~7u) == ch_offset) local = lb_probe_ch[p] & 7u;
+      for (uint8_t p = 0; p < LB_NUM_EMIT; p++) {
+        if ((lb_emit_ch[p] & ~7u) == ch_offset) local = lb_emit_ch[p] & 7u;
       }
       for (uint32_t i = 0; i < samples; i++) {
         uint32_t k = lb_chirp_pos + i;
