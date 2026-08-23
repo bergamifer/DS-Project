@@ -59,6 +59,18 @@ _Min_Heap_Size = 0x200;      /* required amount of heap  */
 _Min_Stack_Size = 0x400; /* required amount of stack */
 
 /* Specify the memory areas */
+/* ⚠️ La aplicación NO arranca en 0x08000000 desde que existe la actualización
+ * por WiFi: los primeros 128 kB (sector 0 del banco 1) son del bootloader, que
+ * se flashea aparte y no se actualiza nunca. Ver ota.h para el mapa completo.
+ *
+ * Consecuencias de esto, todas obligatorias:
+ *   - main() pone SCB->VTOR = 0x08020000 antes de cualquier otra cosa;
+ *   - `make flash-stlink` escribe en 0x08020000, no en 0x08000000;
+ *   - flashear este .bin en 0x08000000 pisa el bootloader y deja el equipo sin
+ *     OTA hasta volver a grabarlo (no lo rompe: se recupera con `make boot-flash`).
+ *
+ * Los 896K son los sectores 1..7 del banco 1. El banco 2 entero (0x08100000)
+ * queda para el staging de la imagen que llega por WiFi. */
 MEMORY
 {
 DTCMRAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 128K
@@ -66,7 +78,7 @@ RAM (xrw)      : ORIGIN = 0x24000000, LENGTH = 512K
 RAM_D2 (xrw)      : ORIGIN = 0x30000000, LENGTH = 288K
 RAM_D3 (xrw)      : ORIGIN = 0x38000000, LENGTH = 64K
 ITCMRAM (xrw)      : ORIGIN = 0x00000000, LENGTH = 64K
-FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 2048K
+FLASH (rx)      : ORIGIN = 0x8020000, LENGTH = 896K
 }
 
 /* Define output sections */

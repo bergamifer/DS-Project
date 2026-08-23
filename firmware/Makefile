@@ -69,6 +69,8 @@ Core/Src/syscalls.c \
 Core/Src/pcm1690.c \
 Core/Src/uart_protocol.c \
 Core/Src/eeprom_config.c \
+Core/Src/ota.c \
+Core/Src/fw_version.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc.c \
@@ -180,8 +182,28 @@ vpath %.s $(sort $(dir $(ASM_SOURCES)))
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASMM_SOURCES:.S=.o)))
 vpath %.S $(sort $(dir $(ASMM_SOURCES)))
 
-$(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR) 
+$(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR)
 	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
+
+#######################################
+# Identidad del binario (ver Core/Src/fw_version.c)
+#######################################
+# Regla EXPLICITA que pisa el patron de arriba: fw_version.o se recompila en
+# cada `make`, sin condiciones, porque su contenido depende del commit y de la
+# hora — cosas que make no puede ver como dependencias. Es un archivo de tres
+# lineas: recompilarlo siempre no cuesta nada, y a cambio el identificador que
+# reporta /status nunca miente.
+GIT_ID     := $(shell git rev-parse --short=8 HEAD 2>/dev/null | cut -c1-8)
+ifeq ($(GIT_ID),)
+GIT_ID     := 00000000
+endif
+BUILD_EPOCH := $(shell date +%s)
+
+$(BUILD_DIR)/fw_version.o: Core/Src/fw_version.c Makefile FORCE | $(BUILD_DIR)
+	$(CC) -c $(CFLAGS) -DFW_ID=0x$(GIT_ID) -DFW_BUILD=$(BUILD_EPOCH)UL $< -o $@
+
+.PHONY: FORCE
+FORCE:
 
 $(BUILD_DIR)/%.o: %.s Makefile | $(BUILD_DIR)
 	$(AS) -c $(CFLAGS) $< -o $@
@@ -310,6 +332,69 @@ clean-i2c:
 	-rm -fR $(I2C_BUILD)
 
 #######################################
+# BOOTLOADER (0x08000000, sector 0 del banco 1)
+#
+# Se graba UNA vez con el ST-Link y no se actualiza nunca por WiFi: es el codigo
+# que aplica las actualizaciones, asi que actualizarlo a si mismo seria la unica
+# forma de dejar el equipo sin nada que arranque. Ver Core/Inc/ota.h.
+#######################################
+BOOT_TARGET = ds11_boot
+BOOT_BUILD  = build_boot
+BOOT_LDSCRIPT = STM32H743XX_BOOT.ld
+
+BOOT_SOURCES = \
+Core/Src/boot_main.c \
+Core/Src/ota.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_cortex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rcc.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rcc_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart_ex.c \
+Core/Src/system_stm32h7xx.c \
+Core/Src/sysmem.c \
+Core/Src/syscalls.c
+
+BOOT_OBJECTS  = $(addprefix $(BOOT_BUILD)/,$(notdir $(BOOT_SOURCES:.c=.o)))
+BOOT_OBJECTS += $(addprefix $(BOOT_BUILD)/,$(notdir $(ASM_SOURCES:.s=.o)))
+vpath %.c $(sort $(dir $(BOOT_SOURCES)))
+
+# -Os y no -O2: al bootloader no le sobra nada de velocidad que ganar (borrar y
+# copiar flash es I/O puro) y en cambio conviene que entre holgado en su sector.
+BOOT_CFLAGS = $(MCU) $(C_DEFS) $(C_INCLUDES) -Os -Wall -fdata-sections -ffunction-sections
+BOOT_LDFLAGS = $(MCU) -specs=nano.specs -T$(BOOT_LDSCRIPT) $(LIBS) \
+               -Wl,-Map=$(BOOT_BUILD)/$(BOOT_TARGET).map,--cref -Wl,--gc-sections
+
+$(BOOT_BUILD)/%.o: %.c Makefile | $(BOOT_BUILD)
+	$(CC) -c $(BOOT_CFLAGS) $< -o $@
+
+$(BOOT_BUILD)/%.o: %.s Makefile | $(BOOT_BUILD)
+	$(AS) -c $(BOOT_CFLAGS) $< -o $@
+
+$(BOOT_BUILD)/$(BOOT_TARGET).elf: $(BOOT_OBJECTS)
+	$(CC) $(BOOT_OBJECTS) $(BOOT_LDFLAGS) -o $@
+	$(SZ) $@
+
+$(BOOT_BUILD)/$(BOOT_TARGET).bin: $(BOOT_BUILD)/$(BOOT_TARGET).elf
+	$(BIN) $< $@
+
+$(BOOT_BUILD):
+	mkdir $@
+
+boot: $(BOOT_BUILD)/$(BOOT_TARGET).elf $(BOOT_BUILD)/$(BOOT_TARGET).bin
+
+boot-flash: boot
+	st-flash --reset write $(BOOT_BUILD)/$(BOOT_TARGET).bin 0x08000000
+
+clean-boot:
+	-rm -fR $(BOOT_BUILD)
+
+#######################################
 # clean up
 #######################################
 clean:
@@ -320,13 +405,32 @@ clean-led:
 
 #######################################
 # flash targets
+#
+# ⚠️ 0x08020000, no 0x08000000. Desde que existe la actualizacion por WiFi los
+# primeros 128 kB son del bootloader (`make boot-flash`). Grabar la aplicacion
+# en 0x08000000 pisa el bootloader: el equipo sigue arrancando —la app se
+# ejecuta igual desde ahi— pero se queda sin OTA hasta volver a hacer
+# `make boot-flash`, y ademas quedan dos copias del firmware en la flash.
 #######################################
 flash: all
-	dfu-util -a 0 -s 0x08000000:leave -D $(BUILD_DIR)/$(TARGET).bin
+	dfu-util -a 0 -s 0x08020000:leave -D $(BUILD_DIR)/$(TARGET).bin
 
 flash-stlink: all
-	st-flash --reset write $(BUILD_DIR)/$(TARGET).bin 0x08000000
-  
+	st-flash --reset write $(BUILD_DIR)/$(TARGET).bin 0x08020000
+
+# Primera instalacion o rescate: bootloader + aplicacion, en ese orden.
+flash-todo: boot all
+	st-flash write $(BOOT_BUILD)/$(BOOT_TARGET).bin 0x08000000
+	st-flash --reset write $(BUILD_DIR)/$(TARGET).bin 0x08020000
+
+# Flasheo por WiFi, sin cable. Requiere el bootloader ya instalado (make boot-flash).
+# El equipo queda mudo durante la carga y se reinicia solo al terminar.
+OTA_HOST ?= domosonica.local
+ota: all
+	@echo "Subiendo $(BUILD_DIR)/$(TARGET).bin a http://$(OTA_HOST) ..."
+	@curl -sS --max-time 240 -X POST --data-binary @$(BUILD_DIR)/$(TARGET).bin \
+	  "http://$(OTA_HOST)/firmware?id=$(GIT_ID)&build=$(BUILD_EPOCH)" ; echo
+
 #######################################
 # dependencies
 #######################################

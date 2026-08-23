@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -70,14 +71,34 @@
 #define CMD_SET_AMPS     0x0A   // payload: uint8 (1=on, 0=off) — enable de los 32 PAM8302A
 #define CMD_FACTORY_RESET 0x0C  // sin payload — todo a valores de fabrica, y persiste
 #define CMD_SET_INGAIN   0x0B   // payload: uint8 dB (0..36) — ganancia de ENTRADA
+// Actualizacion de firmware del STM32 por WiFi. Los tres primeros NO se
+// contestan desde el parser del STM32: el ACK llega recien cuando termino de
+// escribir la flash, y ESE es el control de flujo — mientras no llega, no se
+// manda el tramo siguiente. Por eso cada uno tiene su propio tiempo de espera.
+#define CMD_FW_BEGIN     0x20   // payload: fw_begin_t (12 B)
+#define CMD_FW_DATA      0x21   // payload: [seq:2 LE][datos:1..FW_CHUNK_MAX]
+#define CMD_FW_END       0x22   // payload: uint32 LE = CRC32 de la imagen
+#define CMD_FW_ABORT     0x23   // sin payload
 #define CMD_ACK          0x06
 #define CMD_NACK         0x15
+
 #define NUM_CHANNELS     32     // los 32 de DS11 (era 16 = media matriz)
 // Techo del payload. DEBE coincidir con PROTO_MAX_PAYLOAD del STM32: si el
 // STM32 manda mas de lo que aca se acepta, la trama se descarta por larga y el
 // endpoint queda mudo SIN error visible.
 #define PROTO_MAX_PAYLOAD 128
 #define ESP_IP_PUSH_MS   10000  // reenvio periodico: si el STM32 resetea, recupera la IP
+
+// Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
+// payload llevan el numero de tramo.
+#define FW_CHUNK_MAX     (PROTO_MAX_PAYLOAD - 2)
+
+typedef struct __attribute__((packed)) {
+    uint32_t len;
+    uint32_t fw_id;
+    uint32_t build;
+} fw_begin_t;
+_Static_assert(sizeof(fw_begin_t) == 12, "fw_begin_t debe ser 12 bytes");
 
 // Espejo de ds_config_t del STM32 — 102 bytes packed LE. packed explicito: sin
 // el, el uint32 de mutes se alinearia distinto y el STM32 leeria basura.
@@ -113,8 +134,12 @@ typedef struct __attribute__((packed)) {
     uint8_t  mic_live_mask;   // v7: bit N = entrada N con senal (no solo ruido)
     uint8_t  cal_progress;    // v7: parlantes ya medidos por el AUTOFOCUS
     uint8_t  cal_ok_count;    // v7: de esos, cuantos con calidad suficiente
+    uint32_t fw_id;           // v8: hash git corto del firmware STM32 que corre
+    uint32_t fw_build;        // v8: epoch unix de esa compilacion
+    uint8_t  ota_state;       // v8: 0 idle, 1 recibiendo, 2 lista, 3 error
+    uint8_t  ota_pct;         // v8: avance de la carga, 0..100
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 73, "ds_status_t debe ser 73 bytes");
+_Static_assert(sizeof(ds_status_t) == 83, "ds_status_t debe ser 83 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 #define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
@@ -592,7 +617,10 @@ static esp_err_t status_handler(httpd_req_t *req)
     xSemaphoreTake(status_sem, 0);              // drenar status viejo
     uart_send_frame(CMD_GET_STATUS, NULL, 0);
 
-    char buf[640];
+    /* 768: el JSON ronda los 550 chars con los campos de la v8. snprintf trunca
+     * en silencio, y un JSON truncado hace que la pagina entera se quede en
+     * "sin conexion" sin decir por que — asi que conviene el margen. */
+    char buf[768];
     /* 800 ms, no 400. El STM32 manda el status byte a byte sirviendo los fills
      * de audio entre medio (para no meter un pop de 6 ms), asi que en el modo
      * mas pesado —el 15, 8 fuentes x 32 salidas— la trama entera puede tardar
@@ -613,6 +641,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
             "\"cpu_fills_pct\":%u.%u,"
             "\"mic_live\":%u,\"cal_prog\":%u,\"cal_ok\":%u,\"cal_saved\":%s,"
+            "\"fw_id\":\"%08lX\",\"fw_build\":%lu,\"ota_state\":%u,\"ota_pct\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
@@ -631,6 +660,8 @@ static esp_err_t status_handler(httpd_req_t *req)
             s->cpu_fills_x10 / 10, s->cpu_fills_x10 % 10,
             s->mic_live_mask, s->cal_progress, s->cal_ok_count,
             (s->state_flags & STATE_F_CALIB) ? "true" : "false",
+            (unsigned long)s->fw_id, (unsigned long)s->fw_build,
+            s->ota_state, s->ota_pct,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
     } else {
@@ -867,6 +898,162 @@ static esp_err_t volume_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// ============== POST /firmware — actualizacion del STM32 por WiFi ==============
+//
+// El cuerpo del POST es el .bin crudo (build/ds11_beamforming.bin), tal cual.
+// Este chip NO lo guarda en ningun lado: lo va reenviando al STM32 a medida que
+// lo recibe. No hace falta particion de almacenamiento, no hace falta que entre
+// en RAM, y —lo importante— una transferencia cortada a la mitad no deja nada
+// que limpiar: el STM32 escribe en un banco de flash que no ejecuta, y sin la
+// trama final de cierre esa imagen es invisible para su bootloader.
+//
+// Ver firmware/Core/Inc/ota.h para por que eso es seguro.
+
+// Mismo CRC-32 (zlib) que ota.c del STM32, reimplementado a proposito en vez de
+// usar el de la ROM del ESP32: las variantes de la ROM difieren en si el valor
+// entra y sale invertido, y un desacuerdo silencioso aca haria fallar TODAS las
+// cargas con "el CRC no coincide" y ninguna pista de por que.
+static const uint32_t CRC32_TAB[16] = {
+    0x00000000UL, 0x1DB71064UL, 0x3B6E20C8UL, 0x26D930ACUL,
+    0x76DC4190UL, 0x6B6B51F4UL, 0x4DB26158UL, 0x5005713CUL,
+    0xEDB88320UL, 0xF00F9344UL, 0xD6D6A3E8UL, 0xCB61B38CUL,
+    0x9B64C2B0UL, 0x86D3D2D4UL, 0xA00AE278UL, 0xBDBDF21CUL
+};
+
+static uint32_t crc32_up(uint32_t crc, const uint8_t *p, int len)
+{
+    while (len--) {
+        crc ^= *p++;
+        crc = (crc >> 4) ^ CRC32_TAB[crc & 0x0F];
+        crc = (crc >> 4) ^ CRC32_TAB[crc & 0x0F];
+    }
+    return crc;
+}
+
+// Techo: el hueco de la aplicacion en el banco 1 del STM32 (OTA_APP_SIZE).
+#define FW_MAX_BYTES (896 * 1024)
+
+// Tiempos de espera, muy distintos entre si porque el trabajo del otro lado lo
+// es: FW_BEGIN borra sectores de flash, FW_DATA escribe 126 bytes, FW_END relee
+// la imagen entera para el CRC.
+#define FW_TO_BEGIN  20000
+#define FW_TO_DATA    3000
+#define FW_TO_END    20000
+
+static esp_err_t firmware_handler(httpd_req_t *req)
+{
+    char resp[224];
+    int  total = req->content_len;
+
+    if (total <= 0 || total > FW_MAX_BYTES) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"tamano invalido (%d bytes)\"}", total);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
+    }
+
+    // id y build son informativos: viajan para que quede registrado que binario
+    // se subio. El STM32 igual reporta por /status el fw_id que trae compilado
+    // adentro, que es la fuente de verdad de "que esta corriendo".
+    uint32_t id = 0, build = 0;
+    {
+        char q[96], v[32];
+        if (httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK) {
+            if (httpd_query_key_value(q, "id", v, sizeof(v)) == ESP_OK)
+                id = (uint32_t)strtoul(v, NULL, 16);
+            if (httpd_query_key_value(q, "build", v, sizeof(v)) == ESP_OK)
+                build = (uint32_t)strtoul(v, NULL, 10);
+        }
+    }
+
+    printf("[ESP32] OTA STM32: %d bytes, id %08lX\n", total, (unsigned long)id);
+
+    fw_begin_t beg = { .len = (uint32_t)total, .fw_id = id, .build = build };
+    int ack = uart_send_and_wait_ack(CMD_FW_BEGIN, (const uint8_t *)&beg,
+                                     sizeof(beg), FW_TO_BEGIN);
+    if (ack != 1) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"el STM32 no acepto la carga (%s)\"}",
+                 ack == 0 ? "rechazada" : "sin respuesta");
+        goto fail;
+    }
+
+    uint32_t crc = 0xFFFFFFFFUL;
+    uint16_t seq = 0;
+    int      left = total;
+    uint8_t  chunk[2 + FW_CHUNK_MAX];
+
+    while (left > 0) {
+        int want = (left < FW_CHUNK_MAX) ? left : FW_CHUNK_MAX;
+        int got  = 0;
+        while (got < want) {
+            int r = httpd_req_recv(req, (char *)&chunk[2 + got], want - got);
+            if (r <= 0) {
+                // El navegador corto. Se avisa para que el STM32 cierre la
+                // sesion; si el aviso tampoco llega, no importa: sin la trama
+                // final la imagen a medias no la aplica nadie.
+                uart_send_and_wait_ack(CMD_FW_ABORT, NULL, 0, 500);
+                snprintf(resp, sizeof(resp),
+                         "{\"status\":\"error\",\"message\":\"se corto la subida en el byte %d\"}",
+                         total - left + got);
+                goto fail;
+            }
+            got += r;
+        }
+
+        crc = crc32_up(crc, &chunk[2], got);
+        chunk[0] = (uint8_t)(seq & 0xFF);
+        chunk[1] = (uint8_t)(seq >> 8);
+
+        // Hasta tres intentos por tramo. Reenviar es inofensivo: el STM32
+        // reconoce el numero de tramo anterior como repetido y lo vuelve a
+        // ACKear sin escribirlo dos veces.
+        int a = -1;
+        for (int t = 0; t < 3 && a != 1; t++)
+            a = uart_send_and_wait_ack(CMD_FW_DATA, chunk, (uint16_t)(2 + got), FW_TO_DATA);
+
+        if (a != 1) {
+            uart_send_and_wait_ack(CMD_FW_ABORT, NULL, 0, 500);
+            snprintf(resp, sizeof(resp),
+                     "{\"status\":\"error\",\"message\":\"el STM32 dejo de contestar en el tramo %u\"}",
+                     (unsigned)seq);
+            goto fail;
+        }
+        seq++;
+        left -= got;
+    }
+
+    crc ^= 0xFFFFFFFFUL;
+    uint8_t endp[4] = { (uint8_t)crc, (uint8_t)(crc >> 8),
+                        (uint8_t)(crc >> 16), (uint8_t)(crc >> 24) };
+    ack = uart_send_and_wait_ack(CMD_FW_END, endp, 4, FW_TO_END);
+
+    if (ack != 1) {
+        snprintf(resp, sizeof(resp),
+                 "{\"status\":\"error\",\"message\":\"la imagen no verifico en el STM32 (%s)\"}",
+                 ack == 0 ? "CRC distinto" : "sin respuesta");
+        goto fail;
+    }
+
+    printf("[ESP32] OTA STM32: %d bytes ok, crc %08lX\n", total, (unsigned long)crc);
+    snprintf(resp, sizeof(resp),
+             "{\"status\":\"ok\",\"bytes\":%d,\"crc\":\"%08lX\","
+             "\"message\":\"imagen verificada; el STM32 se reinicia para aplicarla\"}",
+             total, (unsigned long)crc);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+
+fail:
+    printf("[ESP32] OTA STM32 FALLO: %s\n", resp);
+    httpd_resp_set_status(req, "500 Internal Server Error");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 // ============== UI web embebida (GET /) ==============
 // Pagina autocontenida (sin CDN): botones de modo + sliders de beam + telemetria.
 static const char INDEX_HTML[] =
@@ -980,6 +1167,22 @@ static const char INDEX_HTML[] =
 "<span class=val id=rstv></span></div>"
 "<div style='font-size:.75em;color:#888;margin-top:6px'>Volumen &minus;24 dB, "
 "ganancia 0 dB, modo 0 y focos por defecto. No toca los amplificadores.</div></div>"
+/* Actualizacion del firmware del STM32 sin cable. Va al final de la pagina a
+ * proposito: no es algo que uno haga durante una medicion. */
+"<div class=card><h2>Firmware del STM32</h2>"
+"<div class=row style='font-size:.85em'>corriendo: <span class=val id=fwid>&mdash;</span>"
+"<span class=val id=fwdate style='color:#888'></span></div>"
+"<div class=row><input type=file id=fwfile accept='.bin'>"
+"<button onclick=doFw()>Actualizar</button></div>"
+"<div id=fwbarw style='display:none;background:#223;border-radius:4px;height:6px;margin-top:8px'>"
+"<div id=fwbar style='background:#4c8;height:6px;width:0%;border-radius:4px'></div></div>"
+"<div id=fwmsg style='font-size:.8em;margin-top:6px;color:#888'></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Sub&iacute; "
+"<b>firmware/build/ds11_beamforming.bin</b>. Durante la carga (~15 s) el equipo "
+"queda <b>mudo</b> y despu&eacute;s se reinicia solo con los amplificadores "
+"apagados. La imagen se escribe en un banco de flash que no se est&aacute; "
+"ejecutando: si algo falla a mitad de camino no pasa nada y se puede reintentar."
+"</div></div>"
 "<script>"
 /* ⚠️ N y names[] son el ESPEJO de ui_states[] del STM32 y de MODE_NAMES de
  * arriba. Agregar un modo y olvidarse de esta linea deja el modo SIN BOTON: el
@@ -1106,7 +1309,37 @@ static const char INDEX_HTML[] =
 "function startAF(){fetch('/mode',{method:'POST',body:JSON.stringify({mode:11})}).then(poll);}"
 "function setRx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'rx',az:+az.value})});}"
 "function setTx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'tx',fx:+fx.value,fy:+fy.value,fz:+fz.value})});}"
-"function poll(){fetch('/status').then(r=>r.json()).then(s=>{"
+/* ===== Actualizacion del firmware del STM32 =====
+ * XMLHttpRequest y no fetch(): fetch no da progreso de SUBIDA (el
+ * ReadableStream de request body no esta disponible en Safari), y una barra que
+ * no se mueve durante 15 s se lee como "se colgo". Aca la subida es lo lento.
+ *
+ * Se corta el poll de /status mientras dura: el server HTTP del ESP32 atiende
+ * de a una, asi que cada poll competiria con la carga y ademas se veria como
+ * "sin conexion" justo cuando todo va bien. */
+"let fwBusy=false;"
+"function doFw(){const f=document.getElementById('fwfile').files[0];"
+"const m=document.getElementById('fwmsg'),bw=document.getElementById('fwbarw'),b=document.getElementById('fwbar');"
+"if(!f){m.textContent='eleg\\u00ed un archivo .bin primero';return;}"
+"if(f.size<1024||f.size>917504){m.textContent='ese archivo no parece un firmware ('+f.size+' bytes)';return;}"
+"if(!confirm('Actualizar el firmware del STM32 con '+f.name+' ('+f.size+' bytes)?\\n\\n"
+"El equipo queda mudo y se reinicia al terminar.'))return;"
+"fwBusy=true;bw.style.display='block';b.style.width='0%';"
+"m.style.color='#9cf';m.textContent='enviando...';"
+"const x=new XMLHttpRequest();"
+"x.open('POST','/firmware');"
+"x.timeout=180000;"
+"x.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.round(e.loaded*100/e.total);"
+"b.style.width=p+'%';m.textContent='enviando... '+p+'%';}};"
+"x.onload=()=>{let r={};try{r=JSON.parse(x.responseText);}catch(e){}"
+"if(r.status=='ok'){b.style.width='100%';m.style.color='#6d6';"
+"m.textContent='\\u2713 '+r.message+' \\u2014 volv\\u00e9 a mirar dentro de unos segundos';"
+"setTimeout(()=>{fwBusy=false;poll();},6000);}"
+"else{m.style.color='#f84';m.textContent='\\u2717 '+(r.message||('error HTTP '+x.status));fwBusy=false;}};"
+"x.onerror=()=>{m.style.color='#f84';m.textContent='\\u2717 se corto la conexion';fwBusy=false;};"
+"x.ontimeout=()=>{m.style.color='#f84';m.textContent='\\u2717 el equipo no contesto a tiempo';fwBusy=false;};"
+"x.send(f);}"
+"function poll(){if(fwBusy)return;fetch('/status').then(r=>r.json()).then(s=>{"
 "document.getElementById('link').textContent=s.stm32=='ok'?'\\u25cf online':'\\u25cb '+s.stm32;"
 "if(s.stm32!='ok')return;"
 "curMode=s.mode;"
@@ -1151,6 +1384,12 @@ static const char INDEX_HTML[] =
 "chk(6,s.cal_saved?2:0,s.cal_saved"
 "?'en EEPROM \\u2014 polaridades activas en todos los modos; foco medido en el modo 18'"
 ":'ninguna guardada \\u2014 el equipo usa la geometr\\u00eda nominal');"
+/* Identidad del binario que corre. Con OTA dejo de ser obvia: puede haberla
+ * subido otro, desde otra maquina. fw_id 00000000 = se compilo sin git. */
+"if(s.fw_id!=null){document.getElementById('fwid').textContent="
+"(s.fw_id=='00000000'?'sin identificar':s.fw_id.toLowerCase());"
+"document.getElementById('fwdate').textContent="
+"s.fw_build>0?('compilado '+new Date(s.fw_build*1000).toLocaleString()):'';}"
 "document.getElementById('st').textContent="
 "'modo: '+s.mode_name+'  |  vol: '+(s.vol_db<=-64?'MUTE':s.vol_db+'dB')+'  |  foco: ('+s.focus.fx+','+s.focus.fy+','+s.focus.fz+')mm'"
 "+'\\nunderruns: '+s.underruns+'  errores SAI: '+s.sai_errors+'  OVF: '+s.ovf+'  cal: '+s.cal_state;"
@@ -1183,6 +1422,11 @@ static httpd_handle_t start_webserver(void)
      * que nadie lo notara, y agregar /reset tiro /status — o sea la telemetria
      * entera— sin un solo mensaje de error. Margen de sobra y chequeo abajo. */
     config.max_uri_handlers = 16;
+    /* 10 s, no los 5 de fabrica. POST /firmware consume el cuerpo al ritmo al
+     * que el STM32 puede grabar la flash (~15 s para 80 kB), asi que el socket
+     * pasa mucho tiempo sin que se lo lea; con el timeout corto una pausa del
+     * navegador cortaba la subida a mitad de camino. */
+    config.recv_wait_timeout = 10;
 
     printf("[ESP32] Iniciando HTTP server en puerto %d...\n", config.server_port);
 
@@ -1198,6 +1442,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/ingain",  .method = HTTP_POST, .handler = ingain_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
             { .uri = "/ping",    .method = HTTP_GET,  .handler = ping_handler    },
+            { .uri = "/firmware",.method = HTTP_POST, .handler = firmware_handler},
         };
         for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
             esp_err_t e = httpd_register_uri_handler(server, &uris[i]);

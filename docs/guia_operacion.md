@@ -522,15 +522,41 @@ uno se carga distinto.
 si se actualiza uno solo, el equipo responde a los comandos pero la información de
 estado deja de leerse.
 
-### El STM32 (el chip grande)
+### El STM32 (el chip grande) — por WiFi
+
+**Es la forma normal desde ahora.** No hace falta programador ni desarmar nada:
+al final de `http://domosonica.local` hay una tarjeta **Firmware del STM32** con
+un selector de archivo. Se elige `firmware/build/ds11_beamforming.bin`, se
+aprieta *Actualizar* y listo. Desde la computadora es lo mismo con un comando:
+
+```bash
+cd ~/STM32CubeIDE/DS-Firmware/firmware
+make -j4              # compila
+make ota              # sube por WiFi
+```
+
+Durante los ~15 segundos que dura, **el equipo se queda mudo** y los
+amplificadores se apagan solos; después se reinicia con el programa nuevo. Si
+algo falla a mitad de camino no pasa nada: el programa que estaba sigue
+intacto y se puede reintentar. Los detalles están en
+[ota_wifi.md](ota_wifi.md).
+
+> Esto necesita que la placa tenga el **bootloader** instalado. Se hace una sola
+> vez, con ST-Link: `make flash-todo`. Si nunca se hizo, hay que empezar por ahí.
+
+### El STM32 — por cable (primera vez, o rescate)
 
 Necesita un **programador ST-Link** conectado al conector **J7**.
 
 ```bash
 cd ~/STM32CubeIDE/DS-Firmware/firmware
 make -j4              # compila
-make flash-stlink     # carga
+make flash-stlink     # carga la aplicación (0x08020000)
+make flash-todo       # bootloader + aplicación — instalación desde cero
 ```
+
+Hace falta cuando el equipo no arranca o no aparece en la red — es decir,
+cuando no hay forma de llegarle por WiFi.
 
 ⚠️ **Dos advertencias importantes con el ST-Link:**
 
@@ -543,7 +569,8 @@ make flash-stlink     # carga
 
 ### El ESP32 (el chiquito con antena)
 
-Se carga por su propio **conector USB-C** (J3), sin programador.
+Se carga por su propio **conector USB-C** (J3), sin programador. Éste todavía
+no se puede actualizar por WiFi.
 
 ```bash
 cd ~/STM32CubeIDE/DS-Firmware/firmware_esp32c3

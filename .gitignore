@@ -115,3 +115,4 @@ firmware_esp32c3/main/secrets.h
 # Fuera del repo a proposito — es un binario de ~460 KB que cambiaria en cada
 # edicion del .md y quedaria desincronizado del texto sin que nadie se entere.
 docs/pdf/*.pdf
+firmware/build_boot/

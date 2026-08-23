@@ -28,6 +28,7 @@
 #include "pcm1690.h"
 #include "pin_definitions.h"
 #include "eeprom_config.h"
+#include "ota.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -944,6 +945,7 @@ static void Cal_Init(void);
 static void Cal_StartScan(void);
 static void Cal_Process(void);
 static void LB_Process(void);
+static void OTA_ServiceRequests(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -969,6 +971,124 @@ static void LB_Process(void);
  * bloqueos largos del sistema (print, EEPROM, status) quedan así cooperativos. */
 void EEPROM_Yield(void)        { Service_Fills(); }
 void UART_Protocol_Yield(void) { Service_Fills(); }
+/* Lo mismo para la verificación del CRC de una imagen OTA (~1,4 ms de un tirón
+ * sobre 80 kB). El borrado de un sector NO se puede cooperativizar: ahí el CPU
+ * queda en espera activa sobre el registro de estado del flash. Por eso el
+ * borrado se hace con los amplificadores ya apagados. */
+void OTA_Yield(void)           { Service_Fills(); }
+
+/* ============================================================
+ * Actualización de firmware por WiFi — lado main loop
+ *
+ * Recibe la imagen del ESP32 y la deja en el banco 2 (ota.c). No la aplica: eso
+ * lo hace el bootloader en el próximo arranque, y por eso una carga que sale
+ * mal —CRC que no cierra, WiFi que se corta, la corriente que se va— no cuesta
+ * absolutamente nada: el firmware que está corriendo vive en el banco 1 y este
+ * código no lo puede tocar. Ver ota.h.
+ *
+ * El equipo queda MUDO durante la carga, a propósito: el borrado del sector
+ * bloquea el CPU cientos de milisegundos y eso son decenas de deadlines de fill
+ * perdidos. En vez de dejar que salga por los parlantes como una serie de pops,
+ * se apagan los amplificadores en FW_BEGIN. Vuelven con el reinicio (arrancan
+ * apagados) y se prenden a mano como siempre.
+ * ============================================================ */
+
+/* Número de tramo esperado. La comprobación no es paranoia: sin ella, un ACK
+ * que se pierda hace que el ESP32 reenvíe el mismo tramo y el STM32 lo escriba
+ * DOS VECES, corriendo todo lo que sigue medio tramo — con el CRC fallando al
+ * final y sin ninguna pista de dónde. */
+static uint16_t ota_seq_next = 0;
+
+/* Reinicio diferido tras una carga exitosa. No se reinicia en el acto: primero
+ * tiene que salir el ACK, y después el ESP32 tiene que contestarle al navegador
+ * que la carga terminó. Si el STM32 se reinicia antes, la página muestra un
+ * error justo cuando todo salió bien. */
+static uint32_t ota_reboot_at = 0;
+
+/* Una carga que se queda a mitad —el ESP32 se reinicia, el navegador se cierra,
+ * el WiFi se cae— dejaría la sesión abierta para siempre, con el equipo mudo y
+ * /status informando "recibiendo 43%" indefinidamente. No es peligroso, pero es
+ * un estado del que nadie sabe cómo salir. Treinta segundos son un orden de
+ * magnitud más que el tramo más lento. */
+#define OTA_IDLE_TIMEOUT_MS  30000
+
+static void OTA_ServiceRequests(void)
+{
+  static uint32_t ota_last_ms = 0;
+
+  if (UART_Protocol_GetFwAbort()) {
+    OTA_Abort();
+    UART_Print("OTA: carga cancelada\r\n");
+  }
+
+  if (OTA_GetState() == OTA_ST_RECV && ota_last_ms != 0 &&
+      (HAL_GetTick() - ota_last_ms) > OTA_IDLE_TIMEOUT_MS) {
+    OTA_Abort();
+    ota_last_ms = 0;
+    UART_Print("OTA: la carga se cortó y no volvió — sesión abandonada\r\n");
+  }
+
+  static uint8_t pl[PROTO_MAX_PAYLOAD];
+  uint8_t  cmd = 0;
+  uint16_t n   = 0;
+  if (!UART_Protocol_TakeFwRequest(&cmd, pl, &n)) return;
+
+  ota_last_ms = HAL_GetTick();
+
+  uint8_t ok = 0;
+
+  if (cmd == CMD_FW_BEGIN && n == sizeof(ds_fw_begin_t)) {
+    ds_fw_begin_t b;
+    memcpy(&b, pl, sizeof(b));
+    Set_Amps(0);                       /* mudo antes de bloquear en el borrado */
+    ok = (OTA_Begin(b.len, b.fw_id, b.build) == 0);
+    ota_seq_next = 0;
+    if (ok) {
+      snprintf(uart_buf, sizeof(uart_buf),
+               "OTA: recibiendo %lu bytes (id %08lX) — amps apagados\r\n",
+               (unsigned long)b.len, (unsigned long)b.fw_id);
+    } else {
+      snprintf(uart_buf, sizeof(uart_buf), "OTA: no arranco — %s\r\n", OTA_GetError());
+    }
+    UART_Print(uart_buf);
+
+  } else if (cmd == CMD_FW_DATA && n >= 3) {
+    uint16_t seq = (uint16_t)pl[0] | ((uint16_t)pl[1] << 8);
+    if (seq == ota_seq_next) {
+      ok = (OTA_Data(&pl[2], (uint16_t)(n - 2)) == 0);
+      if (ok) ota_seq_next++;
+      else {
+        snprintf(uart_buf, sizeof(uart_buf), "OTA: fallo en el tramo %u — %s\r\n",
+                 (unsigned)seq, OTA_GetError());
+        UART_Print(uart_buf);
+      }
+    } else if ((uint16_t)(seq + 1U) == ota_seq_next) {
+      /* Reenvío del tramo anterior: se perdió NUESTRO ack, no sus datos. Se
+       * vuelve a ACKear sin escribir nada. */
+      ok = 1;
+    } else {
+      snprintf(uart_buf, sizeof(uart_buf),
+               "OTA: tramo fuera de orden (llego %u, esperaba %u) — carga abortada\r\n",
+               (unsigned)seq, (unsigned)ota_seq_next);
+      UART_Print(uart_buf);
+      OTA_Abort();
+    }
+
+  } else if (cmd == CMD_FW_END && n == 4) {
+    uint32_t crc = (uint32_t)pl[0]        | ((uint32_t)pl[1] << 8)
+                 | ((uint32_t)pl[2] << 16) | ((uint32_t)pl[3] << 24);
+    ok = (OTA_End(crc) == 0);
+    if (ok) {
+      UART_Print("OTA: imagen verificada. Reiniciando para aplicarla...\r\n");
+      ota_reboot_at = HAL_GetTick() + 1500;
+    } else {
+      snprintf(uart_buf, sizeof(uart_buf), "OTA: imagen RECHAZADA — %s\r\n", OTA_GetError());
+      UART_Print(uart_buf);
+    }
+  }
+
+  UART_Protocol_FwReply(ok);
+}
 
 static void Service_Fills(void) {
   static volatile uint8_t in_service = 0;
@@ -1089,6 +1209,18 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  /* Tabla de vectores en 0x08020000. Desde que existe la actualización por WiFi
+   * la aplicación NO vive en el principio de la flash: los primeros 128 kB son
+   * del bootloader (ver ota.h). El bootloader ya deja VTOR apuntando acá antes
+   * de saltar, pero se repite por dos motivos, y los dos pasan seguido: correr
+   * la app directamente desde el debugger sin pasar por el bootloader, y
+   * flashearla sola con el ST-Link. Sin esto, la primera interrupción salta a
+   * la tabla del bootloader — o sea, a cualquier lado.
+   *
+   * Va antes de HAL_Init() porque después ya hay SysTick corriendo. */
+  SCB->VTOR = 0x08020000UL;
+  __DSB();
+
   /* I-cache ON. El M7 corre a 480 MHz pero la flash tiene 4 wait states, así
    * que sin caché de instrucciones cada vuelta del lazo de fill paga el fetch.
    * Medido 2026-08-13 (modo 7): 716856 ciclos para 480 muestras × 8 canales =
@@ -1134,6 +1266,11 @@ int main(void)
 
   // Startup message
   UART_Print("\r\n=== DS11 Beamforming Audio (32ch) ===\r\n");
+  /* Qué binario es y desde dónde corre. Con actualización por WiFi las dos
+   * cosas dejaron de ser obvias: la imagen pudo haberla subido otro. */
+  snprintf(uart_buf, sizeof(uart_buf), "firmware %08lX  build %lu  @ 0x%08lX\r\n",
+           (unsigned long)fw_id, (unsigned long)fw_build, (unsigned long)SCB->VTOR);
+  UART_Print(uart_buf);
 
   /* Revisión de silicio — NO es cosmético.
    *
@@ -1676,6 +1813,16 @@ int main(void)
 
       if (UART_Protocol_GetFactoryResetRequest()) Config_FactoryReset();
 
+      OTA_ServiceRequests();
+
+      /* Reinicio diferido tras una carga OTA verificada: acá termina el trabajo
+       * de la aplicación. Lo que sigue lo hace el bootloader. */
+      if (ota_reboot_at != 0 && (int32_t)(HAL_GetTick() - ota_reboot_at) >= 0) {
+        UART_Print("OTA: reiniciando.\r\n");
+        HAL_Delay(20);                 /* que salga la línea antes del reset */
+        NVIC_SystemReset();
+      }
+
       if (UART_Protocol_StatusRequested()) {
         ds_status_t st;
         st.proto_ver = PROTO_VERSION;
@@ -1701,6 +1848,15 @@ int main(void)
         st.mic_live_mask = mic_live_mask;
         st.cal_progress  = cal_progress;
         st.cal_ok_count  = cal_ok_count;
+        st.fw_id    = fw_id;
+        st.fw_build = fw_build;
+        st.ota_state = (uint8_t)OTA_GetState();
+        {
+          uint32_t exp = OTA_GetExpected();
+          st.ota_pct = (OTA_GetState() == OTA_ST_RECV && exp)
+                       ? (uint8_t)((OTA_GetReceived() * 100U) / exp)
+                       : ((OTA_GetState() == OTA_ST_READY) ? 100U : 0U);
+        }
         /* Pico REAL sobre todas las muestras desde el sondeo anterior, drenado
          * al leerlo. Acá se recalculaba sobre el buffer DMA vivo, o sea 10 ms
          * de cada intervalo — ver el comentario de adc_peak_net. */

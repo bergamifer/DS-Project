@@ -50,6 +50,23 @@
                                      * en un estado raro a fuerza de ajustes
                                      * en vivo, varios de los cuales se
                                      * guardan solos. */
+/* ===== Actualización de firmware por WiFi (0x20-0x23) =====
+ *
+ * Los tres primeros NO se contestan desde el parser: el ACK lo manda el MAIN
+ * LOOP recién cuando terminó de escribir la flash. Eso no es un detalle de
+ * implementación sino el control de flujo: mientras el ESP32 espera el ACK de
+ * un tramo, no manda el siguiente, y así la transferencia va exactamente al
+ * ritmo al que el STM32 puede grabar. Sin eso habría que inventar una ventana y
+ * un buffer, y el borrado de un sector (cientos de ms) lo desbordaría igual.
+ *
+ * Por eso también los tiempos de espera del ESP32 son distintos por comando:
+ * FW_BEGIN puede tardar segundos (borra), FW_DATA milisegundos, FW_END otra vez
+ * segundos (relee toda la imagen para el CRC). */
+#define CMD_FW_BEGIN        0x20    /* payload: ds_fw_begin_t */
+#define CMD_FW_DATA         0x21    /* payload: [seq:2 LE][datos:1..FW_CHUNK_MAX] */
+#define CMD_FW_END          0x22    /* payload: uint32 LE = CRC32 de la imagen */
+#define CMD_FW_ABORT        0x23    /* payload: none */
+
 #define CMD_ACK             0x06
 #define CMD_NACK            0x15
 
@@ -63,7 +80,11 @@
  * de las filas 3 y 4 no se podían tocar desde el ESP32. */
 #define CFG_PAYLOAD_SIZE    102
 #define CFG_NUM_CHANNELS    32
-#define PROTO_VERSION       7   /* v2: + master_vol_db; v3: + in_gain_db y los
+/* Datos de la imagen en CMD_FW_DATA. Son 126 y no 128 porque los dos primeros
+ * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
+ * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
+#define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
+#define PROTO_VERSION       8   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -73,7 +94,11 @@
                                  * un cable. Ahora sale por /status.
                                  * v7: + mic_live_mask / cal_progress /
                                  * cal_ok_count — el AUTOFOCUS se puede correr
-                                 * y juzgar desde la página, sin serie. */
+                                 * y juzgar desde la página, sin serie.
+                                 * v8: + fw_id / fw_build / ota_state / ota_pct.
+                                 * Con actualización por WiFi, "¿qué binario
+                                 * está corriendo?" deja de ser obvio: ya no
+                                 * es el último que uno flasheó a mano. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -113,6 +138,25 @@ typedef struct __attribute__((packed)) {
 _Static_assert(sizeof(ds_beam_req_t) == 9, "ds_beam_req_t must be 9 bytes");
 
 /**
+ * @brief Apertura de una carga de firmware (CMD_FW_BEGIN).
+ *
+ * El tamaño va por adelantado a propósito: con él el STM32 borra SÓLO los
+ * sectores del staging que la imagen va a ocupar (uno, con los ~80 kB de hoy)
+ * en vez del banco entero. La diferencia son cientos de milisegundos contra
+ * varios segundos, y durante el borrado el equipo está mudo.
+ *
+ * fw_id y build no se verifican: viajan para que el firmware nuevo pueda decir
+ * por /status qué binario es, sin depender de que uno se acuerde.
+ */
+typedef struct __attribute__((packed)) {
+    uint32_t len;       /* bytes de la imagen */
+    uint32_t fw_id;     /* hash git corto */
+    uint32_t build;     /* epoch unix de compilación */
+} ds_fw_begin_t;
+
+_Static_assert(sizeof(ds_fw_begin_t) == 12, "ds_fw_begin_t must be 12 bytes");
+
+/**
  * @brief Telemetry snapshot (CMD_STATUS response). Little-endian packed —
  * the ESP32 casts it directly. Extend only by APPENDING fields and bumping
  * PROTO_VERSION so old ESP32 firmware keeps parsing its known prefix.
@@ -142,7 +186,14 @@ typedef struct __attribute__((packed)) {
     uint8_t  mic_live_mask;  /* v7: bit N = entrada N con señal (no sólo ruido) */
     uint8_t  cal_progress;   /* v7: parlantes ya medidos, 0..CAL_NUM_CH */
     uint8_t  cal_ok_count;   /* v7: de esos, cuántos con calidad suficiente */
-} ds_status_t;               /* 70 + 3 = 73 bytes */
+    /* v8 — identidad del binario que está corriendo. Antes alcanzaba con
+     * acordarse de qué se había flasheado; con OTA la placa puede tener un
+     * firmware que uno subió desde otra máquina, o desde el celular. */
+    uint32_t fw_id;          /* v8: hash git corto de la compilación */
+    uint32_t fw_build;       /* v8: epoch unix de la compilación */
+    uint8_t  ota_state;      /* v8: ota_state_t — 0 idle, 1 recibiendo, 2 lista, 3 error */
+    uint8_t  ota_pct;        /* v8: avance de la carga, 0..100 */
+} ds_status_t;               /* 73 + 10 = 83 bytes */
 
 /* Estado REAL, no el nominal.
  *
@@ -167,7 +218,7 @@ typedef struct __attribute__((packed)) {
  * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18
  * midiendo underruns, cuando el contador BAJÓ de 6 a 0 — un contador monótono
  * que retrocede es un reboot, y no había con qué confirmarlo. */
-_Static_assert(sizeof(ds_status_t) == 73, "ds_status_t must be 73 bytes");
+_Static_assert(sizeof(ds_status_t) == 83, "ds_status_t must be 83 bytes");
 /* ⚠️ Un payload por encima de PROTO_MAX_PAYLOAD hace que el ESP32 descarte la
  * trama por larga y el endpoint quede mudo SIN dar error — de ahí los asserts. */
 _Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,
@@ -278,5 +329,43 @@ uint8_t UART_Protocol_GetAmpsRequest(uint8_t *on);
  * @return 1 una vez por request, 0 si no hay ninguno pendiente.
  */
 uint8_t UART_Protocol_GetFactoryResetRequest(void);
+
+/* ===== Actualización de firmware: par tomar-pedido / contestar =====
+ *
+ * A diferencia de todos los demás comandos, éstos NO se contestan desde el
+ * parser. El parser guarda el pedido y se aparta; el main loop lo ejecuta —
+ * borrado o escritura de flash, que puede tardar de milisegundos a segundos— y
+ * recién entonces contesta con UART_Protocol_FwReply(). El ESP32 no manda el
+ * tramo siguiente hasta ver ese ACK, así que la transferencia se autorregula
+ * sola al ritmo de la flash. Ver el comentario de CMD_FW_BEGIN.
+ *
+ * Hay UN solo pedido pendiente a la vez. Si llega otro antes de que el main loop
+ * conteste el anterior, el parser lo rechaza con NACK en vez de encolarlo: eso
+ * sólo puede pasar si el otro extremo no está respetando el ACK, y en una carga
+ * de firmware es mucho mejor cortar que seguir a ciegas. */
+
+/**
+ * @brief Se lleva el pedido de firmware pendiente, si hay uno.
+ * @param cmd      destino: CMD_FW_BEGIN / CMD_FW_DATA / CMD_FW_END.
+ * @param payload  destino, al menos PROTO_MAX_PAYLOAD bytes.
+ * @param len      destino: bytes válidos en payload.
+ * @return 1 si había un pedido, 0 si no.
+ *
+ * ⚠️ Después de un 1 hay que llamar SIEMPRE a UART_Protocol_FwReply(): hasta
+ * que eso pase el parser rechaza todo lo que llegue, y la carga se cuelga.
+ */
+uint8_t UART_Protocol_TakeFwRequest(uint8_t *cmd, uint8_t *payload, uint16_t *len);
+
+/**
+ * @brief Contesta el pedido tomado con TakeFwRequest y libera el lugar.
+ * @param ok  1 → ACK, 0 → NACK.
+ */
+void UART_Protocol_FwReply(uint8_t ok);
+
+/**
+ * @brief Poll for a CMD_FW_ABORT request (ése sí se ACKea desde el parser:
+ *        cancelar no escribe nada).
+ */
+uint8_t UART_Protocol_GetFwAbort(void);
 
 #endif /* UART_PROTOCOL_H */

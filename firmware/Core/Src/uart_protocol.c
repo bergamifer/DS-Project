@@ -70,6 +70,14 @@ static volatile uint8_t amps_req_flag = 0;
  * main loop; el ISR sólo levanta la bandera. */
 static volatile uint8_t factory_reset_flag = 0;
 
+/* CMD_FW_* — un único pedido pendiente, sin ACK desde el ISR. Ver el comentario
+ * de UART_Protocol_TakeFwRequest en el header: el ACK diferido ES el control de
+ * flujo de la transferencia. `fw_req_cmd == 0` significa "libre". */
+static volatile uint8_t  fw_req_cmd = 0;
+static volatile uint16_t fw_req_len = 0;
+static uint8_t           fw_req_payload[PROTO_MAX_PAYLOAD];
+static volatile uint8_t  fw_abort_flag = 0;
+
 /* Pre-formatted print buffer for non-blocking IT transmission */
 /* Una línea por canal (~45 chars) + ~200 de encabezado y cierre. Con 32 canales
  * son ~1640, y el buffer estaba en 1200 desde que la config tenía 16 — pasar a
@@ -288,6 +296,26 @@ static void process_byte(uint8_t byte)
             vol_req_flag = 1;
             rx_frame_count++;
             send_ack();
+        } else if (rx_command == CMD_FW_BEGIN ||
+                   rx_command == CMD_FW_DATA  ||
+                   rx_command == CMD_FW_END) {
+            /* Sin ACK acá: contesta el main loop cuando terminó con la flash.
+             * Si todavía no contestó el pedido anterior, esto es el otro extremo
+             * mandando sin esperar — se corta con un NACK antes de que la carga
+             * se desordene. */
+            if (fw_req_cmd != 0) {
+                rx_error_count++;
+                send_nack();
+            } else {
+                memcpy(fw_req_payload, rx_payload, rx_payload_len);
+                fw_req_len = rx_payload_len;
+                fw_req_cmd = rx_command;     /* último: publica el pedido ya completo */
+                rx_frame_count++;
+            }
+        } else if (rx_command == CMD_FW_ABORT && rx_payload_len == 0) {
+            fw_abort_flag = 1;               /* cancelar no escribe nada: ACK inmediato */
+            rx_frame_count++;
+            send_ack();
         } else {
             rx_error_count++;
             send_nack();
@@ -396,6 +424,39 @@ uint8_t UART_Protocol_GetFactoryResetRequest(void)
 {
     if (!factory_reset_flag) return 0;
     factory_reset_flag = 0;
+    return 1;
+}
+
+uint8_t UART_Protocol_TakeFwRequest(uint8_t *cmd, uint8_t *payload, uint16_t *len)
+{
+    if (!fw_req_cmd) return 0;
+    /* Copia con la IRQ apagada, misma regla que TakeConfig: fw_req_payload lo
+     * escribe el ISR. Acá el riesgo es menor (el ISR no acepta otro pedido
+     * mientras éste esté sin contestar) pero la regla del módulo es la regla. */
+    __disable_irq();
+    *cmd = fw_req_cmd;
+    *len = fw_req_len;
+    memcpy(payload, fw_req_payload, fw_req_len);
+    __enable_irq();
+    return 1;
+}
+
+void UART_Protocol_FwReply(uint8_t ok)
+{
+    /* Liberar ANTES de contestar. Al revés hay una ventana —chica pero real— en
+     * la que el otro extremo ya vio el ACK y manda el tramo siguiente mientras
+     * el lugar sigue ocupado: el parser lo rechazaría y la carga se cortaría
+     * sola en un punto al azar. */
+    fw_req_cmd = 0;
+    fw_req_len = 0;
+    if (ok) send_ack();
+    else    send_nack();
+}
+
+uint8_t UART_Protocol_GetFwAbort(void)
+{
+    if (!fw_abort_flag) return 0;
+    fw_abort_flag = 0;
     return 1;
 }
 
