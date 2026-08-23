@@ -235,9 +235,15 @@ Esto importa cuando los cables cruzan una sala.
 1. Conectar parlantes y audio **con la placa apagada**.
 2. Dar tensión.
 3. Esperar unos 10 segundos a que el ESP32 se conecte al WiFi.
-4. Averiguar la dirección IP del equipo (aparece en el monitor serie, o en la lista
-   de dispositivos del router).
-5. Abrir esa dirección en el navegador: **`http://LA_IP`**.
+4. Abrir en el navegador: **`http://domosonica.local`**
+
+El equipo **se anuncia solo en la red** con ese nombre, así que no hace falta
+averiguar ninguna dirección. Funciona en Mac, iPhone y iPad sin instalar nada; en
+Windows y Android a veces no, y ahí sí hay que buscar la IP (aparece en el monitor
+serie o en la lista de dispositivos del router) y usar `http://LA_IP`.
+
+> En todos los comandos de acá en adelante, donde dice `LA_IP` podés escribir
+> `domosonica.local`.
 
 ### ⚠️ Primero hay que encender los amplificadores
 
@@ -266,18 +272,61 @@ curl -X POST http://LA_IP/volume -d '{"db":-40}'
 El número va de **0** (máximo) a **−63** (casi mudo). **−40 es un buen punto de
 partida**; de ahí se sube de a poco. Si suena distorsionado, bajar.
 
+### Si suena "roto" y bajar el volumen no lo arregla
+
+Hay un **segundo** control de nivel, y es el que importa cuando el problema no se
+va bajando el volumen. La diferencia:
+
+- **`volume`** = cuán fuerte suena **lo que sale** hacia los parlantes.
+- **`ingain`** = cuánto se amplifica **lo que entra** por los cables de audio.
+
+Si `ingain` está muy alto, la señal se **rompe adentro del equipo**, antes de llegar
+al control de volumen — y entonces bajar el volumen te da lo mismo roto, pero más
+bajito. Es exactamente lo que pasaba en agosto de 2026 con una computadora
+conectada: rompía al 30 % del volumen de la Mac.
+
+```bash
+curl -X POST http://LA_IP/ingain -d '{"db":0}'
+```
+
+**Con `0` funcionan bien todas las fuentes normales**: computadora, celular, mesa de
+sonido, reproductor. Es el valor de fábrica y **queda guardado** — se pone una sola
+vez, no hace falta repetirlo en cada encendido.
+
+El valor **`30`** es para micrófonos, que dan una señal muchísimo más débil. Si lo
+dejás en 30 con una computadora enchufada, **rompe**. Ante la duda: `0`.
+
+> **La regla**: si distorsiona, primero probá `ingain 0`. Si con eso suena limpio
+> pero bajo, subí el `volume`. Nunca al revés.
+
 ### Cambiar de modo
 
-El equipo tiene **16 modos** de funcionamiento (tonos de prueba, recorridos,
-distintos tipos de enfoque). Se cambian desde la página web, o así:
+El equipo tiene **20 modos** de funcionamiento, numerados del **0 al 19** (tonos
+de prueba, recorridos, distintos tipos de enfoque). Se cambian tocando el botón
+correspondiente en la página —cada uno lleva su número adelante— o así:
 
 ```bash
 curl -X POST http://LA_IP/mode -d '{"mode":1}'
 ```
 
-También hay un **botón físico (K2)** en la placa que va pasando de modo en modo —
-útil si no hay WiFi. La descripción de cada modo está en
-[manual_modos.md](manual_modos.md).
+**Cuál usar para qué está en §8.** Si sólo querés escuchar algo y que se note,
+andá al **16**.
+
+### El botón físico (K2) — si no hay WiFi, alcanza con esto
+
+Hay un **botón en la placa** que hace dos cosas según cuánto lo apretés:
+
+| gesto | qué hace |
+|---|---|
+| **Toque corto** | pasa al modo siguiente |
+| **Mantener 1 segundo** | enciende / apaga los amplificadores |
+
+**Con ese botón el equipo es operable sin red**: se enciende, se mantiene apretado
+un segundo para que suene, y se toca para ir cambiando de modo. La descripción de
+cada modo está en [manual_modos.md](manual_modos.md).
+
+> 💡 Si algunos parlantes quedaron mudos después de un bajón de tensión, mantener
+> apretado el botón (apagar y volver a encender los amplificadores) los revive.
 
 ---
 
@@ -305,9 +354,166 @@ arriba de izquierda a derecha, después la siguiente, y así.
 Esta prueba valida todo el conexionado de golpe. **Si falla, no tiene sentido
 seguir con nada más** — todo lo demás asume que la grilla está bien mapeada.
 
+### Y después: ¿el enfoque funciona? (modo 16)
+
+El recorrido prueba los **cables**. Esta prueba el **enfoque**, que es lo que
+hace especial al aparato.
+
+```bash
+curl -X POST http://LA_IP/mode -d '{"mode":16}'
+```
+
+El equipo emite un tono y **mueve el punto de enfoque solo**, de izquierda a
+derecha y vuelta, dando un viaje completo cada 5 segundos.
+
+**Qué tiene que pasar**: parado en cualquier lugar frente al equipo, sin
+moverte, el sonido **sube y baja de intensidad** al ritmo del recorrido — se
+oye más fuerte cuando el punto pasa por donde estás.
+
+No hace falta caminar ni comparar con nada. Si eso se percibe, el enfoque
+funciona.
+
+> El tono suena **ondulante**, como si vibrara. Es a propósito y no es una
+> falla: un tono perfectamente fijo arma "zonas muertas" en la sala por rebote
+> de las paredes, y uno terminaría escuchando el dibujo de la sala en vez del
+> del equipo.
+
 ---
 
-## 8. Cargar el programa en las placas
+## 8. Los modos: cuál usar para qué
+
+Son 19, pero en la práctica se usan cinco. El resto son pruebas.
+
+| Para… | Modo | Qué hace |
+|---|---|---|
+| **Escuchar lo que entra por los cables** | **0** | Repite las entradas por todos los parlantes. Es el modo normal |
+| **Probar el conexionado** | **1** | Un parlante por vez (§7) |
+| **Mostrar el enfoque a alguien** | **16** | El punto se mueve solo, izquierda↔derecha |
+| **La intervención: 8 sonidos en 8 lugares** | **15** | Cada entrada de audio suena en su propio punto de la sala (§9) |
+| **Recuperar un enfoque calibrado** | **18** | Usa la medición hecha con micrófono (§10) |
+| *(banco)* **Medir el equipo por cable** | **19** | LOOPBACK: no suena. Necesita adaptadores; ver `loopback_debug.md` |
+
+Los demás son enfoques fijos en puntos distintos (7 a 13), un mapa de tonos de
+prueba (14), la calibración (11) y un experimento vertical (17). Están
+explicados uno por uno en [manual_modos.md](manual_modos.md).
+
+> ⚠️ **Los modos 7 a 14, 16 y 17 generan su propio tono** y no usan lo que
+> entra por los cables. Si conectaste una fuente de audio y "no se escucha",
+> fijate primero en qué modo estás: el **0** y el **15** son los que reproducen
+> lo que entra.
+
+---
+
+## 9. Poner cada sonido en su lugar — el mapa (modo 15)
+
+Esto es **para lo que se hizo el aparato**: ocho sonidos distintos, en ocho
+lugares distintos de la sala, al mismo tiempo.
+
+1. Conectá las fuentes de audio a las entradas (§5). Con **una o dos ya
+   funciona** — las entradas libres no molestan.
+2. Poné el equipo en **modo 15**.
+3. En la página web, bajá hasta el recuadro **MULTIFOCUS**.
+
+Vas a ver un **mapa visto desde arriba**, como un plano: el equipo está abajo
+(la barra verde) y la sala se extiende hacia arriba. Hay **ocho puntos
+numerados**, uno por entrada de audio.
+
+| en el mapa | en la sala |
+|---|---|
+| mover un punto a la **izquierda o derecha** | ese sonido se corre hacia ese lado |
+| mover un punto **hacia arriba** | ese sonido se aleja del equipo (hasta 3 m) |
+| mover un punto **hacia abajo** | ese sonido se acerca al equipo |
+| el deslizador **"altura fuente"** | sube o baja ese sonido |
+
+**Se arrastran con el dedo o el mouse y el cambio se escucha al instante.**
+
+**Qué tiene que pasar**: si separás dos puntos en el mapa y caminás por la sala,
+tendrías que ir "entrando y saliendo" de cada sonido.
+
+> ⚠️ **Tocar el mapa cambia el modo.** Arrastrar un punto pone el equipo en
+> MULTIFOCUS aunque estuvieras en otro modo — es a propósito, para que la
+> página no muestre una cosa y el equipo haga otra.
+
+> ⚠️ **La altura casi no se nota, y es un límite del aparato, no un error.**
+> Las filas de parlantes están demasiado separadas entre sí para enfocar bien
+> en vertical: se corrige en la próxima versión de la placa. Izquierda-derecha
+> y cerca-lejos sí funcionan.
+
+---
+
+## 10. Calibrar con un micrófono (modo 11)
+
+**Cuándo sirve**: cuando querés que el enfoque sea exacto **en un punto
+concreto** —donde se va a sentar la gente, por ejemplo— en vez de calculado
+sobre el papel. El equipo mide la sala de verdad y se corrige solo.
+
+**Qué hace falta**: un micrófono **con preamplificador o interfaz de audio**
+(§5: la placa no alimenta micrófonos), enchufado a la **entrada 1**.
+
+### Los pasos
+
+1. Poné el micrófono **exactamente donde querés el enfoque**. No se mueve
+   durante toda la medición.
+2. En la página, buscá el recuadro **AUTOFOCUS**. Tiene cinco renglones con un
+   punto de color al lado.
+3. **Esperá a que los tres primeros estén en verde.** Si alguno está rojo, te
+   dice qué falta.
+4. Tocá **"Iniciar scan"**.
+5. Dura unos **8 segundos** y vas a escuchar los parlantes sonando de a uno.
+   **No muevas el micrófono.**
+
+### Cómo se lee el resultado
+
+| renglón | verde significa |
+|---|---|
+| amplificadores | están encendidos |
+| micrófono en la entrada 1 | llega señal de verdad, no sólo ruido |
+| nivel del micrófono | ni muy bajo ni saturado |
+| scan | terminó |
+| resultado | midió bien (**16 de 32 parlantes o más**) |
+| calibración guardada | quedó grabada en el equipo |
+
+**Si el resultado sale rojo, no pasa nada malo**: el equipo **descarta** la
+medición y deja todo como estaba. Corregís lo que marque en rojo y volvés a
+tocar "Iniciar scan".
+
+> 💡 Si no hay micrófono conectado, el resultado da **0 de 32**. Eso es
+> correcto: significa que no midió nada.
+
+### Lo que queda guardado
+
+La calibración **sobrevive a apagar el equipo**. Se guardan dos cosas:
+
+- **La corrección de cada parlante** (si alguno está conectado al revés): se
+  aplica **siempre**, en todos los modos, sin que tengas que hacer nada.
+- **El punto enfocado**: se recupera con el **modo 18**, cuando lo quieras.
+
+Están separadas porque la primera vale siempre y la segunda vale **sólo para
+ese punto** — el lugar donde estaba el micrófono. Si el equipo aplicara el punto
+solo, estaría enfocando hacia un micrófono que ya no está ahí.
+
+---
+
+## 11. Volver todo a cero
+
+Si el equipo quedó en un estado raro —enfoques movidos, volumen imposible, no
+suena como esperabas y no sabés qué tocaste— hay un **reset de fábrica** al
+final de la página web.
+
+Deja volumen en −24 dB, ganancia de entrada en 0, modo 0 y todos los enfoques
+en su lugar original. **Borra también la calibración con micrófono**, así que
+si hiciste una, hay que repetirla.
+
+**No apaga los amplificadores** y no toca el conexionado. Es seguro: lo peor que
+puede pasar es tener que volver a acomodar los puntos del mapa.
+
+```bash
+curl -X POST http://LA_IP/reset
+```
+
+---
+
+## 12. Cargar el programa en las placas
 
 Sólo hace falta al actualizar el programa. Son **dos chips independientes** y cada
 uno se carga distinto.
@@ -357,7 +563,7 @@ el ESP32 — pedírselo a Fernando.
 
 ---
 
-## 9. Si algo no anda
+## 13. Si algo no anda
 
 | Síntoma | Causa más probable | Qué hacer |
 |---|---|---|
@@ -369,7 +575,12 @@ el ESP32 — pedírselo a Fernando.
 | No aparece en la red | El ESP32 no conectó | Reiniciar; si sigue, la red no está cargada |
 | El programador se apaga al enchufarlo | Pin 1 del cable sin cortar | Usar el cable preparado |
 | Suena distorsionado y fuerte | Está saturando | Bajar el volumen |
+| Distorsiona y bajar el volumen NO lo arregla | La ganancia de entrada está alta | `ingain 0`, ver §6 |
 | Zumbido de fondo | Entradas de audio al aire | Desconectar lo que no se use, o silenciar |
+| Conecté audio y sale un tono raro | Estás en un modo que genera su propio tono | Modo **0** o **15**, ver §8 |
+| El enfoque no se mueve en altura | Límite del aparato, no una falla | Ver §9 |
+| La calibración da 0 de 32 | No hay señal del micrófono | Revisar el checklist del AUTOFOCUS, §10 |
+| Quedó en un estado raro y no sé qué toqué | — | Reset de fábrica, §11 |
 
 ### Reglas de oro
 
@@ -381,11 +592,11 @@ el ESP32 — pedírselo a Fernando.
 
 ---
 
-## 10. Para seguir leyendo
+## 14. Para seguir leyendo
 
 | Documento | Qué tiene |
 |---|---|
-| [manual_modos.md](manual_modos.md) | Los 16 modos, uno por uno |
+| [manual_modos.md](manual_modos.md) | Los 20 modos, uno por uno |
 | [ds11_bringup_checklist.md](ds11_bringup_checklist.md) | Checklist de primer encendido |
 | [ds11_errata.md](ds11_errata.md) | Fallas conocidas de esta tirada de placas |
 | [protocolo_medicion.md](protocolo_medicion.md) | Cómo medir el enfoque en serio |

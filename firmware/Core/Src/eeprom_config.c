@@ -25,7 +25,25 @@ __weak void EEPROM_Yield(void) { }
 
 /* CAT24C256 page size */
 #define EEPROM_PAGE_SIZE    64
+/* Máximo de bytes por transacción I2C. El chip acepta los 64 de una página,
+ * pero HAL_I2C_Mem_Write BLOQUEA mientras transfiere y a 100 kHz una página
+ * entera son (1 dir + 2 mem + 64 datos) × 9 bits ≈ **6 ms** — por encima del
+ * deadline de 5 ms del fill de audio. Resultado: exactamente un medio buffer
+ * repetido en los 32 canales por página, o sea el pop que quedaba al guardar.
+ *
+ * Con 32 bytes la transferencia baja a ~3,2 ms y entra con margen. El costo son
+ * más ciclos de escritura del chip, pero esos SÍ están yieldeados (el bucle de
+ * espera de abajo sirve los fills), así que no se oyen. Escribir de a media
+ * página es legal: el CAT24C256 sólo prohíbe cruzar el límite de página. */
+#define EEPROM_WRITE_CHUNK  32
+
 #define EEPROM_I2C_TIMEOUT  100  /* ms */
+
+/* Buffer de verificación: la config se lee acá, se le chequea el CRC y sólo
+ * entonces se copia al destino. 256 basta de sobra para beam_config_t (108 B) y
+ * deja margen; si algún día no alcanza, LoadConfig devuelve EEPROM_ERR_SIZE en
+ * vez de desbordar. */
+static uint8_t cfg_scratch[EEPROM_CFG_MAX_SIZE];
 
 /* I2C4 handle (local to this module) */
 static I2C_HandleTypeDef hi2c4;
@@ -143,6 +161,7 @@ static HAL_StatusTypeDef eeprom_write(uint16_t mem_addr, const uint8_t *data, ui
         uint16_t page_remain = EEPROM_PAGE_SIZE - page_offset;
         uint16_t chunk = len - offset;
         if (chunk > page_remain) chunk = page_remain;
+        if (chunk > EEPROM_WRITE_CHUNK) chunk = EEPROM_WRITE_CHUNK;
 
         HAL_StatusTypeDef status = eeprom_write_page(mem_addr + offset, &data[offset], chunk);
         if (status != HAL_OK) return status;
@@ -203,6 +222,8 @@ eeprom_status_t EEPROM_LoadConfig(void *config, uint16_t config_size)
 {
     uint16_t addr = EEPROM_CFG_BASE_ADDR;
 
+    if (config_size > sizeof(cfg_scratch)) return EEPROM_ERR_SIZE;
+
     /* Read and verify magic */
     uint32_t magic;
     if (eeprom_read(addr, (uint8_t*)&magic, 4) != HAL_OK)
@@ -219,8 +240,11 @@ eeprom_status_t EEPROM_LoadConfig(void *config, uint16_t config_size)
         return EEPROM_ERR_VERSION;
     addr += 2;
 
-    /* Read config data */
-    if (eeprom_read(addr, (uint8_t*)config, config_size) != HAL_OK)
+    /* Los datos van a un buffer intermedio, NO al destino: recién se copian si
+     * el CRC valida. Leer directo sobre `config` dejaba al llamador corriendo
+     * con datos corruptos aunque detectara el error — y "los defaults" que creía
+     * conservar ya habían sido pisados. */
+    if (eeprom_read(addr, cfg_scratch, config_size) != HAL_OK)
         return EEPROM_ERR_I2C;
     addr += config_size;
 
@@ -229,9 +253,10 @@ eeprom_status_t EEPROM_LoadConfig(void *config, uint16_t config_size)
     if (eeprom_read(addr, (uint8_t*)&stored_crc, 2) != HAL_OK)
         return EEPROM_ERR_I2C;
 
-    uint16_t calc_crc = crc16_ccitt((const uint8_t*)config, config_size);
+    uint16_t calc_crc = crc16_ccitt(cfg_scratch, config_size);
     if (calc_crc != stored_crc)
         return EEPROM_ERR_CRC;
 
+    memcpy(config, cfg_scratch, config_size);
     return EEPROM_OK;
 }

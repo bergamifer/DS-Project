@@ -10,4 +10,5 @@ idf_component_register(
         esp_http_server
         nvs_flash
         json
+        espressif__mdns
 )

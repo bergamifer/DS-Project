@@ -1,7 +1,7 @@
 # Manual de modos de operación — DS11 (firmware STM32)
 
-> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (16 modos, índices 0–15).
-> Última actualización: 2026-08-16.
+> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (**20 modos, índices 0–19**).
+> Última actualización: 2026-08-21.
 >
 > **¿Primera vez con el equipo?** Empezá por [guia_operacion.md](guia_operacion.md),
 > que explica el conexionado y el encendido en lenguaje llano. Este manual asume
@@ -34,11 +34,18 @@ todo el pipeline —SAI, DMA, beamforming, los 4 bancos— en silencio absoluto.
 
 | Vía | Mecanismo |
 |-----|-----------|
-| **Botón K2** (PA4, presionar = LOW) | Avanza un modo por pulsación, con wrap 15→0. Debounce de 30 ms. |
+| **Botón K2** (PA4, presionar = LOW) | **Corto** (al soltar): avanza un modo, con wrap 19→0. **Largo** (≥1 s, actúa sin soltar): toggle de los amps. Debounce de 30 ms. |
+
+> El K2 largo es lo que hace al instrumento **operable sin red**: los amps arrancan
+> apagados y hasta ahora solo se encendían por HTTP, así que sin WiFi la placa
+> quedaba muda sin forma de recuperarla desde el hardware. Como "on" republica el
+> pulso de SD, también es el gesto de recuperación del UVLO enclavado de los
+> PAM8302A. El modo se cambia **al soltar**, no al presionar: si no, toda pulsación
+> larga cambiaría de modo antes de llegar a tocar los amps.
 | **HTTP** (web/app vía ESP32) | `POST /mode` con `{"mode":N}` → trama `CMD_SET_MODE` por UART4. |
 | **UART4 directo** | Trama binaria `CMD_SET_MODE` (0x02), payload = 1 byte con el índice. |
 
-Cada cambio imprime en UART7: `MODE [n/16]: <nombre>`.
+Cada cambio imprime en UART7: `MODE [n/20]: <nombre>`.
 
 **Persistencia**: el último modo se guarda en EEPROM con debounce de 3 s
 (`CFG_SAVE_DEBOUNCE_MS`, compartido con volumen y config) — ciclar rápido con
@@ -55,48 +62,159 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 
 | # | Nombre (UART) | Fuente | Salida | Notas |
 |---|---------------|--------|--------|-------|
-| 0 | `ADC monitor (+30dB)` | ADC ch0–7 en vivo | Las 8 entradas repetidas en cada fila | Boost ×32, modo por defecto. ⚠️ **No sirve para juzgar niveles de línea** — ver abajo |
+| 0 | `ADC monitor` | ADC ch0–7 en vivo | Las 8 entradas repetidas en cada fila | Escala por la ganancia de entrada, modo por defecto |
 | 1 | `Channel walker (1s/ch)` | Tono 1 kHz interno | Un canal por vez, 1 s cada uno | **32 canales** = 32 s por vuelta |
-| 2 | `RX beam az=0 (broadside)` | Beam delay-and-sum de los 8 ADC | Beam mono en todos los canales | Boost ×32 |
+| 2 | `RX beam az=0 (broadside)` | Beam delay-and-sum de los 8 ADC | Beam mono en todos los canales | Escala por la ganancia de entrada |
 | 3 | `RX beam az=+30` | ídem, steering +30° | ídem | |
 | 4 | `RX beam az=-30` | ídem, −30° | ídem | |
 | 5 | `RX beam az=+60` | ídem, +60° | ídem | |
 | 6 | `RX beam az=-60` | ídem, −60° | ídem | |
-| 7 | `TX focus center @1m` | RX beam broadside | 32 canales con delays focales | Foco (0, 0, 1000) mm |
-| 8 | `TX focus left 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
-| 9 | `TX focus right 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
-| 10 | `TX focus center NEAR 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
+| 7 | `TX 2k ondulante LEJOS 2m` | Tono interno 2 kHz | 32 canales con delays focales | Foco (0, 0, 2000) mm — el par de profundidad con el 10 |
+| 8 | `TX 2k ondulante izq 0.5m @1m` | ídem | ídem | Foco (−500, 0, 1000) mm |
+| 9 | `TX 2k ondulante der 0.5m @1m` | ídem | ídem | Foco (+500, 0, 1000) mm |
+| 10 | `TX 2k ondulante CERCA 0.3m` | ídem | ídem | Foco (0, 0, 300) mm |
 | 11 | `AUTOFOCUS scan (mic->ADC c0)` | Chirp por parlante + mic | Scan → tono enfocado medido | Requiere mic en ADC c0 |
-| 12 | `TX tone 2k focus @1m` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
-| 13 | `TX tone 1k focus @1m` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
+| 12 | `TX 2k ondulante centro @1m` | Tono interno 2 kHz | TX steering completo | Valida direccionalidad sin mic |
+| 13 | `TX 1k ondulante centro @1m (spot 2x)` | Tono interno 1 kHz | ídem | Spot ~2× más ancho que el 12 |
 | 14 | `MULTIFOCUS 4 tonos @1m` | 4 tonos internos (1.3/1.6/1.9/2.1 kHz) | Cada tono enfocado en su propio punto | Precuela de la intervención 8-in |
 | 15 | `MULTIFOCUS 8 entradas @1m` | Las 8 entradas analógicas | Cada entrada enfocada en su propio punto | **La intervención**: 8 señales, 8 lugares |
+| 16 | `TX 2k BARRIDO izq<->der @1m` | Tono interno 2 kHz | Foco barriendo ±700 mm, ciclo de 5 s | **Demuestra el steering sin caminar** |
+| 17 | `BARRIDO VERTICAL 800Hz arriba<->abajo @1m` | Tono interno **800 Hz** | Foco barriendo ±600 mm en Y, ciclo de 5 s | **Es un experimento**, no una demo — decide un gasto de hardware en DS12 |
+| 18 | `TX foco CALIBRADO (AUTOFOCUS guardado)` | Tono interno 2 kHz | Retardos **medidos** recuperados de la EEPROM | Recupera el foco del punto donde estaba el micrófono; sin calibración cae al foco geométrico de 1 m |
+| 19 | `LOOPBACK electrico` | Chirp interno | Un canal de **cada banco** (0/8/16/24) a la vez | **Modo de banco**: mide el camino de salida por cable, no por la sala. Requiere adaptadores pasivos |
 
 **IMPORTANTE (append-only)**: los índices están espejados en el ESP32, la web y
 la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.
 
+## Modo 16 — BARRIDO: la demostración que no hay que explicar
+
+El foco recorre solo la sala, **±700 mm en un ciclo de 5 segundos**, con el mismo
+tono ondulante de 2 kHz. Los presets 8/9 prueban el steering, pero exigen pararse
+en un punto descentrado y **comparar dos modos de memoria**. Acá no hace falta
+nada de eso: parado donde sea, el nivel **sube cuando el foco pasa por vos y baja
+cuando se va**.
+
+- Se reapunta 20 veces por segundo desde el main loop (32 raíces cuadradas por
+  paso, ~3 µs). El paso de foco por actualización son ~14 mm = **0,04 muestras de
+  delay**, así que no hay salto audible al reapuntar.
+- Usa `Beam_SetTxFocus()`, la versión **silenciosa**: la que imprime la tabla de
+  delays por fila sería inviable 20 veces por segundo.
+
+> ⚠️ **El barrido del modo 16 es horizontal a propósito.** En vertical el array
+> no enfoca a 2 kHz — las filas están a 160 mm = 0,93 λ, por encima del límite
+> λ/2, así que produce lóbulos de rejilla en vez de un foco. Para probar el eje
+> vertical hay que bajar la frecuencia: eso es el modo 17.
+
 ---
 
-## ⚠️ El modo 0 satura con fuentes de línea, y no es culpa del ADC
+## Modo 17 — BARRIDO VERTICAL: un experimento, no una demo
 
-Observado el 2026-08-18 con una Mac conectada: por encima del ~20% de volumen de la
-fuente, "satura". **El ADC no tiene nada que ver.**
+**Este modo existe para responder una pregunta de hardware, y la frecuencia ES
+la pregunta.** No lo uses para mostrarle el equipo a alguien; usá el 16.
 
-Medido en ese momento: picos de **46778 sobre 8388607** = **−45 dBFS**, con `OVF=0`
-sostenido. **Al ADC le sobraban 45 dB de headroom.**
+El 2026-08-19 Fernando reportó que el eje vertical del modo 15 no se percibe.
+La causa es geométrica y **no se arregla por firmware**:
 
-Lo que clipea es el **boost de +30 dB del propio modo 0** (`adc_monitor_shift = 5`,
-×32), que existe para poder escuchar un micrófono, no una salida de línea. Con la
-fuente al 20% ya estás a −15 dBFS *después* del boost.
+| eje | apertura | paso | a 2 kHz (λ=172 mm) | techo sin lóbulos |
+|-----|----------|------|--------------------|-------------------|
+| horizontal (8 columnas) | 600 mm | 80 mm | 0,47 λ ✅ | **2144 Hz** |
+| vertical (4 filas) | 480 mm | **160 mm** | **0,93 λ** ❌ | **1072 Hz** |
 
-**Conclusión práctica: no hace falta atenuador ni resistencias de entrada.** Para
-fuentes de línea usá el **modo 15**, que aplica `mf_in_shift = 2` (×4, +12 dB) — ahí
-podés subir bastante más la fuente. El modo 0 es una herramienta de diagnóstico de
-micrófonos, no un monitor de nivel.
+A 2 kHz el array vertical está **aliaseado**: en vez de un foco produce lóbulos
+de rejilla. A 800 Hz (con el dither de ±5 %, 840 Hz máximo) el paso vertical es
+0,37 λ — **dentro del límite en todo el rango de steering**.
 
-> 💡 **Cómo verificar el nivel de verdad**: mirá `OVF` en `/status`. Mientras esté en
-> **0**, el ADC no satura, sin importar lo que escuches. Si pasa a 1, ahí sí hay que
-> bajar la fuente.
+### Cómo se lee el resultado
+
+Parate quieto a ~1 m y escuchá el ciclo de 5 s. Hay **dos respuestas posibles y
+las dos deciden plata**:
+
+- **Se percibe movimiento vertical** → la causa era el aliasing. Bajar el paso
+  de filas a ≤86 mm en la DS12 **se justifica**.
+- **No se percibe** → el limitante son las 4 filas, no el paso. La apertura
+  vertical de 480 mm son 1,12 λ a 800 Hz: haz de ~51°, spot de ±45 cm a 1 m.
+  Achicar el paso **no alcanza** — hay que agregar filas.
+
+Compará contra el modo 16 (mismo barrido, eje horizontal, 2 kHz), que es donde
+el array sí tiene resolución: esa es la referencia de "así se siente cuando
+funciona".
+
+> La amplitud vertical es ±600 mm y no ±700 como en el 16, porque el haz
+> vertical es mucho más ancho: barrer más sacaría el foco fuera de la zona donde
+> el array todavía puede formarlo, y el recorrido se percibiría como un simple
+> subir y bajar de volumen.
+
+Detalle de la decisión de producto: `hardware/DS/DS12_PLANNING.md` §0.5.
+
+---
+
+## Las DOS ganancias, y por qué saturaba
+
+**Hay dos controles de nivel y hacen cosas distintas.** Confundirlos fue el origen
+del único problema serio de nivel que tuvo la DS11.
+
+| | comando | qué es | dónde actúa |
+|---|---|---|---|
+| **Ganancia de entrada** | `POST /ingain {"db":N}` | cuánto se amplifica lo que ENTRA | **antes** del clamp digital |
+| **Volumen maestro** | `POST /volume {"db":-N}` | atenuador del PCM1690 | **después**, a la salida |
+
+### El síntoma y el diagnóstico
+
+Con una Mac conectada, por encima del **~30 %** de volumen de la fuente el audio se
+rompía. Sonaba a parlante exigido, pero no era eso: los PAM8302A son de 8 W y no se
+los estaba exigiendo ni de cerca.
+
+La medición **sticky** (pico sostenido entre impresiones, no una muestra al azar del
+1 % del tiempo) resolvió la ambigüedad de una:
+
+```
+>>> SATURACION: ADC(OVF)=0  SALIDA(clip)=3152  <<<
+```
+
+**El ADC no clipeaba nunca. Clipeaba la salida digital, 3152 veces por segundo.**
+
+> ⚠️ Ojo con medir el nivel muestreando: la línea `ADCpk` del heartbeat mira una
+> ventana de 5 ms una vez por segundo — el 0,5 % del tiempo. Con eso llegué a
+> escribir acá que "al ADC le sobraban 45 dB de headroom", y era falso: el pico real
+> era −25 dBFS, no −45. Cualquier afirmación sobre niveles necesita pico sostenido.
+
+### La causa: la cadena estaba al revés
+
+```
+ADC −25 dBFS ──[ +30 dB ]──► +4,6 dBFS ──[ CLAMP ]──► recorta ──[ −40 dB ]──► parlantes
+                  ▲                          ▲                       ▲
+            boost para mic             el techo real          atenuador del DAC
+```
+
+Se amplificaba **+30 dB para tirar −40 dB después**, con el recorte justo en el
+medio. Por eso rompía a un nivel de fuente tan bajo: el techo no estaba donde
+parecía. El +30 dB existía para poder escuchar un micrófono; con línea es
+exactamente lo contrario de lo que hace falta.
+
+### Cómo queda
+
+La ganancia de entrada es **un parámetro global y persistente** (EEPROM, igual que el
+volumen), no un default por modo: depende de **qué está enchufado**, no del modo de
+beamforming activo. Escala toda la cadena alimentada por el ADC — monitor, RX beam y
+MULTIFOCUS de entradas — con la única excepción de los modos de tono, cuya fuente
+interna ya está a −6 dBFS.
+
+- **Default de fábrica: 0 dB (línea).** Las entradas de la DS11 son de línea: J9 no
+  lleva bias de micrófono, así que un electret necesita preamp externo igual.
+- **+30 dB** es el preset "micrófono", para cuando lo que entra es de verdad débil.
+- Se configura **una vez** y sobrevive al reboot.
+
+```bash
+curl -X POST http://$IP/ingain -d '{"db":0}'      # línea (default)
+curl -X POST http://$IP/volume -d '{"db":-15}'    # subí acá, no allá
+```
+
+Con `/ingain 0` la fuente puede ir **al 100 %** sin recortar. Verificado en hardware
+el 2026-08-18.
+
+> 💡 **Cómo verificar el nivel de verdad**: la línea `SATURACION` del heartbeat solo
+> aparece cuando hay algo que reportar, y distingue las dos causas. `ADC(OVF)>0` =
+> bajá la fuente. `SALIDA(clip)>0` = bajá `/ingain` y compensá con `/volume`.
 
 ### Observación pendiente: diafonía entre canales del mismo cable
 
@@ -110,13 +228,13 @@ desbalanceadas— la **impedancia común del retorno de masa**, que con una fich
 stereo comparte el cuerpo entre los dos canales. Vale la pena separarlo antes de
 atribuirlo al cable.
 
-## Modo 0 — ADC monitor (+30 dB)
+## Modo 0 — ADC monitor
 
 Ruta directa ADC→DAC para *escuchar* lo que captura el AK5538. Cada canal de
 salida reproduce su canal ADC homólogo (DAC ch0 ← ADC ch0, etc.). En DS11 las
 8 entradas se **repiten en cada fila** de 8 parlantes: la entrada N suena en la
-columna N de las 4 filas. La señal del ADC es débil (hum ~−55 dBFS),
-así que se aplica `adc_monitor_shift = 5` (×32 ≈ +30 dB) y clamp a ±FS 24-bit.
+columna N de las 4 filas. Se escala por la **ganancia de entrada** global (ver
+arriba) y se clampea a ±FS 24-bit.
 
 - **Uso**: verificar cadena de entrada, mapear entrada física → slot TDM
   (junto con la línea `ADCpk` del heartbeat).
@@ -146,8 +264,9 @@ mínimo 0, redondeados a muestras @48 kHz (tope `MAX_DELAY_SAMPLES = 64`).
 - La suma de los 8 canales se escala (`>>8` por término y `>>3` al total) para
   que señal coherente idéntica en los 8 mics salga ~unity, y se escribe en
   `beam_line[]`.
-- Salida: el beam mono en **todos** los canales de salida, con boost ×32
-  (`beam_out_shift = 5`) — la fuente ADC es débil.
+- Salida: el beam mono en **todos** los canales de salida, escalado por la
+  **ganancia de entrada** global (`beam_out_q8 = in_gain_q8`) — misma cadena de
+  ganancia que el monitor, así `/ingain` gobierna estos modos también.
 - Azimut: 0 = broadside; positivo hacia índices de mic más altos.
 - El heartbeat agrega la línea `BEAM az=<az> pk=<pico>`: con la misma señal
   inyectada en todos los mics, steering "hacia la fuente" ≈ ADCpk de un canal;
@@ -158,9 +277,55 @@ mínimo 0, redondeados a muestras @48 kHz (tope `MAX_DELAY_SAMPLES = 64`).
 
 ## Modos 7–10 — TX focus (steering de transmisión, presets)
 
-Beamforming **de transmisión** near-field: la fuente es el RX beam a broadside
-(az = 0), y cada canal de salida la reproduce retrasada para que los frentes de
-onda converjan en el punto focal.
+Beamforming **de transmisión** near-field: un **tono interno de 2 kHz** que cada
+canal de salida reproduce retrasado para que los frentes de onda converjan en el
+punto focal. Caminando la sala se oye el spot moverse — el modo se valida solo,
+sin instrumental y sin nada conectado a la entrada.
+
+> **Cambio 2026-08-18: la fuente era el RX beam (los micrófonos).** El diseño
+> original asumía micrófonos en la placa y la DS11 no los tiene: J9 son entradas
+> de **línea sin bias**, así que estos modos reproducían lo que hubiera enchufado
+> en el ADC y no se distinguían del modo 0 salvo por el retardo — que fue
+> exactamente el reporte ("los modos TX suenan como RX"). Escuchar la entrada ya
+> lo hacen los modos 2-6, y mucho mejor el 15. Lo que faltaba era **demostrar el
+> steering**, y para eso la fuente tiene que ser interna. El modo 7 queda
+> equivalente al 12; los que agregan valor son el 8, 9 y 10.
+
+> **2 kHz, no 1 kHz** (corregido 2026-08-19 tras escucharlos). La apertura en X
+> son 600 mm (8 columnas × 80 mm + 40 de ladrillo). A **1 kHz** eso es **1,75 λ**
+> y el spot a 1 m sale de **±286 mm**: los focos de izquierda y derecha, separados
+> 1 m, se solapan tanto que **desde el centro suenan idénticos** — que fue
+> exactamente el reporte. A **2 kHz** la apertura es **3,50 λ** y el spot cae a
+> **±143 mm**, el doble de resolución. El techo es **2144 Hz** (c/2d, lóbulos de
+> rejilla), así que 2 kHz es lo mejor que puede hacer este array.
+>
+> ⚠️ **Estos modos NO se distinguen por el timbre** — es el mismo tono en los
+> cuatro. Lo que cambia es **dónde** en la sala sube el nivel. Escucharlos parado
+> en un solo punto no prueba nada.
+
+### Por qué se llaman "ondulante" y no "tono"
+
+No producen un tono puro: la frecuencia hace un **triángulo de ±5 % a 3 Hz**
+(a 2 kHz, entre 1900 y 2100 Hz). Se llamaban "tono 2k", y eso confundía —
+reportado el 2026-08-19 escuchándolos.
+
+**No es un defecto ni algo cosmético.** Un tono puro en una sala arma **ondas
+estacionarias** con nodos fijos en el espacio: caminando se escucharía el patrón
+de la **sala**, no el foco del beam. El dither los emborrona, y por eso lo que se
+oye es el beam de verdad.
+
+Concretamente: la verificación del steering —modo 8 más fuerte parado 50 cm a la
+izquierda, modo 9 más fuerte a la derecha, **sin espejar**— funcionó *gracias* a
+la ondulación. Un tono puro habría dado un resultado mucho menos confiable.
+
+> ✅ **Steering verificado a oído el 2026-08-19.** El 8 (foco −500 mm) suena más
+> fuerte a la izquierda y más bajo a la derecha; el 9 al revés. **La orientación
+> NO está espejada** — el marco del oyente mirando los conos es correcto y
+> `spk_x_mm[]` no necesita cambio de signo. Dato firme para la DS12.
+>
+> El 10 (0,3 m) contra el 7 (1 m) también se percibe, aunque **es ambiguo**:
+> acercarse al array sube el nivel por distancia, más allá del foco. Para que ese
+> test sea concluyente conviene que el 7 enfoque más lejos (ver "Próximos pasos").
 
 - `Beam_UpdateTxFocus()`: d_k = |foco − parlante_k|/c; delay_k = max(d) − d_k
   (el parlante más lejano dispara primero). Delays en **Q8** (1 LSB = 1/256 de
@@ -174,7 +339,8 @@ onda converjan en el punto focal.
   relativas al centro del array.
 - Se aplican por canal: gain (`beam_config.gains`), mute, master gain/mute
   global y `speaker_sign` (polaridad, +1 por defecto; el AUTOFOCUS la mide).
-- Boost ×32 igual que los modos RX (fuente ADC débil).
+- Ganancia unitaria: el tono ya está a −6 dBFS (la ganancia de entrada NO se
+  aplica acá — la fuente es interna y de nivel conocido).
 - `tx_delay_q8[]` es deliberadamente **independiente** de
   `beam_config.delays[]`: un config del ESP32 no pisa el foco.
 
@@ -220,6 +386,115 @@ heartbeat = nivel en el foco. Para re-escanear, salir y volver a entrar.
 - **No se restaura al boot** (ver Persistencia arriba).
 - `cal_state` (0=idle … 5=done) se reporta en la telemetría `CMD_STATUS`.
 
+### Se corre desde la página, sin cable serie (2026-08-20)
+
+Hasta ahora el scan sólo se podía seguir por UART, y **terminaba diciendo
+`done` aunque no hubiera medido nada**. Con el micrófono desenchufado o los
+amplificadores apagados, la correlación elegía el máximo del *ruido*, el equipo
+se quedaba con 32 retardos arbitrarios, pisaba un foco anterior que sí servía, y
+después "reproducía un tono enfocado en el micrófono" que no estaba enfocado en
+ningún lado. **El fallo era indistinguible del éxito.**
+
+En `http://domosonica.local` hay una tarjeta **AUTOFOCUS** con cinco filas que
+se pintan solas — rojo por defecto, porque "todavía no se comprobó" y "está mal"
+se atienden igual:
+
+| fila | verde cuando | de dónde sale |
+|------|--------------|---------------|
+| amplificadores | están encendidos | `state_flags` bit 0 |
+| micrófono en la entrada 1 | c0 tiene señal, no sólo ruido | `mic_live_mask` bit 0 |
+| nivel del micrófono | entre el umbral y −6 dBFS | `adc_pk[0]`, en dBFS |
+| scan | terminó (ámbar mientras corre, con `N/32`) | `cal_state` + `cal_progress` |
+| resultado | ≥16/32 parlantes medidos con confianza | `cal_ok_count` |
+
+**Y ahora un scan malo NO se aplica.** Con menos de la mitad de los parlantes
+por encima de `CAL_Q_MIN`, los retardos anteriores quedan **intactos** y el
+serie dice qué revisar.
+
+### El umbral de calidad era exactamente el valor del ruido
+
+Primera versión de esta guarda: sin micrófono daba **4/32** una vez y **7/32**
+otra. Fernando preguntó lo obvio —*¿no es raro que encuentre micrófonos si no
+hay ninguno?*— y tenía razón: no era casual, era la **mediana de la distribución
+del ruido**.
+
+`cal_quality` es `peak/avg × 10` de la correlación. Correlacionando ruido blanco
+contra el chirp, `|c|` es media-normal:
+
+```
+promedio  = σ·√(2/π)                        = 0,798 σ
+máximo sobre N = CAL_MAX_LAG = 4320 lags
+          ≈ σ·√(2·ln N) = σ·√(2·8,371)      = 4,09 σ
+peak/avg  ≈ 5,13                            →  q10 ≈ 51
+```
+
+El umbral estaba en **50**. Cada canal era una moneda al aire y 4-7 de 32 caían
+del lado bueno. **Un cociente siempre encuentra un máximo**: en cualquier
+ventana de ruido hay un lag que sobresale.
+
+Dos correcciones:
+
+1. **`CAL_Q_MIN` 50 → 100.** Exige un máximo de ~8σ, cuya probabilidad sobre
+   4320 lags es del orden de 5·10⁻¹²: nunca. Una detección real tiene ganancia
+   de proceso de √480 ≈ 22 en amplitud, así que queda muy por encima.
+2. **Gate absoluto sobre el pico de la captura** (`cal_cap_peak`), porque un
+   cociente **no distingue señal de ruido fuerte**: si subís el preamp, el ruido
+   crece arriba y abajo y el cociente ni se entera. Si en los 100 ms de captura
+   el micrófono no pasó de `MIC_LIVE_THRESH`, la calidad se anula sin mirar la
+   correlación.
+
+**Verificado 2026-08-20**: tres scans seguidos sin micrófono → **0/32, 0/32,
+0/32**. Determinístico, no lotería. El log por canal ahora imprime también
+`cap=` (el pico de la captura) y distingue `(SIN SENAL en el mic)` de
+`(BAJA — ruido de sala?)`, que son dos problemas distintos.
+
+### La calibración ahora SOBREVIVE al reinicio (2026-08-20)
+
+Antes el scan medía bien y el resultado **se evaporaba**: los retardos se
+pisaban al cambiar de modo y las polaridades no pasaban el reinicio. O sea que
+había que rehacer la calibración, con el micrófono en su lugar, cada vez que se
+encendía el equipo — exactamente lo que no se le puede pedir a una instalación.
+
+Persistirla es viable porque el **SYNC entre bancos mide 4 µs y es reproducible
+arranque tras arranque** (medido 2026-08-13). Si variara por encendido, una
+calibración dejaría de valer tras un ciclo de alimentación; ese era el "no se
+puede" que ya no aplica.
+
+Se guardan **dos cosas distintas, y se usan distinto**:
+
+| qué | qué es | cuándo se aplica |
+|---|---|---|
+| **polaridades** (`cal_sign`) | propiedad del **hardware** (cableado del parlante) — no depende de dónde esté el foco | **siempre**, en todos los modos, restaurada en el arranque |
+| **retardos** (`cal_delay_q8`) | **un** foco: el del punto donde estaba el micrófono | **a pedido**, con el **modo 18** |
+
+Distinguirlas es lo que permite persistir sin romper nada. Aplicar los retardos
+por defecto pisaría el foco de cualquier otro modo con el de un micrófono que ya
+no está ahí.
+
+- Sólo se guarda un scan que **pasó** el umbral de calidad → la EEPROM nunca
+  guarda una calibración de ruido.
+- El **reset de fábrica la borra** (una calibración vieja sobreviviendo a un
+  "volver a cero" es justo el estado raro del que no se puede salir).
+- La fila **"calibración guardada"** del checklist lo muestra, y `/status`
+  publica `cal_saved` (`STATE_F_CALIB`).
+- EEPROM v4 → **v5**; la config pasó de 108 a **208 bytes** (techo 256, con
+  `_Static_assert` para que crecerla no rompa el guardado en silencio).
+  Verificado el round-trip con reinicio real.
+
+El botón *Iniciar scan* entra al modo 11; volver a entrar **relanza** el scan,
+así que sirve igual para arrancar y para repetir después de corregir una fila.
+
+> **Detección de micrófono**: pico de 1 s sobre *todas* las muestras ≥ 2000
+> cuentas (escala 24 bits), con 3 s de histéresis para que una pausa al hablar
+> no cuente como desconexión. El piso de ruido con las entradas al aire, medido
+> el 2026-08-20, es de 437 cuentas máximo → el umbral queda 13 dB arriba. Un
+> micrófono con preamplificador captando una sala en silencio lo cruza de sobra
+> (−40 dBFS son 83886 cuentas).
+>
+> ⚠️ Los números de piso de ruido "43–224" que aparecen en comentarios viejos
+> son de cuando el pico se calculaba sobre una ventana de 10 ms: **subestiman el
+> piso real por un factor de ~2.**
+
 ## Modos 12–13 — TX tone (validación de direccionalidad sin mic)
 
 Generador de tono **interno** (−6 dBFS) que se escribe en `beam_line` en las
@@ -235,8 +510,9 @@ los modos 12-13 de `manual_modos.md`.
   ~3 Hz alrededor de la base (2 kHz → 1900↔2100). El haz es de retardos puros
   (banda ancha) → no cambia; los modos de la sala se promedian y la medición
   se estabiliza aunque la sala sea mala. Sin clicks (fase continua).
-- `beam_out_shift = 0` en estos modos (el ×32 de los modos ADC clipearía
-  brutalmente contra los PAM: el tono ya es −6 dBFS).
+- `beam_out_q8 = 256` (unidad) en estos modos: la ganancia de entrada NO se
+  aplica acá — el tono ya es −6 dBFS y un ×32 clipearía brutalmente contra los
+  PAM. La fuente es interna y de nivel conocido, no necesita ajuste.
 - Foco (0, **0**, 1000) mm: con las 4 filas pobladas en DS11 el foco va al
   centro del array y la apertura vertical (480 mm) también enfoca. En DS10
   iba a fy = −240 para apuntar al plano de la única fila poblada.
@@ -294,12 +570,40 @@ lugares distintos, simultáneamente.
   la versión "de laboratorio" de este modo, con tonos en vez de entradas.
 - **Focos default**: entrada N → fx = −700 + 200·N mm (−700…+700, paso 200),
   fy = −240, fz = 1000. Re-entrar al modo resetea a estos defaults.
-- **Mover una entrada de lugar** (en vivo):
+- **El pad de la página web** es la forma normal de manejar este modo: vista en
+  planta (X horizontal, Z = distancia, el array abajo) con 8 puntos arrastrables,
+  uno por entrada, más un slider de altura para el punto seleccionado. Manda el
+  mismo `POST /beam type:"mf"` de abajo, con throttle de 150 ms mientras se
+  arrastra — cada POST espera el ACK del STM32 por UART a 115200, así que sin
+  throttle la UI se traba encolando tramas.
+
+  > ⚠️ **El "arrastre fantasma" (encontrado y corregido 2026-08-20).** Síntoma:
+  > el equipo estaba en modo 0 y *"después de un rato empezaba a tirar un tono
+  > solo"*, con `MFOCUS src0: ...` en el serie y `CPU fills` saltando a 61%. No
+  > era el STM32: era la página mandando `POST /beam type=mf`, y **ese comando
+  > apaga el monitor y enciende MULTIFOCUS**.
+  >
+  > Causa: si un `pointerup` se perdía —soltar fuera de la ventana, cambiar de
+  > pestaña a mitad de arrastre, un gesto del trackpad— la variable `drag`
+  > quedaba en ≥0 **para siempre**, y desde ahí **cualquier paso del mouse por
+  > encima del pad re-apuntaba una fuente y cambiaba el modo, sin hacer clic**.
+  > Se volvió frecuente justo cuando el pad pasó a ocupar todo el ancho: el
+  > cursor lo cruza mucho más seguido, sobre todo al scrollear.
+  >
+  > Arreglo: en `pointermove`, `e.buttons == 0` significa que no hay ningún
+  > botón apretado → el arrastre terminó. Más `pointerup` a nivel ventana,
+  > `lostpointercapture` y `blur` como redes de seguridad.
+  >
+  > **Lección**: un comando que cambia el modo de operación no puede colgar de
+  > una variable de estado de UI que sólo se limpia por el camino feliz.
+- **Mover una entrada de lugar** (en vivo, equivalente por comando):
   `POST /beam {"type":"mf","src":5,"fx":200,"fy":0,"fz":800}` — en este
   modo `src` va de 0 a 7 y re-apunta esa entrada sin tocar las demás.
-- **Niveles**: boost de entrada +12 dB (`mf_in_shift = 2`, nivel de línea).
-  Si distorsiona, **bajar el volumen de la fuente** (hay clamp, pero suena
-  mal). Entradas sin nada conectado solo aportan piso de ruido, inaudible.
+- **Niveles**: usa la **ganancia de entrada** global (`/ingain`, default 0 dB =
+  línea). Si distorsiona, bajala y compensá con `/volume` — hay clamp, pero
+  suena mal. Ojo que acá se suman 8 fuentes: si las 8 tienen señal fuerte, el
+  acumulado puede recortar aunque cada una sola no lo hiciera. Entradas sin nada
+  conectado solo aportan piso de ruido, inaudible.
 - Con 1–2 fuentes conectadas ya funciona (las entradas libres no molestan) —
   no hace falta esperar a tener las 8 señales.
 - `gains[ch]`, mutes y `speaker_sign` se aplican igual que en los modos TX.
@@ -312,9 +616,35 @@ lugares distintos, simultáneamente.
 |---------|-----|--------|
 | **Amplificadores** | `POST /amps {"on":true}` → `CMD_SET_AMPS` (0x0A) | Enable del banco de 32 PAM8302A (pin SD, PD3). **Arranca en 0** — sin esto no suena nada. No se persiste: cada boot arranca apagado. |
 | **Volumen maestro** | `POST /volume {"db":-20}` → `CMD_SET_VOLUME` | **Único maestro**: atenuación del PCM1690 (0…−63 dB, ≤−64 = mute), 0.5 dB/paso. Se persiste en EEPROM (debounce 3 s). Default −24 dB. |
-| **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (52 bytes) | mute_global, gains/delays/mutes de los primeros 16 canales. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
+| **Ganancia de entrada** | `POST /ingain {"db":0}` → `CMD_SET_INGAIN` | Ganancia de la etapa de ENTRADA, 0…36 dB en pasos de 1 dB (multiplicador Q8). Global, **no** por modo. Se persiste en EEPROM (debounce 3 s). Default 0 dB = línea; 30 dB = preset micrófono. Ver "Las DOS ganancias" arriba. |
+| **Config de canales** | `POST /command` → `CMD_UPDATE_CFG` (102 bytes) | mute_global, gains/delays/mutes de **los 32 canales** (hasta 2026-08-18 eran 16 — media matriz: las filas 3 y 4 no se podían silenciar ni atenuar desde la red). ⚠️ El ESP32 manda siempre los 32: **los canales que no estén en el JSON van en cero**, o sea mudos. La respuesta HTTP ahora refleja el ACK del STM32, no sólo que se envió. `master_gain` ya **no se aplica** (volumen unificado en el DAC; el campo queda por compatibilidad). Se persiste (debounce 3 s). En modos RX beam, delays[0..7] pisan los delays de steering. |
 | **Beam custom** | `POST /beam` → `CMD_SET_BEAM` | Steering fuera de los presets: `type:"tx"` con foco (fx,fy,fz) libre — **preserva el tono interno** si está activo (protocolo mic-fijo/foco-móvil); `type:"rx"` con az libre — **apaga el tono** y restaura el boost ×32; `type:"mf"` con `src` 0-7 — re-apunta el foco de UNA fuente MULTIFOCUS (tonos del 14 o entradas del 15, según el modo activo). No toca `ui_state_idx` — el próximo K2 retoma el ciclo desde el último preset. |
-| **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2). |
+| **Telemetría** | `GET /status` → `CMD_GET_STATUS`/`CMD_STATUS` | modo actual, num_modes, az, foco, underruns, errores SAI, OVF del ADC, cal_state, picos ADC por canal, volumen maestro (`vol_db`, proto v2), ganancia de entrada y los dos contadores de saturación (`ingain_db`, `adc_ovf`, `out_clip`, proto v3), estado real de amps y beam custom (`amps`, `custom`, proto v4), uptime del STM32 (`stm32_uptime_ms`, v5) y **% de CPU del pipeline** (`cpu_fills_pct`, v6). |
+
+> ⚠️ **`mode` puede mentir, y `custom` es el que avisa.** `POST /beam` cambia lo
+> que suena **sin** tocar `ui_state_idx` — a propósito, para que el próximo K2
+> retome el ciclo desde el último preset elegido. La consecuencia es que la página
+> puede mostrar "modo 13" mientras la placa hace otra cosa; costó una sesión de
+> debug el 2026-08-18. Con `custom: true` la UI lo dice. Lo limpia elegir un modo.
+>
+> `amps` también es estado real, leído del firmware: antes la web sólo recordaba
+> el último botón apretado, y eso se vuelve falso con un reboot o con el K2 largo.
+
+> **`underruns` y `sai_errors` también son acumulativos desde proto v5.** Antes
+> el resumen de 60 s los ponía en cero, así que el número de `/status` parecía
+> acumulativo y retrocedía solo cada minuto — medir por diferencia daba
+> resultados imposibles. Y `uptime_ms` era el del **ESP32**: un reinicio del
+> STM32 no se veía desde la red. Ahora `/status` trae `stm32_uptime_ms` aparte.
+>
+> **Los contadores de saturación son MONOTÓNICOS**: lo que importa es que *crezcan*
+> entre dos lecturas — eso es "está saturando ahora", no "saturó alguna vez". Antes
+> se ponían en cero al imprimirse en el heartbeat, y así no se podían exponer por
+> telemetría (el que leyera primero se los comía). Ahora el heartbeat imprime el
+> delta contra su propia lectura anterior y `/status` publica el acumulado.
+>
+> ⚠️ `ds_status_t` ocupa **63 de los 64 bytes** de `PROTO_MAX_PAYLOAD`. El próximo
+> campo obliga a subir ese límite **en ambos lados** — si no, el ESP32 descarta la
+> trama por larga y el status se queda mudo sin dar error.
 
 ## Diagnóstico por UART7 (115200 8N1, J7 → ST-Link VCP)
 
@@ -371,3 +701,64 @@ funcionó y el riesgo está cerrado. Como el offset es reproducible, una calibra
 de AUTOFOCUS **sí sobreviviría** un ciclo de alimentación.
 
 En DS10 esto era invisible porque sólo estaba poblado un banco (U2).
+
+
+---
+
+## Modo 19 — LOOPBACK eléctrico: medir el equipo, no la sala
+
+**No suena para nadie.** Es un modo de banco: emite un chirp por un canal de
+cada banco y mide lo que vuelve por el ADC a través de **adaptadores pasivos**
+(divisor + pasabajos) que van de una salida de parlante a una entrada RJ45.
+Receta, valores y fundamento en [loopback_debug.md](loopback_debug.md).
+
+La diferencia con el AUTOFOCUS es qué hay en el medio: el AUTOFOCUS mide **a
+través de la sala** —con eco, reverberación y la posición del micrófono—; esto
+mide **el equipo**, con un cable. Sin sala, el pico de correlación es limpio y
+el resultado es del instrumento.
+
+### Para qué existe
+
+Para medir el **SYNC entre bancos del lado ANALÓGICO**. El número de 4 µs que
+publica el heartbeat sale de comparar marcas de `DWT->CYCCNT` en los callbacks
+de DMA: mide **cuándo se entera el software**, no cuándo sale la señal. SAI1_A y
+SAI2_A son masters asíncronos entre sí, su offset queda fijo al arrancar los
+streams, y hasta ahora nunca se verificó por fuera del microcontrolador.
+
+El chirp sale por los cuatro bancos **a la vez** y la captura es simultánea (el
+ADC muestrea sus 8 entradas en la misma trama TDM, así que no aporta skew).
+Cualquier diferencia entre los retardos medidos es **skew real de la salida**.
+
+### Cómo se lee
+
+Informa por el serie cada 2 s:
+
+```
+LOOPBACK ---------------------------------------------------
+  sonda0  ch0   t=812.43 smp (16925 us)  skew=+0.0 us  pol=+  q=1840  pico=148233
+  sonda1  ch8   t=812.62 smp (16929 us)  skew=+4.0 us  pol=+  q=1795  pico=151002
+  sonda2  ch16  SIN SENAL (pico=87, q=0)
+  sonda3  ch24  SIN SENAL (pico=91, q=0)
+  (skew relativo a la sonda0; + = sale DESPUES)
+```
+
+- **`t=`** retardo absoluto: la ida y vuelta completa DAC→adaptador→ADC.
+- **`skew=`** lo que importa: diferencia entre bancos, en décimas de µs.
+- **`pol=`** polaridad medida del canal.
+- **`q=`** calidad (pico/promedio ×10). Mismo umbral que el AUTOFOCUS: bajo
+  `CAL_Q_MIN` = 100 se informa *SIN SENAL* en vez de un número inventado.
+
+**La referencia es la primera sonda con señal, no la sonda 0.** Con un solo
+adaptador puesto en otro banco, anclar en la 0 daría todo "sin señal".
+
+### Detalles
+
+- Resolución **sub-muestra** por interpolación parabólica sobre el pico. Sin eso
+  la resolución sería una muestra = 20,8 µs, y no se podría hablar de un skew de
+  4 µs.
+- La correlación va **en trozos** de 128 lags por pasada del main loop: son ~2M
+  multiplicaciones por sonda y de una sola vez se comería varios deadlines.
+- `lb_capture` (38,4 kB) queda en **DTCM**, que a 0 wait states es justo lo que
+  quiere un lazo de correlación.
+- Con los adaptadores desconectados el modo corre igual, informa *SIN SENAL* en
+  las cuatro sondas y no molesta: **2,5 % de CPU, 0 underruns**.

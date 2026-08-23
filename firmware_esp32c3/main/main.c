@@ -28,6 +28,7 @@
 #include "esp_netif.h"
 #include "esp_http_server.h"
 #include "nvs_flash.h"
+#include "mdns.h"
 #include "cJSON.h"
 
 // ============== Configuracion hardware ==============
@@ -67,21 +68,29 @@
 #define CMD_SET_VOLUME   0x09   // payload: int8 dB (0..-63, <=-64 = mute). Volumen
                                 // maestro via atenuacion del PCM1690 (todos los modos).
 #define CMD_SET_AMPS     0x0A   // payload: uint8 (1=on, 0=off) — enable de los 32 PAM8302A
+#define CMD_FACTORY_RESET 0x0C  // sin payload — todo a valores de fabrica, y persiste
+#define CMD_SET_INGAIN   0x0B   // payload: uint8 dB (0..36) — ganancia de ENTRADA
 #define CMD_ACK          0x06
 #define CMD_NACK         0x15
-#define NUM_CHANNELS     16
-#define PROTO_MAX_PAYLOAD 64
+#define NUM_CHANNELS     32     // los 32 de DS11 (era 16 = media matriz)
+// Techo del payload. DEBE coincidir con PROTO_MAX_PAYLOAD del STM32: si el
+// STM32 manda mas de lo que aca se acepta, la trama se descarta por larga y el
+// endpoint queda mudo SIN error visible.
+#define PROTO_MAX_PAYLOAD 128
 #define ESP_IP_PUSH_MS   10000  // reenvio periodico: si el STM32 resetea, recupera la IP
 
-typedef struct {
+// Espejo de ds_config_t del STM32 — 102 bytes packed LE. packed explicito: sin
+// el, el uint32 de mutes se alinearia distinto y el STM32 leeria basura.
+typedef struct __attribute__((packed)) {
     uint8_t  master_gain;
     uint8_t  mute_global;
     uint16_t delays[NUM_CHANNELS];
     uint8_t  gains[NUM_CHANNELS];
-    uint16_t mutes;
+    uint32_t mutes;         // 32 bits: con 16 no se podia silenciar mas alla del ch15
 } ds_config_t;
+_Static_assert(sizeof(ds_config_t) == 102, "ds_config_t debe ser 102 bytes");
 
-// Espejo de ds_status_t del STM32 (uart_protocol.h) — 54 bytes packed LE (v2).
+// Espejo de ds_status_t del STM32 (uart_protocol.h) — 64 bytes packed LE (v4).
 // Extender SOLO appendeando campos (proto_ver versiona el layout).
 typedef struct __attribute__((packed)) {
     uint8_t  proto_ver;
@@ -95,27 +104,44 @@ typedef struct __attribute__((packed)) {
     uint8_t  cal_state;
     int32_t  adc_pk[8];
     int8_t   master_vol_db;   // v2: volumen maestro actual (0..-63, <=-64 mute)
+    uint8_t  in_gain_db;      // v3: ganancia de ENTRADA actual (0..36)
+    uint32_t adc_ovf_count;   // v3: MONOTONICO — satura el ADC (bajar la fuente)
+    uint32_t out_clip_count;  // v3: MONOTONICO — satura la salida (bajar ingain)
+    uint8_t  state_flags;     // v4: bit0 amps encendidos, bit1 beam custom activo
+    uint32_t uptime_ms;       // v5: uptime DEL STM32 (el otro uptime es de este chip)
+    uint16_t cpu_fills_x10;   // v6: % de CPU en los 4 fills, x10 (263 = 26,3%)
+    uint8_t  mic_live_mask;   // v7: bit N = entrada N con senal (no solo ruido)
+    uint8_t  cal_progress;    // v7: parlantes ya medidos por el AUTOFOCUS
+    uint8_t  cal_ok_count;    // v7: de esos, cuantos con calidad suficiente
 } ds_status_t;
+_Static_assert(sizeof(ds_status_t) == 73, "ds_status_t debe ser 73 bytes");
+#define STATE_F_AMPS    0x01
+#define STATE_F_CUSTOM  0x02
+#define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
 
 // Espejo de ui_states[] del STM32 — actualizar junto con el firmware STM32.
 // El indice es lo que viaja en CMD_SET_MODE; el nombre es solo para la UI.
 static const char *MODE_NAMES[] = {
-    "ADC monitor (+30dB)",
+    "ADC monitor",
     "Channel walker (1s/ch)",
     "RX beam az=0 (broadside)",
     "RX beam az=+30",
     "RX beam az=-30",
     "RX beam az=+60",
     "RX beam az=-60",
-    "TX focus centro @1m",
-    "TX focus izq 0.5m @1m",
-    "TX focus der 0.5m @1m",
-    "TX focus centro CERCA 0.3m",
+    "TX 2k ondulante LEJOS 2m",
+    "TX 2k ondulante izq 0.5m @1m",
+    "TX 2k ondulante der 0.5m @1m",
+    "TX 2k ondulante CERCA 0.3m",
     "AUTOFOCUS scan (mic->c0)",
-    "TX tono 2k dither foco @1m",
-    "TX tono 1k dither foco @1m",
+    "TX 2k ondulante centro @1m",
+    "TX 1k ondulante centro @1m (spot 2x)",
     "MULTIFOCUS 4 tonos @1m",
     "MULTIFOCUS 8 entradas @1m",
+    "TX 2k BARRIDO izq<->der @1m",
+    "BARRIDO VERTICAL 800Hz arriba<->abajo @1m",
+    "TX foco CALIBRADO (AUTOFOCUS guardado)",
+    "LOOPBACK electrico (bancos 0/8/16/24 -> ADC 0-3)",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 
@@ -366,11 +392,23 @@ static uint8_t calc_checksum(const uint8_t *data, int len)
     return xor;
 }
 
-static void uart_send_config(const ds_config_t *cfg)
+// Forward: definido mas abajo, junto al resto del transporte UART.
+static int uart_send_and_wait_ack(uint8_t cmd, const uint8_t *payload,
+                                  uint16_t len, int timeout_ms);
+
+// Serializa la config y la manda. Devuelve 1 = ACK, 0 = NACK, -1 = timeout.
+//
+// El armado de la trama y la espera del ACK los hace uart_send_and_wait_ack,
+// igual que el resto de los comandos: antes esta funcion tenia su PROPIA copia
+// del framing y mandaba a ciegas, sin lock del UART ni ACK. El HTTP contestaba
+// "Config sent to STM32" pasara lo que pasara, asi que un largo de payload mal
+// calculado —justo lo que cambio al pasar de 16 a 32 canales— se habria visto
+// como exito.
+static int uart_send_config(const ds_config_t *cfg)
 {
-    // Payload: master_gain(1) + mute_global(1) + delays(32) + gains(16) + mutes(2) = 52 bytes
-    const uint16_t payload_len = 1 + 1 + (NUM_CHANNELS * 2) + NUM_CHANNELS + 2;
-    uint8_t payload[52];
+    // master_gain(1) + mute_global(1) + delays(64) + gains(32) + mutes(4) = 102
+    const uint16_t payload_len = 1 + 1 + (NUM_CHANNELS * 2) + NUM_CHANNELS + 4;
+    uint8_t payload[sizeof(ds_config_t)];
     int idx = 0;
 
     payload[idx++] = cfg->master_gain;
@@ -385,30 +423,15 @@ static void uart_send_config(const ds_config_t *cfg)
     }
     payload[idx++] = cfg->mutes & 0xFF;
     payload[idx++] = (cfg->mutes >> 8) & 0xFF;
+    payload[idx++] = (cfg->mutes >> 16) & 0xFF;
+    payload[idx++] = (cfg->mutes >> 24) & 0xFF;
 
-    // Trama: Header(2) + Cmd(1) + Length(2) + Payload(52) + Checksum(1) + Footer(2) = 60 bytes
-    uint8_t frame[60];
-    int fi = 0;
-
-    frame[fi++] = PROTO_HEADER_1;
-    frame[fi++] = PROTO_HEADER_2;
-    frame[fi++] = CMD_UPDATE_CFG;
-    frame[fi++] = payload_len & 0xFF;
-    frame[fi++] = (payload_len >> 8) & 0xFF;
-    memcpy(&frame[fi], payload, payload_len);
-    fi += payload_len;
-    frame[fi++] = calc_checksum(payload, payload_len);
-    frame[fi++] = PROTO_FOOTER_1;
-    frame[fi++] = PROTO_FOOTER_2;
-
-    int sent = uart_write_bytes(STM32_UART_NUM, frame, fi);
-    printf("[ESP32] Trama enviada al STM32: %d bytes (master_gain=%d, mute_global=%d)\n",
-           sent, cfg->master_gain, cfg->mute_global);
-
-    // Debug hex (solo los primeros 10 bytes para no saturar el log)
-    printf("[ESP32] HEX[0..9]: ");
-    for (int i = 0; i < 10 && i < fi; i++) printf("%02X ", frame[i]);
-    printf("...\n");
+    int ack = uart_send_and_wait_ack(CMD_UPDATE_CFG, payload, payload_len, 400);
+    printf("[ESP32] Config -> STM32: %u bytes, %s (master_gain=%d, mute_global=%d)\n",
+           (unsigned)payload_len,
+           ack == 1 ? "ACK" : (ack == 0 ? "NACK" : "sin respuesta"),
+           cfg->master_gain, cfg->mute_global);
+    return ack;
 }
 
 // Trama generica: Header + Cmd + Len + Payload + Checksum + Footer
@@ -505,23 +528,28 @@ static bool parse_and_send_command(const char *json_str)
                 cfg.delays[c] = delay   ? (uint16_t)delay->valueint              : 0;
                 cfg.gains[c]  = gain    ? (uint8_t)(gain->valuedouble * 255.0)   : 0;
                 if (ch_mute && ch_mute->valueint)
-                    cfg.mutes |= (1 << c);
+                    cfg.mutes |= (1u << c);   // 1u: con 32 canales c llega a 31
             }
         }
     }
 
     printf("[ESP32] ========================================\n");
 
-    uart_send_config(&cfg);
+    int ack = uart_send_config(&cfg);
     cJSON_Delete(root);
-    return true;
+    return ack == 1;      // solo es exito si el STM32 la acepto
 }
 
 // ============== HTTP Handlers ==============
 
 static esp_err_t command_handler(httpd_req_t *req)
 {
-    char buf[2048];
+    /* Un JSON con los 32 canales son ~2,5 KB — con 2048 no entraba y el POST
+     * moria en "Content too large". 4096 deja margen para formato indentado.
+     * `static` para que viva en .bss y no como marco de 4 KB en la pila de la
+     * task HTTP (8 KB en total); el server corre en una sola task, asi que no
+     * hay dos requests usandolo a la vez. */
+    static char buf[4096];
     int received  = 0;
     int remaining = req->content_len;
 
@@ -550,7 +578,8 @@ static esp_err_t command_handler(httpd_req_t *req)
     snprintf(resp, sizeof(resp),
         "{\"status\":\"%s\",\"device_id\":\"" DEVICE_ID "\",\"message\":\"%s\"}",
         ok ? "ok" : "error",
-        ok ? "Config sent to STM32" : "JSON parse error");
+        ok ? "Config aplicada por el STM32"
+           : "JSON invalido, o el STM32 no la acepto (ver log serie)");
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp, strlen(resp));
@@ -564,7 +593,13 @@ static esp_err_t status_handler(httpd_req_t *req)
     uart_send_frame(CMD_GET_STATUS, NULL, 0);
 
     char buf[640];
-    if (xSemaphoreTake(status_sem, 400 / portTICK_PERIOD_MS) == pdTRUE) {
+    /* 800 ms, no 400. El STM32 manda el status byte a byte sirviendo los fills
+     * de audio entre medio (para no meter un pop de 6 ms), asi que en el modo
+     * mas pesado —el 15, 8 fuentes x 32 salidas— la trama entera puede tardar
+     * varios cientos de ms. Con 400 ms se veian timeouts esporadicos JUSTO en
+     * el modo que mas interesa monitorear. El audio siempre gana; la telemetria
+     * espera. Sigue entrando en el poll de 1 s de la pagina. */
+    if (xSemaphoreTake(status_sem, 800 / portTICK_PERIOD_MS) == pdTRUE) {
         const ds_status_t *s = &last_status;
         const char *mname = (s->mode_idx < NUM_MODES)
                           ? MODE_NAMES[s->mode_idx] : "?";
@@ -573,18 +608,34 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"proto_ver\":%u,\"mode\":%u,\"mode_name\":\"%s\",\"num_modes\":%u,"
             "\"rx_az\":%d,\"focus\":{\"fx\":%d,\"fy\":%d,\"fz\":%d},"
             "\"underruns\":%lu,\"sai_errors\":%lu,\"ovf\":%u,\"cal_state\":%u,"
-            "\"vol_db\":%d,"
+            "\"vol_db\":%d,\"ingain_db\":%u,\"amps\":%s,\"custom\":%s,"
+            "\"adc_ovf\":%lu,\"out_clip\":%lu,"
             "\"adc_pk\":[%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld],"
-            "\"uptime_ms\":%lu}",
+            "\"cpu_fills_pct\":%u.%u,"
+            "\"mic_live\":%u,\"cal_prog\":%u,\"cal_ok\":%u,\"cal_saved\":%s,"
+            "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
             (unsigned long)s->underruns, (unsigned long)s->sai_errors,
             s->ovf, s->cal_state, (int)s->master_vol_db,
+            s->in_gain_db,
+            (s->state_flags & STATE_F_AMPS)   ? "true" : "false",
+            (s->state_flags & STATE_F_CUSTOM) ? "true" : "false",
+            (unsigned long)s->adc_ovf_count, (unsigned long)s->out_clip_count,
             (long)s->adc_pk[0], (long)s->adc_pk[1], (long)s->adc_pk[2],
             (long)s->adc_pk[3], (long)s->adc_pk[4], (long)s->adc_pk[5],
             (long)s->adc_pk[6], (long)s->adc_pk[7],
+            /* Los DOS uptimes, separados a proposito: uptime_ms era el de este
+             * chip y se leia como si fuera el de la placa, asi que un reinicio
+             * del STM32 resultaba INVISIBLE desde la red. */
+            s->cpu_fills_x10 / 10, s->cpu_fills_x10 % 10,
+            s->mic_live_mask, s->cal_progress, s->cal_ok_count,
+            (s->state_flags & STATE_F_CALIB) ? "true" : "false",
+            (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
     } else {
+        /* Sin respuesta del STM32 no hay uptime suyo que informar; el que va
+         * es el de este chip, y por eso lleva su nombre. */
         snprintf(buf, sizeof(buf),
             "{\"stm32\":\"timeout\",\"device_id\":\"" DEVICE_ID "\","
             "\"uptime_ms\":%lu}",
@@ -720,6 +771,68 @@ static esp_err_t amps_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /reset — reset de fabrica. Sin payload: no hay nada que elegir.
+//
+// El instrumento tiene muchos parametros que se pisan en vivo (foco por fuente,
+// azimut, mutes, ganancias, volumen, ganancia de entrada) y varios se guardan
+// solos en la EEPROM. Sin una vuelta a cero se puede quedar en un estado raro
+// sin forma evidente de salir — y quien lo opera no necesariamente sabe que
+// parametro toco. Deja volumen -24 dB, ganancia 0 dB, modo 0 y los focos por
+// defecto. NO toca el enable de los amplificadores: apagarlos de sorpresa (o
+// encenderlos) es justo lo que no se quiere de un boton de panico.
+static esp_err_t reset_handler(httpd_req_t *req)
+{
+    int ack = uart_send_and_wait_ack(CMD_FACTORY_RESET, NULL, 0, 600);
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"%s\"}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"));
+    printf("[ESP32] POST /reset -> %s\n", ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
+// POST /ingain {"db":0} — ganancia de la etapa de ENTRADA, 0..36 dB.
+//
+// NO confundir con /volume: aquel es el atenuador del PCM1690, o sea la SALIDA.
+// Este es cuanto se amplifica la senal DESPUES del ADC y ANTES del clamp digital.
+//
+// Por que existe: el modo 0 aplicaba +30 dB fijos (para poder oir un microfono) y
+// el volumen tiraba -40 dB despues. Con una fuente de linea eso hacia recortar el
+// clamp digital mucho antes de que a los parlantes les llegara nada — medido el
+// 2026-08-18: 3152 recortes/s con el ADC ni enterado. Para fuentes de linea va en
+// 0-12 dB; +30 es para microfonos.
+static esp_err_t ingain_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"bad json\"}");
+        return ESP_OK;
+    }
+    cJSON *jdb = cJSON_GetObjectItem(root, "db");
+    int db = (jdb && cJSON_IsNumber(jdb)) ? jdb->valueint : 0;
+    cJSON_Delete(root);
+    if (db < 0)  db = 0;
+    if (db > 36) db = 36;
+
+    uint8_t p = (uint8_t)db;
+    int ack = uart_send_and_wait_ack(CMD_SET_INGAIN, &p, 1, 300);
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"%s\",\"ingain_db\":%d}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"), db);
+    printf("[ESP32] POST /ingain %d dB -> %s\n", db, ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 // POST /volume {"db":-20} — volumen maestro via atenuacion del PCM1690.
 // Afecta TODOS los modos (walker incluido), a diferencia de master_gain.
 static esp_err_t volume_handler(httpd_req_t *req)
@@ -772,22 +885,44 @@ static const char INDEX_HTML[] =
 ".meter{display:flex;gap:3px;height:36px;align-items:flex-end;margin-top:6px}"
 ".bar{flex:1;background:#2a6;min-height:2px;border-radius:2px 2px 0 0}"
 "#st{font-size:.8em;color:#888;white-space:pre-wrap}"
+/* Checklist del AUTOFOCUS: un punto por fila, rojo por defecto. El default es
+ * rojo a proposito — "todavia no se comprobo" y "esta mal" se atienden igual, y
+ * un verde por omision seria una mentira que cuesta 8 segundos de scan. */
+".chk{list-style:none;padding:0;margin:6px 0;font-size:.85em}"
+".chk li{padding:4px 0 4px 22px;position:relative;color:#bbb}"
+".chk li:before{content:'';position:absolute;left:4px;top:9px;width:9px;"
+"height:9px;border-radius:50%;background:#a33}"
+".chk li.ok:before{background:#2a6}.chk li.warn:before{background:#c82}"
 ".row{display:flex;gap:8px;align-items:center}.row button{flex:0 0 auto}"
 "</style></head><body>"
 "<h1>DS Beamformer <span id=link style='font-size:.6em;color:#888'>...</span></h1>"
+"<div id=custom style='color:#f84;font-size:.85em;margin-bottom:10px'></div>"
 "<div class=card><h2>Volumen maestro</h2>"
 "<div class=row><input type=range id=vol min=-63 max=0 value=0 step=1>"
 "<span class=val id=volv>0 dB</span></div>"
 "<div class=row style='margin-top:6px'><button onclick=setVol(-64)>Mute</button>"
 "<button onclick=setVol(+vol.value)>Aplicar</button></div></div>"
+"<div class=card><h2>Ganancia de entrada</h2>"
+"<div class=row><input type=range id=ig min=0 max=36 value=0 step=1>"
+"<span class=val id=igv>0 dB</span></div>"
+"<div class=row style='margin-top:6px'><button onclick=setIg(0)>Linea (0)</button>"
+"<button onclick=setIg(30)>Microfono (30)</button>"
+"<span class=val id=clipv></span></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Si distorsiona y bajar el "
+"volumen no lo arregla, es esto. Se guarda solo.</div></div>"
 "<div class=card><h2>Amplificadores</h2>"
 "<div class=row><button onclick=setAmps(1)>Encender amps</button>"
 "<button onclick=setAmps(0)>Apagar amps</button>"
-"<span class=val id=ampsv>arrancan apagados</span></div></div>"
+"<span class=val id=ampsv>...</span></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Arrancan apagados. "
+"El estado que se muestra viene de la placa, no de esta p&aacute;gina.</div></div>"
 "<div class=card><h2>Modo</h2><div class=grid id=modes></div></div>"
 "<div class=card><h2>RX beam (az&deg;)</h2>"
 "<div class=row><input type=range id=az min=-90 max=90 value=0 step=5>"
-"<span class=val id=azv>0&deg;</span><button onclick=setRx()>Aplicar</button></div></div>"
+"<span class=val id=azv>0&deg;</span><button onclick=setRx()>Aplicar</button></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Aplicar deja el equipo "
+"escuchando los micr&oacute;fonos y <b>apaga el tono interno</b>, aunque arriba "
+"siga marcado otro modo. Para volver, eleg&iacute; el modo de nuevo.</div></div>"
 "<div class=card><h2>TX focus (mm rel centro)</h2>"
 "<label>X (izq&minus;/der+): <span class=val id=fxv>0</span></label>"
 "<input type=range id=fx min=-1500 max=1500 value=0 step=50>"
@@ -796,12 +931,66 @@ static const char INDEX_HTML[] =
 "<label>Z (distancia): <span class=val id=fzv>1000</span></label>"
 "<input type=range id=fz min=200 max=4000 value=1000 step=50>"
 "<div class=row style='margin-top:8px'><button onclick=setTx()>Aplicar foco TX</button></div></div>"
+/* MULTIFOCUS: el modo 15 es el objetivo artistico del instrumento —8 entradas,
+ * cada una colocada en un punto del espacio— y hasta ahora solo se manejaba con
+ * un curl por fuente. Vista en planta: X horizontal, Z (distancia al array) en
+ * vertical, el array abajo. Se arrastran los puntos. */
+"<div class=card><h2>MULTIFOCUS &mdash; d&oacute;nde suena cada entrada</h2>"
+"<svg id=pad viewBox='0 0 300 215' "
+/* height:auto (no 215px fijos) para que la caja tome el aspecto del viewBox: el
+ * dibujo pasa a ocupar TODO el ancho en vez de 300 px centrados, que es el
+ * doble de superficie para agarrar los puntos. */
+"style='width:100%;height:auto;background:#111;border-radius:6px;touch-action:none'>"
+"<rect x=122 y=203 width=56 height=7 fill=#2a6 rx=2></rect>"
+"<text x=150 y=199 fill=#666 font-size=7 text-anchor=middle>array</text>"
+"<line x1=150 y1=12 x2=150 y2=203 stroke=#222 stroke-width=1></line>"
+"<text x=292 y=200 fill=#444 font-size=7 text-anchor=end>+1.5 m</text>"
+"<text x=8 y=200 fill=#444 font-size=7>&minus;1.5 m</text>"
+"<text x=154 y=18 fill=#444 font-size=7>3 m</text></svg>"
+"<div class=row style='margin-top:6px'>"
+"<label style='flex:0 0 auto'>altura fuente <span class=val id=selv>1</span>:</label>"
+"<input type=range id=fyv2 min=-800 max=800 value=0 step=25>"
+"<span class=val id=fyvv>0</span></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Arrastr&aacute; cada punto. "
+"Aplica al modo MULTIFOCUS activo (14 tonos / 15 entradas).</div></div>"
+/* AUTOFOCUS: el modo mide con un microfono y hasta ahora solo se contaba por el
+ * cable serie. Sin terminal no habia forma de saber si el microfono estaba
+ * vivo, por que parlante iba el scan ni si el resultado servia — y el scan
+ * terminaba diciendo "done" igual. Estas cinco filas son las cinco cosas que
+ * pueden salir mal, en el orden en que hay que resolverlas. */
+"<div class=card><h2>AUTOFOCUS &mdash; calibrar con micr&oacute;fono</h2>"
+"<ol class=chk>"
+"<li id=k1>amplificadores</li>"
+"<li id=k2>micr&oacute;fono en la entrada 1</li>"
+"<li id=k3>nivel del micr&oacute;fono</li>"
+"<li id=k4>scan</li>"
+"<li id=k5>resultado</li>"
+"<li id=k6>calibraci&oacute;n guardada</li></ol>"
+"<div class=row><button onclick=startAF()>Iniciar scan (modo 11)</button></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>El micr&oacute;fono va "
+"<b>en el punto donde quer&eacute;s el foco</b>, enchufado a la entrada 1 (c0), "
+"y no se mueve durante los ~8 s del barrido. J9 no da alimentaci&oacute;n: "
+"hace falta un preamplificador. Al terminar, el equipo reproduce un tono "
+"enfocado ah&iacute;. Si el resultado sale en rojo, los focos anteriores "
+"quedan intactos.</div></div>"
 "<div class=card><h2>Entradas ADC (peak)</h2><div class=meter id=meter></div>"
 "<div id=st>esperando estado...</div></div>"
+"<div class=card><h2>Volver a cero</h2>"
+"<div class=row><button onclick=doReset()>Reset de f&aacute;brica</button>"
+"<span class=val id=rstv></span></div>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Volumen &minus;24 dB, "
+"ganancia 0 dB, modo 0 y focos por defecto. No toca los amplificadores.</div></div>"
 "<script>"
-"const N=16,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX centro @1m','TX izq @1m','TX der @1m','TX cerca 0.3m','AUTOFOCUS mic','Tono 2k dither','Tono 1k dither','MULTIFOCUS 4t','MULTIFOCUS 8in'];"
+/* ⚠️ N y names[] son el ESPEJO de ui_states[] del STM32 y de MODE_NAMES de
+ * arriba. Agregar un modo y olvidarse de esta linea deja el modo SIN BOTON: el
+ * 17 quedo invisible en la pagina hasta que se noto. Al agregar un modo se
+ * tocan TRES lugares. */
+"const N=20,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. LEJOS 2m','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','TX 2k ondul. centro','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in','TX 2k BARRIDO izq-der','BARRIDO VERTICAL 800Hz','TX foco CALIBRADO','LOOPBACK electrico'];"
 "const md=document.getElementById('modes');"
-"for(let i=0;i<N;i++){const b=document.createElement('button');b.textContent=names[i];b.id='m'+i;"
+/* El numero adelante: es lo que se usa para referenciar el modo en los comandos
+ * (POST /mode {"mode":N}), en los logs y al hablar del equipo. */
+"for(let i=0;i<N;i++){const b=document.createElement('button');"
+"b.innerHTML='<b style=opacity:.55>'+i+'</b> '+names[i];b.id='m'+i;"
 "b.onclick=()=>fetch('/mode',{method:'POST',body:JSON.stringify({mode:i})}).then(poll);md.appendChild(b);}"
 "const mt=document.getElementById('meter');"
 "for(let i=0;i<8;i++){const d=document.createElement('div');d.className='bar';d.id='b'+i;mt.appendChild(d);}"
@@ -814,15 +1003,154 @@ static const char INDEX_HTML[] =
 "vol.oninput=()=>{volv.textContent=vol.value+' dB';volTouch=Date.now();"
 "if(Date.now()-volT>200){volT=Date.now();setVol(+vol.value);}};"
 "vol.onchange=()=>{volTouch=Date.now();setVol(+vol.value);};"
+"let igTouch=0,lastClip=null;"
+"function setIg(d){ig.value=d;igv.textContent=d+' dB';igTouch=Date.now();"
+"fetch('/ingain',{method:'POST',body:JSON.stringify({db:d})});}"
+"ig.oninput=()=>{igv.textContent=ig.value+' dB';igTouch=Date.now();};"
+"ig.onchange=()=>setIg(+ig.value);"
+/* ===== Pad MULTIFOCUS =====
+ * Estado en mm; el SVG es solo la proyeccion. Los defaults espejan
+ * MFocusIn_ApplyDefaults() del STM32: X de -700 a +700 cada 200, y=0, z=1000. */
+"const SX=1500,SZ=3000,pad=document.getElementById('pad');"
+"const src=[];for(let i=0;i<8;i++)src.push({x:-700+200*i,y:0,z:1000});"
+"let sel=0,drag=-1,padT=0,curMode=-1;"
+"const MX=x=>150+x*140/SX,MZ=z=>203-z*191/SZ;"
+"const IX=p=>Math.max(-SX,Math.min(SX,Math.round((p-150)*SX/140)));"
+"const IZ=p=>Math.max(100,Math.min(SZ,Math.round((203-p)*SZ/191)));"
+"const dots=[];"
+"for(let i=0;i<8;i++){"
+"const g=document.createElementNS('http://www.w3.org/2000/svg','g');"
+"const c=document.createElementNS('http://www.w3.org/2000/svg','circle');"
+"c.setAttribute('r',8);c.setAttribute('fill','#9cf');c.setAttribute('opacity',.85);"
+"const t=document.createElementNS('http://www.w3.org/2000/svg','text');"
+"t.setAttribute('font-size',8);t.setAttribute('fill','#012');"
+"t.setAttribute('text-anchor','middle');t.setAttribute('dy',3);t.textContent=i+1;"
+"g.appendChild(c);g.appendChild(t);g.style.cursor='grab';pad.appendChild(g);"
+"dots.push({c:c,t:t});g.onpointerdown=e=>{drag=i;sel=i;selv.textContent=i+1;"
+"fyv2.value=src[i].y;fyvv.textContent=src[i].y;pad.setPointerCapture(e.pointerId);};}"
+"function drawDots(){for(let i=0;i<8;i++){const X=MX(src[i].x),Z=MZ(src[i].z);"
+"dots[i].c.setAttribute('cx',X);dots[i].c.setAttribute('cy',Z);"
+"dots[i].t.setAttribute('x',X);dots[i].t.setAttribute('y',Z);"
+"dots[i].c.setAttribute('fill',i==sel?'#fd7':'#9cf');}}"
+/* El pad manda POST /beam type=mf, y ese comando APAGA el tono y enciende
+ * MULTIFOCUS en el STM32 sin tocar el indice de modo. O sea que tocarlo estando
+ * en el 12 o el 13 dejaba la placa sonando otra cosa mientras la pagina seguia
+ * mostrando el modo viejo — parecia que "el modo 13 se rompio". Si no estamos
+ * ya en un modo MULTIFOCUS, entramos al 14 EXPLICITAMENTE: la placa y lo que se
+ * ve en pantalla dicen lo mismo. */
+"function sendSrc(i){"
+"if(curMode!=14&&curMode!=15){curMode=14;"
+"fetch('/mode',{method:'POST',body:JSON.stringify({mode:14})}).then(poll);}"
+"fetch('/beam',{method:'POST',body:JSON.stringify("
+"{type:'mf',src:i,fx:src[i].x,fy:src[i].y,fz:src[i].z})});}"
+/* De pixeles de pantalla a unidades del viewBox, con la matriz del PROPIO SVG.
+ * La cuenta a mano —(clientX-r.left)*300/r.width— asume que el viewBox se
+ * estira hasta ocupar la caja, y NO es lo que pasa: con preserveAspectRatio por
+ * defecto el contenido se escala UNIFORME y se centra. El viewBox es 300x215 y
+ * la caja en un escritorio son ~608x215, asi que el dibujo ocupa los 300 px del
+ * medio con 154 px de aire a cada lado. El factor quedaba en 300/608 = 0,49: el
+ * punto seguia al mouse a la MITAD de velocidad en X — y exacto en Y, porque la
+ * altura si coincidia. getScreenCTM() contempla el centrado, el zoom de pagina
+ * y cualquier aspecto, asi que tambien vale en un telefono angosto. */
+"function toPad(e){const p=pad.createSVGPoint();p.x=e.clientX;p.y=e.clientY;"
+"return p.matrixTransform(pad.getScreenCTM().inverse());}"
+/* ⚠️ `e.buttons` NO es opcional: es lo que evita el ARRASTRE FANTASMA.
+ *
+ * Sintoma reportado el 2026-08-20: el equipo estaba en modo 0 y "despues de un
+ * rato empezaba a tirar un tono solo", con `MFOCUS src0: ...` en el serie. No
+ * era el STM32: era ESTA pagina mandando POST /beam type=mf, y ese comando
+ * apaga el monitor y enciende MULTIFOCUS.
+ *
+ * Si un pointerup se pierde —soltar fuera de la ventana, cambiar de pestania a
+ * mitad de arrastre, un gesto del trackpad— `drag` se quedaba en >=0 para
+ * siempre, y a partir de ahi CUALQUIER paso del mouse por encima del pad
+ * reapuntaba una fuente y cambiaba el modo. Sin hacer clic.
+ *
+ * Empeoro justo ahora porque el pad paso a ocupar todo el ancho (height:auto):
+ * el cursor lo cruza mucho mas seguido, sobre todo al scrollear.
+ *
+ * En un pointermove, `buttons` vale 0 si no hay ningun boton apretado. Un
+ * arrastre real nunca tiene buttons==0, asi que esto no cuesta nada y mata la
+ * clase entera de fallas. */
+"pad.onpointermove=e=>{if(drag<0)return;"
+"if(!e.buttons){drag=-1;return;}"
+"const q=toPad(e);"
+"src[drag].x=IX(q.x);src[drag].z=IZ(q.y);drawDots();"
+/* Throttle: arrastrar genera decenas de eventos por segundo y cada POST espera
+ * el ACK del STM32 por UART a 115200. Sin esto se encola y la UI se traba. */
+"if(Date.now()-padT>150){padT=Date.now();sendSrc(drag);}};"
+"pad.onpointerup=()=>{if(drag>=0){sendSrc(drag);drag=-1;}};"
+"pad.onpointercancel=()=>{drag=-1;};"
+/* Redes de seguridad para los pointerup que nunca llegan al pad: soltar fuera
+ * de la ventana, perder la captura del puntero, o irse a otra pestania. */
+"addEventListener('pointerup',()=>{drag=-1;});"
+"pad.addEventListener('lostpointercapture',()=>{drag=-1;});"
+"addEventListener('blur',()=>{drag=-1;});"
+"fyv2.oninput=()=>{src[sel].y=+fyv2.value;fyvv.textContent=fyv2.value;};"
+"fyv2.onchange=()=>sendSrc(sel);"
+"drawDots();"
+/* Confirmacion antes de resetear: es destructivo (pisa focos y ajustes) y el
+ * boton esta a un toque de distancia en un telefono. */
+"function doReset(){if(!confirm('Volver todo a valores de fabrica?'))return;"
+"rstv.textContent='...';fetch('/reset',{method:'POST'}).then(r=>r.json()).then(s=>{"
+"rstv.textContent=s.status=='ok'?'listo':s.status;"
+/* Los sliders quedaron mostrando lo viejo: reponer desde el estado real. */
+"for(let i=0;i<8;i++){src[i]={x:-700+200*i,y:0,z:1000};}sel=0;drawDots();"
+"fyv2.value=0;fyvv.textContent=0;igTouch=0;volTouch=0;poll();"
+"setTimeout(()=>rstv.textContent='',3000);});}"
+/* 0 = rojo (mal o sin comprobar), 1 = ambar (en curso o al limite), 2 = verde. */
+"function chk(n,st,txt){const e=document.getElementById('k'+n);"
+"e.className=st==2?'ok':(st==1?'warn':'');e.textContent=txt;}"
+/* Volver a entrar al modo 11 relanza el scan — por eso el boton sirve tanto
+ * para arrancar como para repetir tras corregir algo del checklist. */
+"function startAF(){fetch('/mode',{method:'POST',body:JSON.stringify({mode:11})}).then(poll);}"
 "function setRx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'rx',az:+az.value})});}"
 "function setTx(){fetch('/beam',{method:'POST',body:JSON.stringify({type:'tx',fx:+fx.value,fy:+fy.value,fz:+fz.value})});}"
 "function poll(){fetch('/status').then(r=>r.json()).then(s=>{"
 "document.getElementById('link').textContent=s.stm32=='ok'?'\\u25cf online':'\\u25cb '+s.stm32;"
 "if(s.stm32!='ok')return;"
+"curMode=s.mode;"
 "for(let i=0;i<N;i++)document.getElementById('m'+i).className=(i==s.mode)?'on':'';"
 "if(s.vol_db!=null&&s.vol_db>-64&&Date.now()-volTouch>3000){vol.value=s.vol_db;volv.textContent=s.vol_db+' dB';}"
+"if(s.ingain_db!=null&&Date.now()-igTouch>3000){ig.value=s.ingain_db;igv.textContent=s.ingain_db+' dB';}"
+/* El estado de los amps y el "custom" vienen del STM32, no de lo que la pagina
+ * recuerde haber clickeado: un reboot o el K2 largo lo cambian por afuera. */
+"if(s.amps!=null){ampsv.textContent=s.amps?'ON':'OFF';ampsv.style.color=s.amps?'#6d6':'#888';}"
+"const cm=document.getElementById('custom');"
+"cm.textContent=s.custom?'\u26a0 beam modificado a mano \u2014 el modo marcado no es lo que suena':'';"
+/* Los contadores del STM32 son monotonicos: lo que importa es que CREZCAN
+ * entre dos polls — eso es "esta saturando ahora", no "saturo alguna vez". */
+"if(s.out_clip!=null){const c=document.getElementById('clipv');"
+"if(lastClip!==null){const dc=s.out_clip-lastClip.c,dv=s.adc_ovf-lastClip.v;"
+"c.textContent=dv>0?'\\u26a0 satura la FUENTE':(dc>0?'\\u26a0 satura: bajar ganancia':'');"
+"c.style.color=(dc>0||dv>0)?'#f84':'#9cf';}"
+"lastClip={c:s.out_clip,v:s.adc_ovf};}"
 "const pk=s.adc_pk||[];for(let i=0;i<8;i++){const v=Math.max(2,Math.min(36,Math.log10((pk[i]||1)+1)/7*36));"
 "document.getElementById('b'+i).style.height=v+'px';}"
+/* ===== Checklist del AUTOFOCUS =====
+ * Cada fila dice el estado Y el numero que lo respalda, para que un rojo se
+ * pueda discutir en vez de solo creer. */
+"chk(1,s.amps?2:0,s.amps?'amplificadores encendidos':'amplificadores APAGADOS \\u2014 no va a salir sonido');"
+"const mlive=(s.mic_live&1)!=0;"
+"chk(2,mlive?2:0,mlive?'micr\\u00f3fono con se\\u00f1al en la entrada 1 (c0)':'sin se\\u00f1al en la entrada 1 (c0)');"
+"const p0=pk[0]||0,db=p0>0?Math.round(20*Math.log10(p0/8388607)):-99;"
+/* El techo en -6 dBFS no es el clipeo del ADC sino el margen que necesitan los
+ * picos entre dos lecturas: si el pico de 1 s ya llega ahi, el chirp del scan
+ * puede recortar y la correlacion mide una onda deformada. */
+"chk(3,p0<2000?0:(db>-6?1:2),'nivel c0: '+db+' dBFS'+(p0<2000?' \\u2014 demasiado bajo':(db>-6?' \\u2014 muy caliente, baj\\u00e1 el preamp':' \\u2014 bien')));"
+"const CS=['en reposo','estabilizando sala','preparando','capturando','correlacionando','terminado'];"
+"const cs=s.cal_state|0,cp=s.cal_prog|0,ck=s.cal_ok|0;"
+"chk(4,cs==0?0:(cs==5?2:1),cs>0&&cs<5?('midiendo parlante '+(cp+1)+'/32 \\u2014 no muevas el micr\\u00f3fono')"
+":'scan '+CS[cs]);"
+"chk(5,cs!=5?0:(ck>=16?2:0),cs!=5?'sin resultado todav\\u00eda'"
+":(ck>=16?('foco aplicado \\u2014 '+ck+'/32 parlantes medidos con confianza')"
+":('DESCARTADO \\u2014 solo '+ck+'/32 parlantes \\u00fatiles; focos anteriores intactos')));"
+/* La calibracion vive en la EEPROM y sobrevive al reinicio. Las POLARIDADES se
+ * aplican a todos los modos; el FOCO medido es de un punto y se recupera con
+ * el modo 18. */
+"chk(6,s.cal_saved?2:0,s.cal_saved"
+"?'en EEPROM \\u2014 polaridades activas en todos los modos; foco medido en el modo 18'"
+":'ninguna guardada \\u2014 el equipo usa la geometr\\u00eda nominal');"
 "document.getElementById('st').textContent="
 "'modo: '+s.mode_name+'  |  vol: '+(s.vol_db<=-64?'MUTE':s.vol_db+'dB')+'  |  foco: ('+s.focus.fx+','+s.focus.fy+','+s.focus.fz+')mm'"
 "+'\\nunderruns: '+s.underruns+'  errores SAI: '+s.sai_errors+'  OVF: '+s.ovf+'  cal: '+s.cal_state;"
@@ -849,6 +1177,12 @@ static httpd_handle_t start_webserver(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;
+    /* HTTPD_DEFAULT_CONFIG deja max_uri_handlers en 8 y el registro que se pasa
+     * FALLA EN SILENCIO: el endpoint simplemente no existe y el server contesta
+     * "Nothing matches the given URI". Con 9 endpoints /ping ya estaba caido sin
+     * que nadie lo notara, y agregar /reset tiro /status — o sea la telemetria
+     * entera— sin un solo mensaje de error. Margen de sobra y chequeo abajo. */
+    config.max_uri_handlers = 16;
 
     printf("[ESP32] Iniciando HTTP server en puerto %d...\n", config.server_port);
 
@@ -860,11 +1194,17 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/beam",    .method = HTTP_POST, .handler = beam_handler    },
             { .uri = "/volume",  .method = HTTP_POST, .handler = volume_handler  },
             { .uri = "/amps",    .method = HTTP_POST, .handler = amps_handler    },
+            { .uri = "/reset",   .method = HTTP_POST, .handler = reset_handler   },
+            { .uri = "/ingain",  .method = HTTP_POST, .handler = ingain_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
             { .uri = "/ping",    .method = HTTP_GET,  .handler = ping_handler    },
         };
-        for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++)
-            httpd_register_uri_handler(server, &uris[i]);
+        for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
+            esp_err_t e = httpd_register_uri_handler(server, &uris[i]);
+            if (e != ESP_OK)
+                printf("[ESP32] !! NO se pudo registrar %s: %s — ese endpoint NO existe\n",
+                       uris[i].uri, esp_err_to_name(e));
+        }
 
         printf("[ESP32] HTTP server listo\n");
         printf("[ESP32]   GET  /         — UI web (control de modos + beam)\n");
@@ -943,6 +1283,28 @@ static void wifi_init(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
+
+    /* mDNS: publicar "domosonica.local" para no depender de la IP.
+     *
+     * El DHCP del router la cambia sin avisar, y averiguarla obliga a abrir el
+     * monitor serie del STM32 (línea "ESP:") — o sea, un cable y una terminal
+     * antes de poder mandar un solo comando. Con esto, cualquier navegador de
+     * la red entra a http://domosonica.local sin saber nada.
+     *
+     * No es ESP_ERROR_CHECK a propósito: si mDNS falla, la placa tiene que
+     * seguir funcionando por IP igual. Es una comodidad, no un requisito. */
+    {
+        esp_err_t merr = mdns_init();
+        if (merr == ESP_OK) {
+            mdns_hostname_set("domosonica");
+            mdns_instance_name_set("Domosonica DS11");
+            mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+            printf("[ESP32] mDNS: http://domosonica.local\n");
+        } else {
+            printf("[ESP32] mDNS no arranco (%s) — usar la IP\n",
+                   esp_err_to_name(merr));
+        }
+    }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));

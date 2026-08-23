@@ -16,12 +16,13 @@
 ## DS11 — Control por HTTP (lo que más se usa)
 
 ```bash
-IP=192.168.100.64        # cambia; sale en la línea "ESP:" del heartbeat
+IP=domosonica.local      # mDNS; también sirve la IP de la línea "ESP:" del heartbeat
 
 curl -s http://$IP/status                                   # telemetría completa
 curl -X POST http://$IP/amps   -d '{"on":true}'             # ⚠️ arrancan APAGADOS
 curl -X POST http://$IP/mode   -d '{"mode":1}'              # 0..15
-curl -X POST http://$IP/volume -d '{"db":-24}'              # 0..-63, ≤-64 mute
+curl -X POST http://$IP/volume -d '{"db":-24}'              # 0..-63, ≤-64 mute (SALIDA)
+curl -X POST http://$IP/ingain -d '{"db":0}'                # 0..36 (ENTRADA: 0=línea, 30=mic)
 
 # Foco TX (mm, relativo al centro del array; fy enfoca desde DS11)
 curl -X POST http://$IP/beam -d '{"type":"tx","fx":0,"fy":-300,"fz":1000}'

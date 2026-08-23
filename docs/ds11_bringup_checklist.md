@@ -63,6 +63,13 @@ prefijo `[STM32]`.
 - [ ] Los 4 bloques SAI con `SAIEN=1 WCKCFG=0 OVRUDR=0`.
 - [ ] `AK5538VN: readback R01=0x01 R02=0x31 R03=0x40` — clock mode y TDM256.
 - [ ] `EEPROM: I2C4 init=0, available=1`
+- [ ] `Memoria: buffers DMA en RAM_D2, tablas calientes en DTCM — OK`. Silencioso
+      cuando está bien; si aparece un `!!` con una dirección, **parar**: las dos
+      clases de bug más caras del proyecto fueron de *ubicación* (un buffer de DMA
+      en DTCM no sale por el SAI; una tabla del lazo de fill en FLASH cuesta wait
+      states por muestra). Ninguna da error de compilación.
+- [ ] `INGAIN: +N dB al boot` — 0 = línea. Si dice 30, lo que entre por J9 va a
+      recortar; ver "Las DOS ganancias" en `manual_modos.md`.
 - [ ] `PAM8302A: SD HIGH — 32 amplifiers enabled`
 
 ## 3. Heartbeat — las dos métricas nuevas
@@ -84,6 +91,71 @@ prefijo `[STM32]`.
       (`Fill avg = 668 µs`), contra 59,2% antes de los cambios de I-cache/`-O2`.
       Si volvés a ver ~60%, algo revirtió: chequeá `SCB_EnableICache()` en `main()`
       y `OPT = -O2` en el Makefile. Falta anotar el valor en **modo 15**.
+
+## 3.5 Sesión de escucha del 2026-08-19 — qué falta validar POR OÍDO
+
+El 2026-08-18 entró mucho cambio y **todo se verificó por telemetría, ninguno por
+oído**. Los 16 modos dan 0 underruns, 0 errores SAI y 0 clip; eso descarta
+deadlines perdidos y recorte digital, pero **no** ve artefactos de fase,
+polaridad ni nivel. Esta lista está ordenada: si algo falla, parar ahí.
+
+```bash
+IP=domosonica.local
+curl -X POST http://$IP/reset -d ''            # arrancar de un estado conocido
+curl -X POST http://$IP/amps  -d '{"on":true}'
+curl -X POST http://$IP/volume -d '{"db":-40}' # y subir de a poco
+```
+
+1. **Modo 13 (tono 1k) — ¿pops?**
+   Un tono puro delata cualquier discontinuidad. Escuchar 2 minutos: tiene que
+   cruzar al menos dos resúmenes de 60 s **sin un tick**. Ese pop por minuto era
+   real (el resumen descartaba fills pendientes, `ds11_perf.md` §8) y este es el
+   test que lo confirma muerto.
+
+2. **Modo 14 (MULTIFOCUS 4 tonos) — el que peor sonaba.**
+   Tenía dos bugs, los dos arreglados: la tabla de senos en FLASH y la fase entre
+   bancos. Si sigue con pops, **es distinto de lo diagnosticado** y hay que
+   volver a mirar — probablemente el buffer de 240.
+
+3. **Modos 8 y 9 — ¿el spot cae donde dice?**
+   `8` enfoca 0,5 m a la **izquierda**, `9` a la **derecha**, del oyente mirando
+   los conos, con un tono de **2 kHz** (spot ±143 mm a 1 m).
+
+   ✅ **Verificado a oído el 2026-08-19: funciona y NO está espejado.**
+
+   ⚠️ **No se distinguen por el timbre: es el mismo tono ondulante en los dos.** Lo que
+   cambia es dónde sube el nivel. El test correcto es un **A/B desde un punto
+   fijo**: pararse a 50 cm a la izquierda del centro, a 1 m del array, y alternar
+   8 ↔ 9. Ahí el 8 tiene que sonar **claramente más fuerte** que el 9. Después
+   repetir 50 cm a la derecha y esperar lo contrario. Escuchar parado en el
+   centro no prueba nada — es justo el punto donde los dos suenan igual.
+   - Si están **espejados**, es una línea: el signo de `spk_x_mm[]` en
+     `Beam_InitTxGeometry()`. **Conviene saberlo antes de la DS12.**
+   - Si no se nota ningún spot, sospechar de la polaridad (`speaker_sign`) o del
+     mapeo canal→parlante: correr el walker (§4.1).
+   - El modo `10` enfoca a 0,3 m: el spot tiene que ser **más chico y más
+     marcado** que el del `7` a 1 m. Es un test auto-validante.
+
+4. **Modo 0 con la Mac al 100 %** — no tiene que distorsionar con `ingain` en 0.
+   Si distorsiona, mirar si aparece la línea `SATURACION` y cuál de los dos
+   contadores creció (`manual_modos.md`, "Las DOS ganancias").
+
+5. **Cambiar de modo mientras suena** — un tick al cambiar es esperable
+   (se recalculan focos y se guarda en EEPROM); un pop fuerte no.
+
+6. **Modo 15 con las 8 entradas** — el objetivo artístico. Arrastrar los puntos
+   del pad de la web y verificar que cada entrada se mueve en el espacio.
+
+> Si algo suena mal, lo más útil que se puede capturar es el **log serie del
+> minuto en cuestión** más `curl -s http://$IP/status`: entre `underruns`
+> (acumulado desde v5), `out_clip`, `adc_ovf`, `cpu_fills_pct` (v6) y
+> `stm32_uptime_ms` casi siempre alcanza para separar deadline / recorte /
+> presupuesto de CPU / reinicio **sin volver a escuchar**.
+>
+> **Presupuesto de CPU esperado** (`cpu_fills_pct`, medido 2026-08-18): RX beam
+> 1,3 % · walker 2,2 % · monitor 4,9 % · AUTOFOCUS 11,1 % · TX con tono 27,0 % ·
+> MULTIFOCUS 4 tonos 63,4 % · MULTIFOCUS 8 entradas 64,8 %. Si alguno aparece
+> muy por encima de eso, hay una regresión de rendimiento — y esa se ve sin oído.
 
 ## 4. Pruebas, en orden de valor diagnóstico
 
@@ -160,11 +232,38 @@ curl -X POST http://<IP>/mode -d '{"mode":15}'
 - [ ] Con una sola fuente conectada ya se prueba: una voz situada en un punto
       del aire. Las entradas libres sólo aportan piso de ruido.
 
+## 4.6 Modo 17 — BARRIDO VERTICAL: la medición que decide la DS12
+
+**No es una demo, es un experimento.** Parado quieto a ~1 m, escuchá el ciclo de
+5 s y anotá cuál de las dos cosas pasa:
+
+- [ ] **Se percibe el foco subiendo y bajando** → el problema del eje vertical
+      era el *aliasing* (filas a 0,93 λ a 2 kHz). Bajar el pitch de filas a
+      ≤86 mm en la DS12 se justifica.
+- [ ] **No se percibe nada, o sólo sube y baja el volumen** → el limitante es la
+      *apertura* (sólo 4 filas). Bajar el pitch no alcanza: hay que agregar filas.
+
+Referencia de "así se siente cuando funciona": el modo 16, mismo barrido pero
+horizontal, donde el array sí tiene resolución. Correr los dos seguidos.
+
+Fundamento y consecuencias: `hardware/DS/DS12_PLANNING.md` §0.5.
+
+---
+
 ## 5. Cuando llegue el preamp (ECM8000 + Focusrite 2i2)
 
+- [ ] **Antes de escanear, mirar la tarjeta AUTOFOCUS** en
+      `http://domosonica.local`: las cinco filas tienen que estar en verde hasta
+      "nivel del micrófono". Si el micrófono no da señal o los amps están
+      apagados, el scan mide ruido — y desde el 2026-08-20 lo **descarta** en vez
+      de aplicar 32 retardos de basura (verificado: 4/32 en el peor caso).
 - [ ] AUTOFOCUS (modo 11) — ahora escanea **los 32 parlantes, ~8 s**. El mic
       no se mueve durante todo el barrido. Guía completa en
       `autofocus_setup.md`.
+- [ ] La fila "resultado" tiene que decir **≥16/32 parlantes medidos con
+      confianza**. Con menos, el scan queda descartado: revisar nivel del preamp
+      y posición del micrófono antes de repetir (el botón *Iniciar scan*
+      relanza).
 - [ ] Revisar los `sign=` del log: cualquier `-` es un parlante con polaridad
       invertida. La doble inversión de los canales impares es **deliberada**
       y debería dar `+` en todos; un `-` inesperado es un dato de hardware.

@@ -1,9 +1,44 @@
-# DS11 — Performance del pipeline de audio (2026-08-13)
+# DS11 — Performance del pipeline de audio
 
-> Sesión de medición sobre la placa DS11 reparada, con los 32 canales activos.
-> Resultado corto: **el modo 15 no entraba en el presupuesto de CPU y ahora sí.**
-> El costo de fill bajó ~43× en el peor modo con tres cambios, ninguno de los
-> cuales toca el algoritmo de beamforming.
+> **Bitácora acumulativa**, de la más vieja a la más nueva. Si venís a buscar el
+> estado actual, está acá abajo; las secciones son el registro de cómo se llegó.
+
+## Estado actual (2026-08-19)
+
+| | |
+|---|---|
+| Buffer | **240 muestras** = 5 ms · latencia total **5062 µs** |
+| Fill | min 61 / avg 62 / max 63 µs · jitter **1 µs** · SYNC bancos **1 µs** |
+| Errores | **0 underruns, 0 errores SAI** en los 16 modos, y en 13 h continuas |
+| CPU | RX beam 1,3 % · walker 2,2 % · monitor 4,9 % · AUTOFOCUS 11,1 % · TX ondulante 27,0 % · MULTIFOCUS 4 tonos 63,4 % · **MULTIFOCUS 8 entradas 64,8 %** |
+| Validado a oído | 2026-08-19: sin pops en 13/14/0, steering correcto y **no espejado** |
+| Pendiente | **MDMA** (§5, "la palanca que sí queda") — nada más en la lista |
+
+**Cómo mirar el rendimiento sin cable**: `curl -s http://domosonica.local/status`
+trae `cpu_fills_pct`, `underruns`, `sai_errors`, `out_clip`, `adc_ovf` y
+`stm32_uptime_ms` (proto v6). Un modo muy por encima de la tabla de arriba es una
+regresión, y se ve sin escuchar nada.
+
+### Índice
+
+| § | tema |
+|---|---|
+| 1–4 | La sesión fundacional (2026-08-13): sin cachés, modo 15 inusable → 43× |
+| 5 | Roadmap: qué se hizo, qué se descartó y qué queda (MDMA) |
+| 6 | Soak de 19,6 h |
+| 7 | El buffer de 240 destapó dos bugs en el modo 14 |
+| 8 | El resumen de 60 s tiraba fills pendientes — un pop por minuto |
+| 9 | Auditoría de concurrencia ISR ↔ main loop: tres carreras |
+| 10 | El modo 15 estaba al tope, y no había forma de verlo |
+
+---
+
+## 1–4 · La sesión fundacional (2026-08-13)
+
+> Resultado corto: **el modo 15 no entraba en el presupuesto de CPU y pasó a
+> entrar.** El costo de fill bajó ~43× en el peor modo con tres cambios —I-cache,
+> `delay_line` a DTCM, `-O2`— ninguno de los cuales toca el algoritmo de
+> beamforming.
 
 ---
 
@@ -300,7 +335,10 @@ esas frecuencias romperían el modo single-rate de 8 canales que necesitamos
 Por lo tanto **la única palanca que queda es el buffer**, que son 10 de los
 11,4 ms. Ver la sección siguiente.
 
-### Bajar el buffer de 480 a 240 muestras — la optimización grande pendiente
+### ✅ Bajar el buffer de 480 a 240 muestras — HECHO (2026-08-18)
+
+> Aplicado y medido: latencia total **5062 µs**. Destapó dos bugs en el modo 14
+> (§7) que estaban latentes. El análisis de abajo es el que llevó a hacerlo.
 
 Ahorraría **5 ms**: la latencia total pasaría de 11,4 ms a **6,4 ms (−44 %)**.
 
@@ -471,3 +509,300 @@ La firma es exactamente la predicha por los prints bloqueantes: **+2 por segundo
 y **+8 en el segundo donde cae el bloque `verbose`** (cada 10 s). Antes eran +4 y
 +10; bajó porque con los fills más rápidos el main loop recupera más rápido tras el
 bloqueo. Sigue sin ser un problema del pipeline de audio.
+
+---
+
+## 7. El buffer de 240 destapó dos bugs en el modo 14 (2026-08-18)
+
+Bajar el buffer de 480 a 240 muestras salió limpio en el modo 0 —`TEST PASSED`,
+0 underruns, latencia total de 10121 a **5054 µs**— y con eso se dio por buena.
+**No alcanzaba: el modo 0 es el más barato de todos.** Probando modo por modo
+después, el 14 estaba roto de dos maneras distintas.
+
+Ambos bugs son de la misma familia: **el buffer no es sólo un número de latencia,
+es el período que aparece en varios invariantes del pipeline.**
+
+### 7.1 La tabla de senos estaba en FLASH
+
+**Síntoma**: en modo 14 el `/status` daba `timeout` y se acumulaban **1234
+underruns en 20 segundos** (~15% de los deadlines). El modo 15 —que es *más*
+pesado: 8 fuentes contra 4— no perdía **ninguno**.
+
+Que el modo más pesado ande y el más liviano no, descarta el presupuesto de CPU
+como explicación. La diferencia está en **de qué memoria lee cada uno**:
+
+```
+$ arm-none-eabi-nm build/ds11_beamforming.elf | grep -E "delay_line|sine_table"
+20006e00 b delay_line          ← DTCM, 0 wait states
+08011aa0 r sine_table_1khz     ← FLASH, 4 wait states, y el D-cache está apagado
+```
+
+El modo 15 lee `delay_line` desde DTCM. El modo 14 lee `sine_table_1khz` **dos
+veces por (muestra × canal × fuente)** = 61440 lecturas a flash por ventana de
+5 ms. Los modos 12/13 usan la misma tabla pero una sola vez por muestra (240 por
+fill), por eso nunca sufrieron.
+
+**Es la misma causa raíz que el arreglo de agosto**: en este chip, con las cachés
+de datos apagadas, lo que domina no es cuántas operaciones hacés sino de qué
+memoria leés.
+
+**Fix**: sacar el `const` **y** forzar la sección.
+
+```c
+__attribute__((section(".data")))
+static int32_t sine_table_1khz[48] = { ... };
+```
+
+Sacar el `const` solo **no alcanza**: con `-O2` GCC ve que nadie escribe la tabla
+y la manda a `.rodata` igual. Con la sección explícita cae en `.data`, que este
+linker script ubica en DTCMRAM y el startup copia solo (+192 B de `.data`).
+
+**Resultado: 1234 → 0 underruns**, y `/status` vuelve a responder dentro del modo.
+
+> **Cómo verificarlo** (vale para cualquier tabla que se lea en un lazo de fill):
+> `arm-none-eabi-nm build/ds11_beamforming.elf | grep <tabla>` tiene que dar
+> `0x2000xxxx` y `d`/`b`, no `0x08xxxxxx` y `r`.
+
+### 7.2 Tres de los cuatro tonos quedaron en contrafase
+
+`mf_frame` lo avanzaba el fill de **SAI1_A**, o sea el primer banco, y los otros
+tres lo leían **ya adelantado un buffer entero**. Eso era inocuo sólo si
+`f × buffer / 48000` daba entero:
+
+| buffer | condición sobre f | 1300 | 1600 | 1900 | 2100 |
+|---|---|---|---|---|---|
+| 480 | múltiplo de **100** | ✅ 13 | ✅ 16 | ✅ 19 | ✅ 21 |
+| 240 | múltiplo de **200** | ❌ 6,5 | ✅ 8 | ❌ 9,5 | ❌ 10,5 |
+
+Con el buffer de 240, **las filas 2-3 quedaron en contrafase con las 0-1 para 3 de
+los 4 tonos**: en el punto focal se cancelaban en vez de sumarse — el foco de esos
+tonos no estaba débil, estaba *invertido*. No lo detecta ninguna telemetría; era
+audible y nada más.
+
+**Fix**: avanzar `mf_frame` en el **último** banco (`ch_offset == AUDIO_CHANNELS*3`)
+en vez del primero. Así los cuatro leen el mismo valor, rinden la misma ventana con
+la misma fase, y la restricción sobre la frecuencia **desaparece** en vez de
+cambiar de número.
+
+### La lección de método
+
+Validar un cambio de buffer **en el modo más barato no valida nada**. La regla para
+la próxima vez que se toque `AUDIO_BUFFER_SAMPLES`: recorrer los modos 0, 12, 14 y
+15 midiendo el delta de `underruns` en una ventana fija, y revisar a mano todo
+invariante que mencione el tamaño del buffer (`grep -n "480\|buffer" main.c`).
+
+---
+
+## 8. El resumen de 60 s tiraba fills pendientes (2026-08-18)
+
+Encontrado probando por telemetría, sin escuchar. El bloque que imprime el
+resumen cada 60 s hacía, además de resetear estadísticas:
+
+```c
+__disable_irq();
+need_fill_first_half = 0;
+need_fill_second_half = 0;
+...                          // las 8 banderas de TX
+rx_3b_first_half_ready = 0;  // y las 2 del RX
+rx_3b_second_half_ready = 0;
+```
+
+**Eso no es resetear una estadística: es tirar trabajo pendiente.** Una bandera
+puesta significa "este medio buffer todavía no se llenó". Borrarla sin llenarlo
+deja que el DMA reproduzca el contenido anterior — **medio buffer repetido en los
+32 canales, o sea un pop, una vez por minuto**.
+
+Encaja con el *"pedito cada vez que se imprime el serial"* que se venía
+reportando. Los prints ya se habían hecho cooperativos en agosto y el síntoma
+mejoró, pero **esto seguía descartando fills** y nadie lo miró: estaba en el
+bloque de reseteo, donde uno espera ver estadísticas, no estado del pipeline.
+
+Dejar las banderas puestas es estrictamente mejor: el fill se sirve **tarde**
+(dato correcto, posición corrida) en vez de **no servirse** (dato viejo
+garantizado).
+
+### El contador de underruns mentía sobre su propia naturaleza
+
+El mismo bloque hacía `underrun_count = 0`, así que `/status` publicaba un número
+que **parecía acumulativo y retrocedía solo cada minuto**. Medir por diferencia
+daba resultados imposibles —incluidos negativos— y llegó a parecer que la placa
+se reiniciaba.
+
+Ahora hay dos contadores: `underrun_count` por ciclo (lo que informa el resumen)
+y `underrun_total`, que no se resetea nunca y es el que va a la telemetría. Ídem
+`sai_errors`.
+
+> **`uptime_ms` era el del ESP32, no el del STM32.** Un reinicio del STM32 era
+> **invisible desde la red**: la única pista habría sido justamente el contador
+> retrocediendo, que resultó ser otra cosa. Desde proto v5, `/status` publica
+> `stm32_uptime_ms` (del STM32) junto a `uptime_ms` (del ESP32). Sin ese campo no
+> se podía distinguir "reinicio" de "contador reseteado", y se perdió un rato
+> largo en esa ambigüedad.
+
+### Barrido completo de los 16 modos
+
+Con todo lo anterior aplicado, con los amps apagados y sin señal de entrada:
+
+| | resultado |
+|---|---|
+| Modos 0–15, ventana de 8 s cada uno | **0 underruns, 0 errores SAI, 0 clip** en los 16 |
+| Barrido de volumen (10 cambios × 32 escrituras I2C) | **0 underruns** |
+| Ganancia de entrada + `/status` concurrente | **0 underruns** |
+| Ráfaga de beam custom (8 fuentes) | **0 underruns** |
+| Cambios de modo rápidos (18 en 7 s) | 6 underruns — ver abajo |
+
+Los 6 de la ráfaga de modos aparecen **una sola vez** y no se repiten en las
+vueltas siguientes; con el arreglo del descarte de fills hay que volver a
+medirlos. Falta la validación auditiva, que es la única que ve los artefactos
+que no cuentan como deadline perdido.
+
+---
+
+## 9. Auditoría de concurrencia ISR ↔ main loop (2026-08-18)
+
+Motivada por el `-O2`: lo clásico que destapa subir el nivel de optimización es
+estado compartido mal declarado. El resultado fue mejor de lo esperado en un
+frente y peor en otro.
+
+**Lo que estaba bien**: las 28 variables que escriben las callbacks del SAI y las
+6 del parser del UART son **todas `volatile`**. La disciplina del pipeline
+diferido (ISR pone bandera, main loop trabaja) está bien sostenida. Y las
+prioridades son correctas: DMA de audio en 0, UART4 en 1 — el ACK que se manda
+desde el ISR del UART **no** puede retrasar una callback de audio.
+
+Lo que apareció fueron **tres carreras estructurales**, ninguna detectable por el
+compilador.
+
+### 9.1 Dos escritores sobre el mismo UART
+
+`UART_Protocol_SendStatus()` escribe la trama de status en `TDR` **byte a byte
+desde el main loop**, sirviendo los fills entre carácter y carácter — cientos de
+ms en el modo 15. `send_ack()` escribe **el mismo `TDR` desde el ISR** del
+parser. Sin coordinación, un comando que llegue durante un status mete sus 5
+bytes **en medio de la trama**. Las dos consecuencias son silenciosas:
+
+- el status queda corrupto → el ESP32 lo descarta → `stm32: timeout`;
+- los bytes del ACK se los come el status → el ESP32 nunca ve su ACK → el POST
+  contesta `timeout` **aunque el STM32 haya ejecutado el comando**.
+
+Es exactamente el escenario de arrastrar el pad de MULTIFOCUS (un `POST /beam`
+cada 150 ms) con la página polleando `/status` cada segundo.
+
+**Fix**: mientras el main loop manda una trama, el ISR **encola**; el main loop
+drena la cola al terminar, y baja la bandera sólo cuando quedó vacía (comprobado
+con la IRQ apagada, para que un ACK que entre durante el drenaje no vuelva a
+intercalarse). Medido después: **40/40 status y 40/40 comandos OK** con ambos
+tráficos a la vez en modo 15.
+
+De paso, el timeout de esos envíos baja de 50 ms a 5 ms. Son 5 bytes = 434 µs; si
+el TX alguna vez se trabara, 50 ms de bloqueo en el ISR son **diez** deadlines de
+fill perdidos. Con 5 ms el peor caso es uno.
+
+### 9.2 El módulo entregaba punteros a memoria que escribe el ISR
+
+`UART_Protocol_GetConfig()` devolvía un puntero al buffer vivo. El main loop leía
+de ahí durante decenas de µs —102 bytes de config, y encima `PrintConfig()`
+formateando 32 líneas— mientras el ISR podía estar haciendo `memcpy` de una trama
+nueva **encima**. El resultado sería una config mezclada de dos tramas: delays de
+unos canales y ganancias de otros, todos en rango, ninguno el pedido. Ídem
+`beam_req` (9 bytes) y `esp_ip`.
+
+**Fix**: regla del módulo — *nada devuelve un puntero a memoria que escribe el
+ISR*. `TakeConfig(dst)` y `CopyEspIp(dst,n)` copian con la IRQ apagada (~100
+ciclos, irrelevante para el audio), y `PrintConfig()` ahora recibe el snapshot.
+
+### 9.3 🔴 La EEPROM cargaba datos corruptos y avisaba que no
+
+El más serio de los tres, y no es de concurrencia. `EEPROM_LoadConfig()` leía los
+datos **directamente sobre la estructura del llamador** y verificaba el CRC
+**después**:
+
+```c
+eeprom_read(addr, (uint8_t*)config, config_size);   // ya piso beam_config
+...
+if (calc_crc != stored_crc) return EEPROM_ERR_CRC;  // demasiado tarde
+```
+
+El `main.c` imprime **"EEPROM: CRC error — using defaults"** y sigue — pero los
+defaults **ya habían sido destruidos**. Con un solo byte dado vuelta, el
+instrumento arranca con `master_vol_db`, `in_gain_db`, gains, delays y mutes
+**arbitrarios**. Y los clamps no salvan: un `master_vol_db` positivo se satura a
+**0 dB, o sea volumen máximo**, y `in_gain_db` a **+36 dB**, sobre 32
+amplificadores.
+
+Nunca se manifestó porque hizo falta que la EEPROM se corrompiera, cosa que no
+pasó. Es una bomba con la espoleta puesta, no un bug activo.
+
+**Fix**: los datos van a un buffer intermedio, se valida el CRC y **recién
+entonces** se copian al destino. Si `config_size` no entra en el buffer,
+devuelve `EEPROM_ERR_SIZE` en vez de desbordar. Verificado que la persistencia
+sigue funcionando: `ingain=7` y `modo=12` sobrevivieron un reset por ST-Link.
+
+---
+
+## 10. El modo 15 estaba al tope, y no se veía (2026-08-18)
+
+### Primero: hacer visible el presupuesto
+
+El `%` de CPU del pipeline sólo salía por el puerto serie, así que diagnosticar
+"este modo no entra" pedía un cable enchufado. Desde **proto v6**, `/status`
+publica `cpu_fills_pct`. Con eso el diagnóstico pasó de conjetura a medición en
+un par de minutos.
+
+### El hallazgo
+
+Con el modo 15 activo, `/status` **no contestaba** y se acumulaban ~25-55
+underruns por segundo. Los demás modos daban 0. Al exponer el `%`:
+
+| modo | CPU antes |
+|---|---|
+| 0 (monitor) | 4,9 % |
+| 12 / 7 (tono + TX) | 25,2 % |
+| 14 (MULTIFOCUS 4 tonos) | 56,8 % |
+| **15 (MULTIFOCUS 8 entradas)** | **no contestaba — al tope** |
+
+Causa: cuando la ganancia de entrada pasó a ser ajustable en runtime, el
+`<< mf_in_shift` del lazo interno se reemplazó por `Apply_In_Gain()`, que es una
+**multiplicación de 64 bits sobre una variable `volatile`** — o sea que el
+compilador está obligado a recargarla de memoria en cada uso. En el lazo más
+caliente del firmware eso son **8 fuentes × 8 canales × 240 muestras × 4 bancos =
+61440 multiplicaciones por ventana de 5 ms**, donde antes había un shift.
+
+Es el precio de una decisión de diseño que sigue siendo correcta (ganancia
+ajustable en dB en vez de saltos de 6 dB), mal ubicada.
+
+### El arreglo
+
+La ganancia es **lineal**, así que aplicarla a cada fuente y sumar es idéntico a
+sumar y aplicarla una vez:
+
+```c
+const int32_t g_q8 = (int32_t)in_gain_q8;   // el volatile, leído UNA vez
+...
+for (src) sum += interpolación;             // sin multiplicar
+acc = (int32_t)(((int64_t)sum * g_q8) >> 8);  // una sola multiplicación
+```
+
+Siete de cada ocho multiplicaciones desaparecen. `sum` son 8 × 24 bits = 27 bits,
+× `g_q8` (≤ 2^14) = 41 bits → el intermedio de 64 bits sigue siendo necesario.
+
+**Resultado: el modo 15 pasa de estar al tope a 64,8 % con 0 underruns**, y la
+telemetría vuelve a responder (24/24 lecturas en 100 s).
+
+### Presupuesto de CPU por modo — medido 2026-08-18
+
+Los 16 modos, amps apagados, sin señal de entrada, **0 underruns en todos**:
+
+| modo | | CPU |
+|---|---|---|
+| 2–6 | RX beam (5 presets) | 1,3 % |
+| 1 | Channel walker | 2,2 % |
+| 0 | ADC monitor | 4,9 % |
+| 11 | AUTOFOCUS scan | 11,1 % |
+| 7–10, 12–13 | TX con tono (6 modos) | 27,0 % |
+| 14 | MULTIFOCUS 4 tonos | 63,4 % |
+| 15 | MULTIFOCUS 8 entradas | **64,8 %** |
+
+El techo real no es 100 %: el main loop también atiende el protocolo, la EEPROM,
+el botón y los prints. Los dos MULTIFOCUS a ~64 % son los que hay que vigilar si
+se agrega trabajo por muestra — y ahora se puede vigilar sin cable.

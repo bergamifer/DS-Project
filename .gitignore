@@ -110,3 +110,8 @@ secrets.h
 firmware_esp32c3/main/secrets.h
 # Config personal de Claude Code (no compartir: rutas y permisos locales)
 .claude/settings.local.json
+
+# PDF generado de la guia: se rehace con docs/pdf/hacer_pdf.sh en 5 segundos.
+# Fuera del repo a proposito — es un binario de ~460 KB que cambiaria en cada
+# edicion del .md y quedaria desincronizado del texto sin que nadie se entere.
+docs/pdf/*.pdf

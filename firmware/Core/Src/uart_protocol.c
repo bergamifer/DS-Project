@@ -57,12 +57,25 @@ static char esp_ip[ESP_IP_MAXLEN + 1] = {0};
 static volatile int8_t  vol_req_db = 0;
 static volatile uint8_t vol_req_flag = 0;
 
+/* CMD_SET_INGAIN: ganancia de la etapa de ENTRADA (distinta del volumen, que es
+ * el atenuador del DAC a la SALIDA). El ISR setea flag+valor; el main loop la
+ * aplica. Ver in_gain_q8 en main.c. */
+static volatile uint8_t ingain_req_db = 0;
+static volatile uint8_t ingain_req_flag = 0;
+
 /* CMD_SET_AMPS: el ISR setea flag+valor, el main loop toca el GPIO. */
 static volatile uint8_t amps_req_on = 0;
 static volatile uint8_t amps_req_flag = 0;
+/* CMD_FACTORY_RESET: sin payload. El trabajo (I2C del volumen, EEPROM) es del
+ * main loop; el ISR sólo levanta la bandera. */
+static volatile uint8_t factory_reset_flag = 0;
 
 /* Pre-formatted print buffer for non-blocking IT transmission */
-#define PRINT_BUF_SIZE 1200
+/* Una línea por canal (~45 chars) + ~200 de encabezado y cierre. Con 32 canales
+ * son ~1640, y el buffer estaba en 1200 desde que la config tenía 16 — pasar a
+ * 32 lo desbordaba. El bucle de abajo además chequea el espacio restante, así
+ * que un CFG_NUM_CHANNELS mayor trunca en vez de pisar memoria. */
+#define PRINT_BUF_SIZE 2048
 static char print_buf[PRINT_BUF_SIZE];
 
 /* Forward declarations */
@@ -94,23 +107,32 @@ void UART_Protocol_Init(UART_HandleTypeDef *h_esp, UART_HandleTypeDef *h_dbg)
     dbg_print("UART4: ESP32 link ready (115200 8N1)\r\n");
 }
 
-uint8_t UART_Protocol_HasNewConfig(void)
+/* ===== Regla del módulo: NUNCA se entrega un puntero a memoria que escribe el
+ * ISR. El que quiera los datos se lleva una COPIA, tomada con la interrupción
+ * apagada.
+ *
+ * Antes esto era HasNewConfig() + GetConfig(), y el segundo devolvía un puntero
+ * al buffer vivo. El main loop leía de ahí durante decenas de microsegundos —
+ * 102 bytes de config, y encima PrintConfig() formateando 32 líneas— mientras el
+ * ISR podía estar haciendo memcpy de una trama nueva ENCIMA. El resultado sería
+ * una config mezclada de dos tramas: delays de unos canales y ganancias de
+ * otros, todos en rango, ninguno el pedido. Improbable (hay que mandar dos
+ * configs casi juntas) pero perfectamente posible desde la app o un script, y de
+ * las que no se reproducen cuando uno las busca.
+ *
+ * La copia son ~100 ciclos con la IRQ apagada: irrelevante para el audio. */
+uint8_t UART_Protocol_TakeConfig(ds_config_t *dst)
 {
-    if (new_config_flag) {
-        new_config_flag = 0;
-        return 1;
-    }
-    return 0;
+    if (!new_config_flag) return 0;
+    __disable_irq();
+    memcpy(dst, &current_config, sizeof(ds_config_t));
+    new_config_flag = 0;
+    __enable_irq();
+    return 1;
 }
 
-const ds_config_t* UART_Protocol_GetConfig(void)
+void UART_Protocol_PrintConfig(const ds_config_t *cfg)
 {
-    return &current_config;
-}
-
-void UART_Protocol_PrintConfig(void)
-{
-    const ds_config_t *cfg = &current_config;
     int pos = 0;
 
     /* Format entire config dump into print_buf, then send non-blocking */
@@ -120,10 +142,14 @@ void UART_Protocol_PrintConfig(void)
     uint32_t gain_pct = ((uint32_t)cfg->master_gain * 100) / 255;
     pos += sprintf(&print_buf[pos], "Master gain: %u (%lu%%)\r\n", cfg->master_gain, gain_pct);
     pos += sprintf(&print_buf[pos], "Global mute: %s\r\n", cfg->mute_global ? "YES" : "no");
-    pos += sprintf(&print_buf[pos], "Mutes bitfield: 0x%04X\r\n", cfg->mutes);
+    pos += sprintf(&print_buf[pos], "Mutes bitfield: 0x%08lX\r\n",
+                   (unsigned long)cfg->mutes);
     pos += sprintf(&print_buf[pos], "--- Channels ---\r\n");
 
     for (uint8_t ch = 0; ch < CFG_NUM_CHANNELS; ch++) {
+        /* 64 = holgura para la línea más larga posible. Truncar es preferible a
+         * escribir fuera del buffer si alguien sube CFG_NUM_CHANNELS. */
+        if (pos > PRINT_BUF_SIZE - 64) break;
         uint32_t ch_gain_pct = ((uint32_t)cfg->gains[ch] * 100) / 255;
         uint8_t ch_muted = (cfg->mutes >> ch) & 1;
         pos += sprintf(&print_buf[pos], "Ch%02u: delay=%5u  gain=%3u(%2lu%%)  mute=%u\r\n",
@@ -243,6 +269,15 @@ static void process_byte(uint8_t byte)
             memcpy(esp_ip, rx_payload, rx_payload_len);
             esp_ip[rx_payload_len] = '\0';   /* NUL último: nunca se lee a medias */
             rx_frame_count++;
+        } else if (rx_command == CMD_SET_INGAIN && rx_payload_len == 1) {
+            ingain_req_db = rx_payload[0];        /* dB, 0..36 (clamp en main) */
+            ingain_req_flag = 1;
+            rx_frame_count++;
+            send_ack();
+        } else if (rx_command == CMD_FACTORY_RESET && rx_payload_len == 0) {
+            factory_reset_flag = 1;               /* el main loop hace el trabajo */
+            rx_frame_count++;
+            send_ack();
         } else if (rx_command == CMD_SET_AMPS && rx_payload_len == 1) {
             amps_req_on = rx_payload[0] ? 1 : 0;
             amps_req_flag = 1;
@@ -269,16 +304,53 @@ static void process_byte(uint8_t byte)
  * SendStatus espera al UART. Ver el comentario en UART_Protocol_SendStatus. */
 __weak void UART_Protocol_Yield(void) { }
 
-static void send_ack(void)
+/* ===== Serialización del TX hacia el ESP32 =====
+ *
+ * Hay DOS escritores sobre el mismo UART4, en contextos distintos:
+ *   - el main loop, que manda la trama de status escribiendo TDR byte a byte y
+ *     sirviendo los fills de audio entre medio (cientos de ms en el modo 15);
+ *   - el ISR del parser, que contesta ACK/NACK apenas termina de leer una trama.
+ *
+ * Sin coordinación, un comando que llegue mientras se manda un status mete sus
+ * 5 bytes EN MEDIO de la trama. Consecuencias, las dos silenciosas:
+ *   - el status queda corrupto → el ESP32 lo descarta → "stm32: timeout";
+ *   - los bytes del ACK se los come el status → el ESP32 no ve su ACK → el POST
+ *     contesta "timeout" aunque el STM32 haya ejecutado el comando.
+ * Es exactamente el escenario de arrastrar el pad de MULTIFOCUS (un POST /beam
+ * cada 150 ms) con la página polleando /status una vez por segundo.
+ *
+ * Solución: mientras el main loop está mandando una trama, el ISR ENCOLA en vez
+ * de transmitir, y el main loop drena la cola al terminar. El ACK sale unos ms
+ * más tarde, muy dentro de los 300-800 ms que el ESP32 espera. */
+static volatile uint8_t tx_frame_busy = 0;   /* main loop escribiendo una trama */
+static volatile uint8_t pending_ack   = 0;
+static volatile uint8_t pending_nack  = 0;
+
+/* 5 bytes = 434 µs a 115200. El timeout era de 50 ms: si el TX se trabara, el
+ * ISR bloquearía 50 ms = diez deadlines de fill perdidos = un pop grande. Con
+ * 5 ms (10× el tiempo real) el peor caso es un solo deadline. */
+static void send_ack_now(void)
 {
     uint8_t ack[] = {PROTO_HEADER_1, PROTO_HEADER_2, CMD_ACK, PROTO_FOOTER_1, PROTO_FOOTER_2};
-    HAL_UART_Transmit(huart_esp, ack, sizeof(ack), 50);
+    HAL_UART_Transmit(huart_esp, ack, sizeof(ack), 5);
+}
+
+static void send_nack_now(void)
+{
+    uint8_t nack[] = {PROTO_HEADER_1, PROTO_HEADER_2, CMD_NACK, PROTO_FOOTER_1, PROTO_FOOTER_2};
+    HAL_UART_Transmit(huart_esp, nack, sizeof(nack), 5);
+}
+
+static void send_ack(void)
+{
+    if (tx_frame_busy) { pending_ack++; return; }
+    send_ack_now();
 }
 
 static void send_nack(void)
 {
-    uint8_t nack[] = {PROTO_HEADER_1, PROTO_HEADER_2, CMD_NACK, PROTO_FOOTER_1, PROTO_FOOTER_2};
-    HAL_UART_Transmit(huart_esp, nack, sizeof(nack), 50);
+    if (tx_frame_busy) { pending_nack++; return; }
+    send_nack_now();
 }
 
 static void dbg_print(const char *str)
@@ -286,9 +358,14 @@ static void dbg_print(const char *str)
     HAL_UART_Transmit(huart_dbg, (uint8_t*)str, strlen(str), 100);
 }
 
-const char* UART_Protocol_GetEspIp(void)
+void UART_Protocol_CopyEspIp(char *dst, uint32_t dst_size)
 {
-    return esp_ip;
+    if (!dst || dst_size == 0) return;
+    __disable_irq();
+    uint32_t i = 0;
+    while (i < dst_size - 1 && esp_ip[i]) { dst[i] = esp_ip[i]; i++; }
+    dst[i] = '\0';
+    __enable_irq();
 }
 
 uint8_t UART_Protocol_GetVolumeRequest(int8_t *db)
@@ -299,11 +376,26 @@ uint8_t UART_Protocol_GetVolumeRequest(int8_t *db)
     return 1;
 }
 
+uint8_t UART_Protocol_GetInGainRequest(uint8_t *db)
+{
+    if (!ingain_req_flag) return 0;
+    ingain_req_flag = 0;
+    *db = ingain_req_db;
+    return 1;
+}
+
 uint8_t UART_Protocol_GetAmpsRequest(uint8_t *on)
 {
     if (!amps_req_flag) return 0;
     amps_req_flag = 0;
     *on = amps_req_on;
+    return 1;
+}
+
+uint8_t UART_Protocol_GetFactoryResetRequest(void)
+{
+    if (!factory_reset_flag) return 0;
+    factory_reset_flag = 0;
     return 1;
 }
 
@@ -361,12 +453,15 @@ int32_t UART_Protocol_GetModeRequest(void)
 
 uint8_t UART_Protocol_GetBeamRequest(ds_beam_req_t *req)
 {
-    if (beam_req_flag) {
-        beam_req_flag = 0;
-        *req = beam_req;    /* struct copy; ISR only re-writes on next frame */
-        return 1;
-    }
-    return 0;
+    if (!beam_req_flag) return 0;
+    /* Copia y limpieza del flag con la IRQ apagada: la trama siguiente puede
+     * llegar justo en medio de la copia de estos 9 bytes y dejar un pedido
+     * mezclado — por ejemplo el src de una fuente con el foco de otra. */
+    __disable_irq();
+    *req = beam_req;
+    beam_req_flag = 0;
+    __enable_irq();
+    return 1;
 }
 
 uint8_t UART_Protocol_StatusRequested(void)
@@ -411,10 +506,26 @@ void UART_Protocol_SendStatus(const ds_status_t *st)
      * el parser, que corre dentro de HAL_UART_RxCpltCallback — contexto de ISR —
      * y ahí NO se puede servir el pipeline: hay que dejarlos bloqueantes. Son 5
      * bytes = 434 µs, que entra de sobra en cualquiera de los dos deadlines. */
+    tx_frame_busy = 1;          /* el ISR encola sus ACK en vez de intercalarlos */
     for (uint16_t i = 0; i < fi; i++) {
         while (!(huart_esp->Instance->ISR & USART_ISR_TXE_TXFNF)) {
             UART_Protocol_Yield();
         }
         huart_esp->Instance->TDR = frame[i];
+    }
+
+    /* Drenar los ACK que llegaron durante la trama. La bandera se baja recién
+     * cuando la cola quedó vacía, y eso se comprueba con la IRQ apagada: si se
+     * bajara antes, un ACK que entrara justo en el medio del drenaje volvería a
+     * intercalarse, que es el problema que esto viene a resolver. */
+    for (;;) {
+        __disable_irq();
+        uint8_t na = pending_ack, nn = pending_nack;
+        pending_ack = 0;
+        pending_nack = 0;
+        if (!na && !nn) { tx_frame_busy = 0; __enable_irq(); break; }
+        __enable_irq();
+        while (na--) send_ack_now();
+        while (nn--) send_nack_now();
     }
 }

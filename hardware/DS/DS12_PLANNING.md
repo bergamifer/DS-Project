@@ -63,6 +63,112 @@ la cadena entera), sino en una **derivación** que alimenta el buck local.
 
 ---
 
+### 0.5. 🔴 Las filas están al DOBLE de separación que las columnas — el eje vertical no enfoca
+
+**Verificado a oído el 2026-08-19**: en el modo 15 se percibe el movimiento del foco
+en horizontal, algo en profundidad, y **nada en vertical**. No es percepción: es la
+geometría del array.
+
+| a 2 kHz (λ = 172 mm) | pitch | |
+|---|---|---|
+| horizontal — 8 columnas, **80 mm** | 0,47 λ | ✅ bajo el límite λ/2 |
+| **vertical — 4 filas, 160 mm** | **0,93 λ** | ❌ **lóbulos de rejilla** |
+
+El criterio de muestreo espacial es **d ≤ λ/2**. Con 160 mm entre filas el techo
+vertical es **1072 Hz**, la mitad del horizontal (2144 Hz). A 2 kHz el enfoque
+vertical está *aliaseado*: en vez de un foco produce varios lóbulos repartidos, y
+por eso no se percibe ningún movimiento al cambiar la altura del foco.
+
+Además hay **la mitad de elementos** en vertical (4 filas contra 8 columnas), así
+que aunque se respetara λ/2 la resolución vertical sería peor.
+
+**Decisión para DS12 — es una decisión de producto, no un fix:**
+
+- **Si el eje vertical importa** (colocar fuentes a distintas alturas, que es
+  bastante del atractivo de la intervención): las filas tienen que ir a **≤ 86 mm**
+  de pitch para 2 kHz. Eso implica repensar el layout mecánico — hoy 160 mm viene
+  del tamaño del parlante y su montaje.
+- **Si no importa**: dejarlo documentado y **no prometer enfoque vertical**. El
+  array es esencialmente **lineal horizontal con algo de apertura vertical**, y
+  conviene decirlo así en la comunicación del proyecto.
+- **Camino intermedio**: aceptar que el enfoque vertical sólo existe **por debajo
+  de ~1 kHz**, y usar la altura sólo con material grave.
+
+> Esto no se puede arreglar por firmware. Los delays ya se calculan bien en 3D
+> (`Beam_InitTxGeometry` + `Beam_SetTxFocus`); lo que falla es que el array no
+> tiene resolución vertical a esa frecuencia.
+
+#### El experimento que decide entre las tres opciones: **modo 17** (2026-08-20)
+
+Antes de rediseñar el layout mecánico conviene saber **cuál de los dos límites
+manda**, porque piden cosas distintas y sólo uno se arregla bajando el pitch:
+
+- ¿el **aliasing** (pitch de 160 mm)? → bajar el pitch alcanza.
+- ¿la **apertura** (sólo 4 filas, 480 mm)? → hay que **agregar filas**, y bajar
+  el pitch sin agregarlas no cambiaría nada.
+
+El modo 17 los separa: barre el foco en vertical con un tono de **800 Hz**, donde
+el pitch de 160 mm son 0,37 λ — **sin lóbulos de rejilla en todo el rango de
+steering**. Si a 800 Hz se percibe movimiento vertical y a 2 kHz no, el limitante
+es el aliasing y el rediseño se justifica. Si tampoco se percibe, el limitante es
+la apertura: a 800 Hz son 1,12 λ → haz de ~51°, spot de ±45 cm a 1 m.
+
+**Es una medición de una tarde que decide gasto de hardware.** Pendiente de
+correr. Procedimiento en `docs/manual_modos.md`, sección "Modo 17".
+
+### 0.6. 🔴 Seis de los siete puntos de prueba de la DS11 no existen eléctricamente
+
+> **Corregido el 2026-08-21**: la versión anterior decía "los siete". **J13 sí
+> tiene cobre**: 16 segmentos en F.Cu que llegan a R82 y a los pines VOUT1± de
+> U4 (PCM1690, DAC3) — o sea la salida del canal 24 antes del amplificador. Lo
+> que no tiene es **red asignada** (`net -1`), y por eso no aparece en el
+> netlist. El pad 2 sí está suelto. Detalle en `docs/loopback_debug.md` §1.
+
+**Verificado sobre `DS.kicad_pcb` el 2026-08-20.** La placa tiene siete huellas
+pensadas para debug —**J13** (header 1x02) y **TP1 a TP6** (pads de 1,5 mm)—.
+**TP1 a TP6** están todos en el mismo estado:
+
+- marcadas `dnp` + `exclude_from_bom` + `exclude_from_pos_files`
+- **pads sin red asignada**
+- **ninguna pista de cobre termina a menos de 0,6 mm de ellos**
+
+O sea: se dibujaron, nunca se conectaron, y la fábrica ni se enteró de que
+existían. **La DS11 no tiene un solo punto donde pinchar una señal.**
+
+Duele especialmente en J13, que en el esquemático sí está cableado a
+`VD.P1/VD.N1` —la salida diferencial del DAC antes del amplificador—, que es
+exactamente la señal que uno querría medir.
+
+**Para la DS12:**
+
+1. **Verificar que cada TP tenga red y cobre antes de plotear.** Es el mismo
+   tipo de falla que los cortos de fábrica de la DS11: el diseño decía una cosa
+   y el archivo que fue a producción decía otra. Un DRC no lo marca porque un
+   footprint sin red no viola ninguna regla.
+2. **Un header de lazo cerrado de fábrica.** Un canal de cada uno de los 4
+   bancos, con divisor y pasabajos **en la placa**, llevado a un header junto a
+   las entradas. Convierte medir el SYNC entre bancos, los retardos
+   fraccionales y el mapeo de canales en "enchufar un cable plano".
+   Fundamento y valores en `docs/loopback_debug.md`.
+
+### 0.7. 🔴 La ganancia del PAM8302A obliga a tirar 42 dB de rango dinámico
+
+`R_I = 1 kΩ` da `A_V = 2·(142k/1k) = 284` = **+49 dB**. Para que el amplificador
+no recorte, la entrada tiene que quedar en ~11 mV<sub>rms</sub>, y como el
+PCM1690 entrega ~1,4 V<sub>rms</sub> a fondo de escala, hay que atenuar
+**≈ −42 dB en digital**. Son 42 dB de rango dinámico del DAC que se tiran.
+
+Corroboración independiente: Fernando venía operando a **−46 dB por oído**.
+
+Subir `R_I` a 20 kΩ (ganancia +23 dB) subiría el punto de operación digital
+~26 dB, con la mejora de señal-ruido correspondiente. **Y de paso corre el
+pasaalto de entrada de 723 Hz a 36 Hz**: hoy el modo 17 (barrido vertical,
+800 Hz) trabaja a media octava del borde de la banda, con −2,6 dB y 42° de fase.
+
+> Mientras tanto, en la DS11: el default de fábrica de −24 dB deja el
+> amplificador **12 dB dentro del recorte** con los modos de tono. Debería ser
+> −40 dB.
+
 ## 🔴 Prioridad alta
 
 ### 1. Margen del buck a 24V — el TVS NO protege al MP2315S
