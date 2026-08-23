@@ -1958,6 +1958,7 @@ int main(void)
               esp_ip[0] ? esp_ip : "--");
       UART_Print(uart_buf);
 
+
       /* SYNC + CPU — las dos métricas nuevas de DS11, una línea por segundo.
        *
        * SYNC = desfase entre los ciclos de DMA de los dos masters (SAI1_A =

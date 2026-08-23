@@ -257,6 +257,43 @@ ESP32 reenvíe el mismo tramo y el STM32 lo escriba **dos veces**, corriendo tod
 lo que sigue medio tramo — con el CRC fallando al final y sin ninguna pista de
 dónde. Con él, un reenvío se reconoce y se vuelve a confirmar sin escribir nada.
 
+### El abrazo mortal del primer día
+
+Las tres primeras cargas murieron en un tramo distinto cada vez —51, 55, 33— con
+el ESP32 informando *"el STM32 dejó de contestar"*. El STM32 no tenía la culpa:
+los contadores de diagnóstico dieron `tx_fail=0`, `busy_nack=0` y `ack_sent`
+congelado, y el contador de bytes recibidos dejaba de subir. **No es que no
+contestara: es que dejaban de llegarle tramos.**
+
+Eran dos problemas del ESP32, los dos invisibles hasta que existió el OTA:
+
+1. **`stm32_monitor_task` es el único que lee el UART**, y por lo tanto el único
+   que puede ver un ACK. Cada 10 s publica su IP al STM32, y para eso tomaba el
+   lock de transmisión **esperando indefinidamente**. Pero
+   `uart_send_and_wait_ack` retiene ese lock durante *toda* la transacción,
+   incluida la espera del ACK. Si el push caía ahí, el lector se quedaba
+   esperando el lock, dejaba de leer, y el ACK del STM32 llegaba sin que nadie
+   lo viera. Plazo vencido, reintento, y a veces otra vez lo mismo.
+
+   Arreglo: el push toma el lock **sin esperar** y si está ocupado se saltea. Es
+   periódico y sólo informativo — perderse uno no cuesta nada; bloquear al
+   lector, sí.
+
+2. **`uart_read_bytes` no vuelve hasta juntar los bytes que le pediste** o agotar
+   el plazo. El lector pedía 512 bytes con 100 ms de plazo, y una respuesta del
+   STM32 son 5 bytes: **se comía los 100 ms enteros, siempre**. Con una consulta
+   de estado por segundo eso no se notaba. Con ~660 tramos que esperan cada uno
+   su ACK, son más de un minuto de puro plazo vencido. Medido: **9 tramos/s
+   cuando el cable da 80**.
+
+   Arreglo: esperar el **primer** byte y después vaciar lo que ya esté en el
+   buffer sin esperar más.
+
+Con los dos arreglos, una carga de 83 kB tarda **10,6 s** y la flash queda byte a
+byte igual al archivo subido. La moraleja, que vale para todo el enlace: *un
+patrón de lectura pensado para una consulta por segundo no sobrevive a
+seiscientas transacciones seguidas.*
+
 **CRC-32 de zlib** (poly reflejado `0xEDB88320`), implementado por separado en
 los dos lados a propósito, en vez de usar el de la ROM del ESP32: las variantes
 de la ROM difieren en si el valor entra y sale invertido, y un desacuerdo

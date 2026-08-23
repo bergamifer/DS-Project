@@ -353,8 +353,22 @@ static void stm32_monitor_task(void *arg)
            STM32_UART_NUM, STM32_UART_RX, STM32_UART_BAUD);
 
     while (1) {
-        int len = uart_read_bytes(STM32_UART_NUM, raw, sizeof(raw),
-                                  100 / portTICK_PERIOD_MS);
+        /* Se espera al PRIMER byte y despues se vacia lo que ya este en el
+         * buffer, sin esperar mas. Antes esto pedia sizeof(raw) bytes con 100 ms
+         * de plazo, y uart_read_bytes no vuelve hasta juntar los que le pediste
+         * o agotar el plazo: como una respuesta del STM32 son 5 bytes, SIEMPRE
+         * se comian los 100 ms enteros.
+         *
+         * Con una consulta de estado por segundo eso no se notaba. Con una carga
+         * de firmware, que son ~660 tramos y cada uno espera su ACK, son 100 ms
+         * por tramo = mas de un minuto de puro plazo vencido, y encima hacia que
+         * el push periodico de IP cayera en medio de una transaccion (ver
+         * uart_push_esp_ip). Medido: 9 tramos/s cuando el cable da 80. */
+        int len = uart_read_bytes(STM32_UART_NUM, raw, 1, 100 / portTICK_PERIOD_MS);
+        if (len == 1) {
+            int more = uart_read_bytes(STM32_UART_NUM, raw + 1, sizeof(raw) - 1, 0);
+            if (more > 0) len += more;
+        }
 
         // Periodic report even if no data
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
@@ -479,10 +493,26 @@ static void uart_send_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
 }
 
 // Publica la IP al STM32 (aparece en su heartbeat). Sin ACK: es un push.
+//
+// ⚠️ Toma el lock SIN ESPERAR, y si esta ocupado se saltea. La razon es un
+// abrazo mortal real, encontrado el 2026-08-23 depurando la carga de firmware:
+//
+//   - esto corre en stm32_monitor_task, que es el UNICO que lee el UART y por
+//     lo tanto el unico que puede detectar un ACK;
+//   - uart_send_and_wait_ack retiene el lock durante TODA la transaccion,
+//     incluida la espera del ACK (hasta 3 s en una carga de firmware);
+//   - si el push cae ahi, el monitor se queda esperando el lock, deja de leer,
+//     el ACK del STM32 llega y NADIE lo ve. La carga muere por plazo vencido en
+//     un tramo al azar, y desde afuera parece que el STM32 dejo de contestar.
+//
+// El push es periodico cada 10 s y solo informativo: saltearse uno no cuesta
+// nada. Bloquear al lector, si.
 static void uart_push_esp_ip(void)
 {
     if (!my_ip[0]) return;
+    if (uart_tx_mutex && xSemaphoreTakeRecursive(uart_tx_mutex, 0) != pdTRUE) return;
     uart_send_frame(CMD_ESP_INFO, (const uint8_t *)my_ip, strlen(my_ip));
+    if (uart_tx_mutex) xSemaphoreGiveRecursive(uart_tx_mutex);
 }
 
 // Envia un comando y espera el ACK/NACK del STM32.
