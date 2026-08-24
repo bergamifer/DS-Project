@@ -604,6 +604,32 @@ el ESP32 — pedírselo a Fernando.
 
 ---
 
+## 12 bis. Revisar el equipo sin saber de electrónica
+
+En `http://domosonica.local` hay una tarjeta **Diagnóstico** con un botón
+*Revisar el equipo*. Da una línea por cosa, en verde o rojo, **con el número que
+la respalda**:
+
+```
+✓ DAC0               FORMAT ok, atenuacion -24.0 dB
+✓ DAC1               FORMAT ok, atenuacion -24.0 dB
+✓ DAC2               FORMAT ok, atenuacion -24.0 dB
+✓ DAC3               FORMAT ok, atenuacion -24.0 dB
+✓ ADC AK5538VN       TDM256 y group delay corto confirmados
+✓ EEPROM             presente, layout v5
+✓ SYNC entre bancos  1 us
+```
+
+No es la telemetría de siempre: **le pregunta a cada chip qué tiene adentro**.
+Un DAC que perdió su configuración sigue reportando cero errores y consumo
+normal — pero saca ruido. Eso no lo ve ningún contador; hay que ir a
+preguntarle.
+
+Conviene apretarlo **al llegar**, antes de dar por sentado que todo está bien, y
+**después de actualizar el programa**.
+
+---
+
 ## 13. Si algo no anda
 
 | Síntoma | Causa más probable | Qué hacer |

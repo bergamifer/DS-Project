@@ -175,3 +175,72 @@ design review era un error, confirmado en el bring-up).
 - ECM8000: condenser, **necesita +48V phantom + preamp** (la placa da nivel de línea, no
   phantom). Sin preamp, medir con app de SPL del teléfono (el protocolo mic-fijo/foco-móvil
   funciona igual).
+
+---
+
+## D. Captura remota del ADC (2026-08-23)
+
+Hasta acá, medir en este equipo era **mirar números por el cable serie**. El modo
+19 (LOOPBACK) hace una medición completa y devuelve *un* pico y *un* retardo;
+todo lo demás —la forma de onda, el contenido en frecuencia, lo que pasa entre
+canales— se calculaba adentro del STM32 y se tiraba.
+
+`GET /capture?n=2048` baja las **ocho entradas crudas**. La placa deja de tener
+que saber de antemano qué se le va a preguntar.
+
+```bash
+python3 tools/captura.py                   # 2048 muestras (43 ms), ~3 s de bajada
+python3 tools/captura.py -n 8192           # 170 ms, ~11 s
+python3 tools/captura.py archivo.ds        # analizar uno ya bajado
+```
+
+Escribe un **`.wav` de 8 canales a 48 kHz** —abrible en Audacity— y saca por
+pantalla nivel por entrada, frecuencia dominante y el **retardo entre canales por
+correlación cruzada**, en muestras, microsegundos y milímetros de camino
+acústico.
+
+### El autorrango, que no es un detalle
+
+Las muestras se guardan en `int32` con los 24 bits del ADC y se transmiten en
+`int16`. El desplazamiento se elige **después** de capturar, con el pico ya
+conocido, como el mínimo que no recorta.
+
+Con un desplazamiento fijo de 8 —el que haría entrar la escala completa— el piso
+de ruido, que son unas decenas de cuentas, quedaría en **cero**. La primera
+captura real salió con `>>0` justamente porque el pico era 286: con un
+desplazamiento fijo habría sido un archivo de ceros. `crudo = muestra << shift`.
+
+### Primera medición: el piso de ruido de las 8 entradas
+
+Sin nada conectado, 2048 muestras (2026-08-23):
+
+| entrada | pico | RMS (dBFS) |
+|---|---|---|
+| 0-3 | 59-70 | **−113,4** |
+| 4 | 286 | −102,3 |
+| 5 | 268 | −103,8 |
+| 6 | 165 | −106,4 |
+| 7 | 121 | −107,6 |
+
+**Las entradas 4 y 5 tienen ~10 dB más de ruido que las 0-3**, y las 6-7 quedan
+en el medio. Coincide con los `adc_pk` que se venían viendo todo el tiempo
+(`[85, 88, 92, 82, 468, 431, 164, 161]`), pero ahora está cuantificado y con la
+distribución medida en vez de un pico suelto.
+
+Las 0-3 y las 4-7 son **dos conectores RJ45 distintos** (§5 de la guía de
+operación), así que el gradiente sigue la separación física del conexionado.
+Todavía no hay explicación; queda anotado para mirar con osciloscopio.
+
+### Formato
+
+16 bytes de cabecera (`ds_cap_info_t` de `firmware/Core/Inc/uart_protocol.h`) y
+después `int16` little-endian intercalados por canal. Los tramos se piden de a
+uno con su offset —igual que los de firmware llevan número de tramo— así una
+trama perdida se nota en vez de correr todo lo que sigue.
+
+### Lo que habilita
+
+- **Cuando esté el puente de J13**: en vez de un pico y un retardo, la respuesta
+  completa del equipo medida sobre sí mismo.
+- **Con un micrófono**: el experimento 17-vs-16 —el que decide cuánto gastar en
+  hardware de DS12— deja de depender del oído y pasa a ser un número.

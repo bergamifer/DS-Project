@@ -208,6 +208,24 @@ SECTIONS
     . = ALIGN(8);
   } >DTCMRAM
 
+  /* AXI SRAM (D1, 512 kB en 0x24000000).
+   *
+   * Estuvo ENTERA sin usar hasta 2026-08-23: el firmware vivía en DTCM (rápida
+   * pero 128 kB, y ya con ~105 kB ocupados) y en RAM_D2 (los buffers de DMA).
+   * Acá va lo que es grande y no lo toca ningún DMA — hoy el buffer de captura
+   * remota del ADC, 256 kB.
+   *
+   * NOLOAD porque no hace falta inicializarla: son datos de medición que se
+   * escriben antes de leerse. Inicializar 256 kB en el arranque sería tiempo
+   * tirado. */
+  .axi_ram (NOLOAD) :
+  {
+    . = ALIGN(32);
+    *(.axi_ram)
+    *(.axi_ram*)
+    . = ALIGN(32);
+  } >RAM
+
   /* DMA buffers section - must be in D2 SRAM for DMA1/DMA2 access */
   .dma_buffer (NOLOAD) :
   {

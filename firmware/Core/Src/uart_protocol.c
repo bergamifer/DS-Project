@@ -49,6 +49,13 @@ static volatile uint8_t  beam_req_flag = 0;
 static volatile uint8_t  status_req_flag = 0;
 static volatile uint8_t  selftest_req_flag = 0;  /* CMD_SELFTEST: el I2C es del main loop */
 
+/* Captura remota del ADC. Igual que el status: el parser sólo levanta la
+ * bandera, la respuesta la arma y la manda el main loop. */
+static volatile uint8_t  cap_start_flag = 0;
+static volatile uint16_t cap_start_n = 0;
+static volatile uint8_t  cap_read_flag = 0;
+static volatile uint32_t cap_read_off = 0;
+
 /* IP del ESP32 (CMD_ESP_INFO). Escrita en contexto ISR, leída en el main loop:
  * el NUL se pone último, así un lector nunca ve una cadena sin terminar. */
 static char esp_ip[ESP_IP_MAXLEN + 1] = {0};
@@ -268,6 +275,17 @@ static void process_byte(uint8_t byte)
             beam_req_flag = 1;
             rx_frame_count++;
             send_ack();
+        } else if (rx_command == CMD_CAP_START && rx_payload_len == 2) {
+            cap_start_n = (uint16_t)rx_payload[0] | ((uint16_t)rx_payload[1] << 8);
+            cap_start_flag = 1;
+            rx_frame_count++;
+            /* Sin ACK: la trama CMD_CAP_INFO es la respuesta, y llega recién
+             * cuando la captura terminó de llenarse. */
+        } else if (rx_command == CMD_CAP_READ && rx_payload_len == 4) {
+            cap_read_off = (uint32_t)rx_payload[0]        | ((uint32_t)rx_payload[1] << 8)
+                         | ((uint32_t)rx_payload[2] << 16) | ((uint32_t)rx_payload[3] << 24);
+            cap_read_flag = 1;
+            rx_frame_count++;
         } else if (rx_command == CMD_SELFTEST && rx_payload_len == 0) {
             selftest_req_flag = 1;   /* el main loop lee I2C y manda CMD_HEALTH */
             rx_frame_count++;
@@ -596,6 +614,37 @@ static void send_frame_yielding(uint8_t cmd, const uint8_t *payload, uint16_t le
 void UART_Protocol_SendHealth(const ds_health_t *h)
 {
     send_frame_yielding(CMD_HEALTH, (const uint8_t *)h, sizeof(ds_health_t));
+}
+
+uint8_t UART_Protocol_GetCapStart(uint16_t *n)
+{
+    if (!cap_start_flag) return 0;
+    cap_start_flag = 0;
+    *n = cap_start_n;
+    return 1;
+}
+
+uint8_t UART_Protocol_GetCapRead(uint32_t *off)
+{
+    if (!cap_read_flag) return 0;
+    cap_read_flag = 0;
+    *off = cap_read_off;
+    return 1;
+}
+
+void UART_Protocol_SendCapInfo(const ds_cap_info_t *info)
+{
+    send_frame_yielding(CMD_CAP_INFO, (const uint8_t *)info, sizeof(ds_cap_info_t));
+}
+
+void UART_Protocol_SendCapData(uint32_t offset, const uint8_t *data, uint16_t len)
+{
+    uint8_t pl[PROTO_MAX_PAYLOAD];
+    if (len > CAP_CHUNK_BYTES) len = CAP_CHUNK_BYTES;
+    pl[0] = (uint8_t)(offset);        pl[1] = (uint8_t)(offset >> 8);
+    pl[2] = (uint8_t)(offset >> 16);  pl[3] = (uint8_t)(offset >> 24);
+    memcpy(&pl[4], data, len);
+    send_frame_yielding(CMD_CAP_DATA, pl, (uint16_t)(4 + len));
 }
 
 void UART_Protocol_SendStatus(const ds_status_t *st)

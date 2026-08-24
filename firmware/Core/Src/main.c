@@ -1000,6 +1000,37 @@ void OTA_Yield(void)           { Service_Fills(); }
  * final y sin ninguna pista de dónde. */
 static volatile int16_t sync_us_last = 0;   /* último SYNC entre bancos, ver el heartbeat */
 
+/* ============================================================
+ * Captura remota del ADC
+ *
+ * Guarda las 8 entradas crudas para bajarlas y analizarlas afuera. Hasta ahora
+ * medir era mirar números por el serie: el modo 19 hace una medición completa y
+ * devuelve UN pico y UN retardo, y todo lo demás —la forma de onda, el
+ * contenido en frecuencia, lo que pasa entre canales— se calculaba adentro y se
+ * tiraba. Con las muestras afuera, la placa deja de tener que saber de antemano
+ * qué se le va a preguntar.
+ *
+ * Vive en la AXI SRAM, que estaba ENTERA sin usar: 256 kB acá no le sacan nada
+ * a nadie. En DTCM no entraría (quedan ~23 kB) y en RAM_D2 competiría con los
+ * buffers de DMA.
+ *
+ * Se guarda en int32 con los 24 bits del ADC y se transmite en int16 con
+ * autorrango — ver ds_cap_info_t. Guardar la precisión completa y decidir el
+ * desplazamiento DESPUÉS, con el pico ya conocido, es lo que permite capturar
+ * tanto un chirp a fondo de escala como el piso de ruido de 437 cuentas.
+ * ============================================================ */
+#define CAP_MAX_SAMPLES   8192      /* 170 ms a 48 kHz; 8192×8×4 = 256 kB */
+
+typedef enum { CAP_IDLE = 0, CAP_FILL, CAP_READY } cap_state_t;
+
+static int32_t cap_buf[CAP_MAX_SAMPLES][ADC_CHANNELS] __attribute__((section(".axi_ram")));
+static volatile cap_state_t cap_state = CAP_IDLE;
+static volatile uint16_t    cap_want = 0;      /* muestras pedidas */
+static volatile uint16_t    cap_count = 0;     /* muestras ya guardadas */
+static uint8_t              cap_shift = 0;     /* autorrango, calculado al llenar */
+static int32_t              cap_peak = 0;
+static uint8_t              cap_info_due = 0;  /* hay un CAP_START esperando respuesta */
+
 static uint16_t ota_seq_next = 0;
 
 /* Reinicio diferido tras una carga exitosa. No se reinicia en el acto: primero
@@ -1872,6 +1903,67 @@ int main(void)
         UART_Print("OTA: reiniciando.\r\n");
         HAL_Delay(20);                 /* que salga la línea antes del reset */
         NVIC_SystemReset();
+      }
+
+      /* ===== Captura remota del ADC ===== */
+      {
+        uint16_t cn;
+        if (UART_Protocol_GetCapStart(&cn)) {
+          if (cn == 0) cn = 1;
+          if (cn > CAP_MAX_SAMPLES) cn = CAP_MAX_SAMPLES;
+          cap_want = cn;
+          cap_count = 0;
+          cap_info_due = 1;
+          cap_state = CAP_FILL;       /* lo llena Process_ADC_Half */
+        }
+
+        /* La captura terminó: recién acá se calcula el autorrango y se contesta
+         * el CAP_START. El pico se busca sobre TODO lo capturado, así el
+         * desplazamiento es uno solo para el archivo entero y la escala no
+         * cambia a mitad de camino. */
+        if (cap_info_due && cap_state == CAP_READY) {
+          cap_info_due = 0;
+          int32_t pk = 0;
+          for (uint32_t i = 0; i < cap_want; i++)
+            for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
+              int32_t v = cap_buf[i][ch];
+              if (v < 0) v = -v;
+              if (v > pk) pk = v;
+            }
+          cap_peak = pk;
+          cap_shift = 0;
+          while ((pk >> cap_shift) > 32767) cap_shift++;
+
+          ds_cap_info_t info;
+          info.n_samples   = cap_want;
+          info.n_channels  = ADC_CHANNELS;
+          info.shift       = cap_shift;
+          info.rate_hz     = 48000;
+          info.peak        = cap_peak;
+          info.total_bytes = (uint32_t)cap_want * ADC_CHANNELS * 2u;
+          UART_Protocol_SendCapInfo(&info);
+        }
+
+        uint32_t coff;
+        if (UART_Protocol_GetCapRead(&coff)) {
+          uint32_t total = (uint32_t)cap_want * ADC_CHANNELS * 2u;
+          uint8_t  chunk[CAP_CHUNK_BYTES];
+          uint16_t n = 0;
+          if (cap_state == CAP_READY && coff < total) {
+            uint32_t left = total - coff;
+            n = (uint16_t)((left > CAP_CHUNK_BYTES) ? CAP_CHUNK_BYTES : left);
+            /* offset en bytes → índice de muestra int16 → (i, ch) */
+            for (uint16_t k = 0; k < n; k += 2) {
+              uint32_t idx = (coff + k) / 2u;
+              int32_t  v   = cap_buf[idx / ADC_CHANNELS][idx % ADC_CHANNELS] >> cap_shift;
+              if (v >  32767) v =  32767;      /* el autorrango lo evita, pero */
+              if (v < -32768) v = -32768;      /* recortar es mejor que envolver */
+              chunk[k]     = (uint8_t)((int16_t)v & 0xFF);
+              chunk[k + 1] = (uint8_t)(((int16_t)v >> 8) & 0xFF);
+            }
+          }
+          UART_Protocol_SendCapData(coff, chunk, n);   /* n=0 = fuera de rango */
+        }
       }
 
       if (UART_Protocol_SelfTestRequested()) {
@@ -3951,6 +4043,20 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
   for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
     if (pk[ch] > adc_peak_hold[ch]) adc_peak_hold[ch] = pk[ch];   /* → serie */
     if (pk[ch] > adc_peak_net[ch])  adc_peak_net[ch]  = pk[ch];   /* → /status */
+  }
+
+  /* Captura remota: las OCHO entradas, crudas, en escala de 24 bits (la misma
+   * que adc_pk y que el cálculo de dBFS de la página). Copia directa, sin
+   * procesar: lo que se analice después se decide afuera. */
+  if (cap_state == CAP_FILL) {
+    uint32_t n = cap_count;
+    for (uint32_t i = 0; i < samples && n < cap_want; i++, n++) {
+      for (uint32_t ch = 0; ch < ADC_CHANNELS; ch++) {
+        cap_buf[n][ch] = rx_buf[i * ADC_CHANNELS + ch] >> 8;
+      }
+    }
+    cap_count = (uint16_t)n;
+    if (n >= cap_want) cap_state = CAP_READY;   /* el main loop hace el resto */
   }
 
   /* LOOPBACK: capturar las LB_NUM_PROBES primeras entradas SIMULTÁNEAMENTE.

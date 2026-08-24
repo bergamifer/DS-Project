@@ -60,6 +60,31 @@
                                      * produciendo underruns=0 y CPU normal. */
 #define CMD_HEALTH          0x0E    /* STM32 → ESP32, ds_health_t */
 
+/* ===== Captura remota del ADC (0x0F-0x12) =====
+ *
+ * Bajar las muestras crudas de las 8 entradas para analizarlas en la
+ * computadora: forma de onda, espectro, fase entre canales, correlación.
+ *
+ * Existe porque hasta ahora medir era mirar números por el serie. El modo 19
+ * (LOOPBACK) hace una medición completa y devuelve UN pico y UN retardo; todo
+ * lo demás —cómo es la onda, qué frecuencias, qué pasa entre canales— se
+ * calculaba adentro y se tiraba. Con las muestras crudas afuera, la placa deja
+ * de tener que saber qué se le va a preguntar.
+ *
+ * La transferencia va pedido-respuesta, un tramo por vez, como el status: no
+ * hace falta control de flujo porque el que pide es el que consume. */
+#define CMD_CAP_START       0x0F    /* payload: uint16 n_samples. La respuesta
+                                     * (CMD_CAP_INFO) llega recién cuando la
+                                     * captura se llenó — hasta 170 ms. */
+#define CMD_CAP_INFO        0x10    /* STM32 → ESP32, ds_cap_info_t */
+#define CMD_CAP_READ        0x11    /* payload: uint32 offset en bytes */
+#define CMD_CAP_DATA        0x12    /* STM32 → ESP32: [offset:4][datos:≤124] */
+
+/* Datos por tramo. 124 y no 128 porque los primeros 4 bytes llevan el offset —
+ * el mismo motivo por el que CMD_FW_DATA lleva número de tramo: sin él, una
+ * trama perdida corre todo lo que sigue y el archivo sale mal sin avisar. */
+#define CAP_CHUNK_BYTES     (PROTO_MAX_PAYLOAD - 4)
+
 /* ===== Actualización de firmware por WiFi (0x20-0x23) =====
  *
  * Los tres primeros NO se contestan desde el parser: el ACK lo manda el MAIN
@@ -168,6 +193,30 @@ typedef struct __attribute__((packed)) {
 } ds_fw_begin_t;
 
 _Static_assert(sizeof(ds_fw_begin_t) == 12, "ds_fw_begin_t must be 12 bytes");
+
+/**
+ * @brief Cabecera de una captura (CMD_CAP_INFO).
+ *
+ * Las muestras viajan en int16 pero se guardan en int32 con los 24 bits del
+ * ADC. `shift` es el AUTORRANGO: se elige después de capturar, con el pico ya
+ * conocido, como el mínimo desplazamiento que evita recortar.
+ *
+ * Eso importa de verdad. Con un desplazamiento fijo de 8 (el que haría entrar
+ * la escala completa) el piso de ruido —unas 437 cuentas de 24 bits— quedaría
+ * en 1 LSB y medir ruido sería imposible. Con autorrango, una captura de puro
+ * ruido usa shift=0 y llega entera. Para reconstruir la escala de 24 bits:
+ * `crudo = muestra << shift`.
+ */
+typedef struct __attribute__((packed)) {
+    uint16_t n_samples;
+    uint8_t  n_channels;
+    uint8_t  shift;          /* muestra_enviada = crudo_24bit >> shift */
+    uint32_t rate_hz;
+    int32_t  peak;           /* pico absoluto en escala de 24 bits (máx 8388607) */
+    uint32_t total_bytes;    /* n_samples × n_channels × 2 */
+} ds_cap_info_t;
+
+_Static_assert(sizeof(ds_cap_info_t) == 16, "ds_cap_info_t must be 16 bytes");
 
 /**
  * @brief Resultado del autodiagnóstico (CMD_HEALTH).
@@ -422,5 +471,24 @@ uint8_t UART_Protocol_SelfTestRequested(void);
 
 /** @brief Manda una trama CMD_HEALTH. Sólo desde el main loop, como SendStatus. */
 void UART_Protocol_SendHealth(const ds_health_t *h);
+
+/**
+ * @brief Poll for a CMD_CAP_START request.
+ * @param n  destino: muestras pedidas.
+ * @return 1 y llena *n una vez por pedido, 0 si no hay ninguno.
+ */
+uint8_t UART_Protocol_GetCapStart(uint16_t *n);
+
+/**
+ * @brief Poll for a CMD_CAP_READ request.
+ * @param off  destino: offset en bytes dentro de la captura.
+ */
+uint8_t UART_Protocol_GetCapRead(uint32_t *off);
+
+/** @brief Manda CMD_CAP_INFO. Sólo desde el main loop. */
+void UART_Protocol_SendCapInfo(const ds_cap_info_t *info);
+
+/** @brief Manda CMD_CAP_DATA con un tramo. Sólo desde el main loop. */
+void UART_Protocol_SendCapData(uint32_t offset, const uint8_t *data, uint16_t len);
 
 #endif /* UART_PROTOCOL_H */

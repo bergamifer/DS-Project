@@ -79,6 +79,12 @@
 // configuracion sigue reportando underruns=0 y CPU normal.
 #define CMD_SELFTEST     0x0D   // sin payload
 #define CMD_HEALTH       0x0E   // STM32 -> ESP32, ds_health_t
+// Captura remota del ADC: bajar las muestras crudas para analizarlas afuera.
+#define CMD_CAP_START    0x0F   // payload: uint16 n_samples
+#define CMD_CAP_INFO     0x10   // STM32 -> ESP32, ds_cap_info_t
+#define CMD_CAP_READ     0x11   // payload: uint32 offset en bytes
+#define CMD_CAP_DATA     0x12   // STM32 -> ESP32: [offset:4][datos]
+#define CAP_CHUNK_BYTES  (PROTO_MAX_PAYLOAD - 4)
 // Actualizacion de firmware del STM32 por WiFi. Los tres primeros NO se
 // contestan desde el parser del STM32: el ACK llega recien cuando termino de
 // escribir la flash, y ESE es el control de flujo — mientras no llega, no se
@@ -107,6 +113,17 @@
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
 #define FW_CHUNK_MAX     (PROTO_MAX_PAYLOAD - 2)
+
+// Espejo de ds_cap_info_t del STM32 (uart_protocol.h).
+typedef struct __attribute__((packed)) {
+    uint16_t n_samples;
+    uint8_t  n_channels;
+    uint8_t  shift;          // muestra_enviada = crudo_24bit >> shift
+    uint32_t rate_hz;
+    int32_t  peak;           // pico absoluto en escala de 24 bits
+    uint32_t total_bytes;
+} ds_cap_info_t;
+_Static_assert(sizeof(ds_cap_info_t) == 16, "ds_cap_info_t debe ser 16 bytes");
 
 // Espejo de ds_health_t del STM32 (uart_protocol.h).
 typedef struct __attribute__((packed)) {
@@ -207,6 +224,12 @@ static ds_status_t       last_status;  // valido tras tomar status_sem
 static uint16_t          last_status_len; // largo REAL de la trama (puede != sizeof)
 static ds_health_t       last_health;   // valido tras tomar health_sem
 static SemaphoreHandle_t health_sem;
+static ds_cap_info_t     last_cap_info; // valido tras tomar cap_info_sem
+static SemaphoreHandle_t cap_info_sem;
+static uint8_t           last_cap_data[CAP_CHUNK_BYTES];
+static uint32_t          last_cap_off;
+static uint16_t          last_cap_len;
+static SemaphoreHandle_t cap_data_sem;
 
 // Serializa las tramas hacia el STM32. Sin esto, el push periodico de la IP
 // (monitor task) puede intercalarse con la transaccion comando→ACK de un handler
@@ -357,6 +380,23 @@ static bool frame_feed(uint8_t b)
         if (fr_cmd == CMD_ACK || fr_cmd == CMD_NACK) {
             last_ack_ok = (fr_cmd == CMD_ACK);
             xSemaphoreGive(ack_sem);
+        } else if (fr_cmd == CMD_CAP_INFO && fr_len == sizeof(ds_cap_info_t)) {
+            uint8_t x = 0;
+            for (uint16_t i = 0; i < fr_len; i++) x ^= fr_payload[i];
+            if (x == fr_cksum) {
+                memcpy(&last_cap_info, fr_payload, sizeof(ds_cap_info_t));
+                xSemaphoreGive(cap_info_sem);
+            }
+        } else if (fr_cmd == CMD_CAP_DATA && fr_len >= 4 && fr_len <= PROTO_MAX_PAYLOAD) {
+            uint8_t x = 0;
+            for (uint16_t i = 0; i < fr_len; i++) x ^= fr_payload[i];
+            if (x == fr_cksum) {
+                last_cap_off = (uint32_t)fr_payload[0]        | ((uint32_t)fr_payload[1] << 8)
+                             | ((uint32_t)fr_payload[2] << 16) | ((uint32_t)fr_payload[3] << 24);
+                last_cap_len = (uint16_t)(fr_len - 4);
+                if (last_cap_len) memcpy(last_cap_data, &fr_payload[4], last_cap_len);
+                xSemaphoreGive(cap_data_sem);
+            }
         } else if (fr_cmd == CMD_HEALTH && fr_len == sizeof(ds_health_t)) {
             uint8_t x = 0;
             for (uint16_t i = 0; i < fr_len; i++) x ^= fr_payload[i];
@@ -1017,6 +1057,94 @@ static esp_err_t volume_handler(httpd_req_t *req)
     }
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
+// ============== GET /capture — muestras crudas del ADC ==============
+//
+// Baja las 8 entradas tal como las ve el ADC, para analizarlas en la
+// computadora: forma de onda, espectro, fase entre canales, correlacion.
+//
+// Existe porque hasta ahora medir era mirar numeros por el cable serie. El modo
+// 19 hace una medicion completa y devuelve UN pico y UN retardo; todo lo demas
+// se calculaba adentro del STM32 y se tiraba. Con las muestras afuera, la placa
+// deja de tener que saber de antemano que se le va a preguntar.
+//
+// Formato: 16 bytes de cabecera (ds_cap_info_t) + int16 intercalados por canal.
+// Ver tools/captura.py, que lo convierte en .wav y saca las cuentas.
+//
+// ⚠️ El pedido de cada tramo NO retiene el lock del UART mientras espera la
+// respuesta. Eso es deliberado: retenerlo durante la espera es exactamente el
+// abrazo mortal que rompio las primeras cargas de firmware (el lector es el
+// unico que puede ver la respuesta, y se quedaba esperando el lock). Cada trama
+// se escribe entera bajo el lock, que es lo unico que hace falta para que no se
+// entremezclen bytes de dos tramas.
+
+static esp_err_t capture_handler(httpd_req_t *req)
+{
+    char err[160];
+
+    int n = 2048;                       // ~43 ms, ~3 s de transferencia
+    {
+        char q[64], v[16];
+        if (httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK &&
+            httpd_query_key_value(q, "n", v, sizeof(v)) == ESP_OK) {
+            n = atoi(v);
+        }
+    }
+    if (n < 64)   n = 64;
+    if (n > 8192) n = 8192;             // el techo del buffer del STM32
+
+    uint8_t p2[2] = { (uint8_t)(n & 0xFF), (uint8_t)(n >> 8) };
+    xSemaphoreTake(cap_info_sem, 0);
+    uart_send_frame(CMD_CAP_START, p2, 2);
+
+    // La respuesta llega recien cuando la captura se lleno: 8192 muestras a
+    // 48 kHz son 170 ms, y el STM32 puede estar sirviendo audio en el medio.
+    if (xSemaphoreTake(cap_info_sem, 3000 / portTICK_PERIOD_MS) != pdTRUE) {
+        snprintf(err, sizeof(err),
+                 "{\"status\":\"error\",\"message\":\"el STM32 no arranco la captura\"}");
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, err, strlen(err));
+        return ESP_OK;
+    }
+
+    ds_cap_info_t info = last_cap_info;
+    uint32_t total = info.total_bytes;
+
+    printf("[ESP32] Captura: %u muestras x %u canales, shift %u, pico %ld (%lu bytes)\n",
+           info.n_samples, info.n_channels, info.shift,
+           (long)info.peak, (unsigned long)total);
+
+    httpd_resp_set_type(req, "application/octet-stream");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=captura.ds");
+    httpd_resp_send_chunk(req, (const char *)&info, sizeof(info));
+
+    for (uint32_t off = 0; off < total; ) {
+        uint8_t r4[4] = { (uint8_t)off, (uint8_t)(off >> 8),
+                          (uint8_t)(off >> 16), (uint8_t)(off >> 24) };
+        int ok = 0;
+        // Hasta tres intentos por tramo: reenviar es inofensivo porque el
+        // pedido lleva el offset — el STM32 devuelve siempre lo mismo.
+        for (int t = 0; t < 3 && !ok; t++) {
+            xSemaphoreTake(cap_data_sem, 0);
+            uart_send_frame(CMD_CAP_READ, r4, 4);
+            if (xSemaphoreTake(cap_data_sem, 1500 / portTICK_PERIOD_MS) == pdTRUE &&
+                last_cap_off == off && last_cap_len > 0) {
+                ok = 1;
+            }
+        }
+        if (!ok) {
+            printf("[ESP32] Captura CORTADA en el byte %lu\n", (unsigned long)off);
+            httpd_resp_send_chunk(req, NULL, 0);   // cierra truncado a proposito
+            return ESP_OK;
+        }
+        httpd_resp_send_chunk(req, (const char *)last_cap_data, last_cap_len);
+        off += last_cap_len;
+    }
+
+    httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
 }
 
@@ -1937,6 +2065,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/firmware",.method = HTTP_POST, .handler = firmware_handler},
             { .uri = "/firmware-esp", .method = HTTP_POST, .handler = firmware_esp_handler },
             { .uri = "/health",  .method = HTTP_GET,  .handler = health_handler  },
+            { .uri = "/capture", .method = HTTP_GET,  .handler = capture_handler },
         };
         for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
             esp_err_t e = httpd_register_uri_handler(server, &uris[i]);
@@ -2136,6 +2265,8 @@ void app_main(void)
     // Semaforos request/response del protocolo binario (antes del monitor task)
     ack_sem = xSemaphoreCreateBinary();
     health_sem = xSemaphoreCreateBinary();
+    cap_info_sem = xSemaphoreCreateBinary();
+    cap_data_sem = xSemaphoreCreateBinary();
     status_sem = xSemaphoreCreateBinary();
     uart_tx_mutex = xSemaphoreCreateRecursiveMutex();
 
