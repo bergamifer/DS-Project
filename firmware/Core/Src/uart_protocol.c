@@ -47,6 +47,7 @@ static volatile uint8_t  mode_req_idx = 0;
 static ds_beam_req_t     beam_req;
 static volatile uint8_t  beam_req_flag = 0;
 static volatile uint8_t  status_req_flag = 0;
+static volatile uint8_t  selftest_req_flag = 0;  /* CMD_SELFTEST: el I2C es del main loop */
 
 /* IP del ESP32 (CMD_ESP_INFO). Escrita en contexto ISR, leída en el main loop:
  * el NUL se pone último, así un lector nunca ve una cadena sin terminar. */
@@ -267,6 +268,10 @@ static void process_byte(uint8_t byte)
             beam_req_flag = 1;
             rx_frame_count++;
             send_ack();
+        } else if (rx_command == CMD_SELFTEST && rx_payload_len == 0) {
+            selftest_req_flag = 1;   /* el main loop lee I2C y manda CMD_HEALTH */
+            rx_frame_count++;
+            /* Sin ACK: la trama CMD_HEALTH es la respuesta, igual que el status */
         } else if (rx_command == CMD_GET_STATUS && rx_payload_len == 0) {
             status_req_flag = 1;   /* main loop builds + sends CMD_STATUS */
             rx_frame_count++;
@@ -534,19 +539,29 @@ uint8_t UART_Protocol_StatusRequested(void)
     return 0;
 }
 
-void UART_Protocol_SendStatus(const ds_status_t *st)
+uint8_t UART_Protocol_SelfTestRequested(void)
 {
-    /* Full framing (header + cmd + len + payload + checksum + footer) so the
-     * ESP32 parses it with the same state machine as any frame. */
-    uint8_t frame[8 + sizeof(ds_status_t)];   /* hdr2+cmd1+len2+payload+ck1+ftr2 */
-    uint16_t len = sizeof(ds_status_t);
+    if (selftest_req_flag) {
+        selftest_req_flag = 0;
+        return 1;
+    }
+    return 0;
+}
+
+/* El envio de una trama larga con servicio de fills entre byte y byte. Lo usan
+ * SendStatus y SendHealth: es exactamente el mismo problema (decenas de bytes a
+ * 115200 desde el main loop sin perder deadlines de audio) y no habia razon
+ * para tener dos copias. */
+static void send_frame_yielding(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    uint8_t frame[8 + PROTO_MAX_PAYLOAD];
     uint32_t fi = 0;
     frame[fi++] = PROTO_HEADER_1;
     frame[fi++] = PROTO_HEADER_2;
-    frame[fi++] = CMD_STATUS;
+    frame[fi++] = cmd;
     frame[fi++] = len & 0xFF;
     frame[fi++] = (len >> 8) & 0xFF;
-    memcpy(&frame[fi], st, len);
+    memcpy(&frame[fi], payload, len);
     uint8_t x = 0;
     for (uint16_t i = 0; i < len; i++) x ^= frame[fi + i];
     fi += len;
@@ -554,19 +569,6 @@ void UART_Protocol_SendStatus(const ds_status_t *st)
     frame[fi++] = PROTO_FOOTER_1;
     frame[fi++] = PROTO_FOOTER_2;
 
-    /* TX byte a byte atendiendo los fills de audio entre carácter y carácter.
-     *
-     * La trama de status son ~60 bytes = ~5,2 ms bloqueado a 115200. Eso entra
-     * bajo el deadline de fill de 10 ms del buffer de 480 muestras, pero **no
-     * entraría bajo uno de 5 ms** si se baja el buffer a 240 — cada GET /status
-     * produciría un pop, igual que los prints antes del arreglo del 2026-08-14.
-     * Con esto el cambio de buffer deja de estar bloqueado por acá.
-     *
-     * Sólo se puede hacer porque SendStatus se llama desde el MAIN LOOP
-     * (main.c, tras UART_Protocol_StatusRequested). Los ACK/NACK se mandan desde
-     * el parser, que corre dentro de HAL_UART_RxCpltCallback — contexto de ISR —
-     * y ahí NO se puede servir el pipeline: hay que dejarlos bloqueantes. Son 5
-     * bytes = 434 µs, que entra de sobra en cualquiera de los dos deadlines. */
     tx_frame_busy = 1;          /* el ISR encola sus ACK en vez de intercalarlos */
     for (uint16_t i = 0; i < fi; i++) {
         while (!(huart_esp->Instance->ISR & USART_ISR_TXE_TXFNF)) {
@@ -589,4 +591,17 @@ void UART_Protocol_SendStatus(const ds_status_t *st)
         while (na--) send_ack_now();
         while (nn--) send_nack_now();
     }
+}
+
+void UART_Protocol_SendHealth(const ds_health_t *h)
+{
+    send_frame_yielding(CMD_HEALTH, (const uint8_t *)h, sizeof(ds_health_t));
+}
+
+void UART_Protocol_SendStatus(const ds_status_t *st)
+{
+    /* ~5,2 ms a 115200, pero sin bloquear el pipeline: send_frame_yielding
+     * sirve los fills de audio entre byte y byte. Ver el comentario del
+     * helper y el del header. */
+    send_frame_yielding(CMD_STATUS, (const uint8_t *)st, sizeof(ds_status_t));
 }

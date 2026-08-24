@@ -946,6 +946,7 @@ static void Cal_StartScan(void);
 static void Cal_Process(void);
 static void LB_Process(void);
 static void OTA_ServiceRequests(void);
+static void Health_Run(ds_health_t *h);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -997,6 +998,8 @@ void OTA_Yield(void)           { Service_Fills(); }
  * que se pierda hace que el ESP32 reenvíe el mismo tramo y el STM32 lo escriba
  * DOS VECES, corriendo todo lo que sigue medio tramo — con el CRC fallando al
  * final y sin ninguna pista de dónde. */
+static volatile int16_t sync_us_last = 0;   /* último SYNC entre bancos, ver el heartbeat */
+
 static uint16_t ota_seq_next = 0;
 
 /* Reinicio diferido tras una carga exitosa. No se reinicia en el acto: primero
@@ -1011,6 +1014,54 @@ static uint32_t ota_reboot_at = 0;
  * un estado del que nadie sabe cómo salir. Treinta segundos son un orden de
  * magnitud más que el tramo más lento. */
 #define OTA_IDLE_TIMEOUT_MS  30000
+
+/* ============================================================
+ * Autodiagnóstico — lo que los chips REALMENTE tienen adentro
+ *
+ * Vuelve a leer por I2C la configuración de los cuatro PCM1690, del AK5538VN y
+ * de la EEPROM. No es telemetría: es una prueba activa, y por eso existe.
+ *
+ * El caso que justifica todo esto: un PCM1690 al que se le fue el registro de
+ * formato deja de decodificar el TDM y saca ruido o silencio — y sin embargo
+ * `underruns` sigue en cero, el CPU sigue igual y el /status entero se ve
+ * perfecto. Ningún contador pasivo lo ve. Sólo se nota escuchando, o leyendo
+ * los registros.
+ *
+ * Se devuelven los VALORES, no un veredicto: un rojo que no se puede discutir
+ * es un rojo en el que no se confía.
+ *
+ * ⚠️ Bloquea unos pocos ms de I2C. Corre en el main loop, nunca en una ISR.
+ * ============================================================ */
+static void Health_Run(ds_health_t *h)
+{
+  memset(h, 0, sizeof(*h));
+
+  for (uint32_t d = 0; d < 4; d++) {
+    uint8_t v = 0;
+    if (PCM1690_ReadReg(&hi2c1, dac_addrs[d], PCM1690_REG_FORMAT, &v) == PCM1690_OK) {
+      h->dac_present |= (uint8_t)(1u << d);
+      h->dac_fmt[d] = v;
+      if (PCM1690_ReadReg(&hi2c1, dac_addrs[d], PCM1690_REG_ATTEN_CH1, &v) == PCM1690_OK)
+        h->dac_att[d] = v;
+    }
+    Service_Fills();       /* cada lectura son ~200 µs; igual no se dejan morir */
+  }
+
+  /* AK5538VN por I2C3. R02/R03/R04 son los que se escriben en el arranque; que
+   * sigan ahí confirma que el chip no se reinició por su cuenta. */
+  for (uint8_t r = 1; r <= 4; r++) {
+    uint8_t v = 0xEE;
+    if (HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, r, I2C_MEMADD_SIZE_8BIT, &v, 1, 50) == HAL_OK) {
+      h->ak_present = 1;
+      h->ak_regs[r - 1] = v;
+    }
+  }
+  Service_Fills();
+
+  h->eeprom_present = EEPROM_IsAvailable() ? 1 : 0;
+  h->eeprom_ver     = EEPROM_CFG_VERSION;
+  h->sync_us        = sync_us_last;
+}
 
 static void OTA_ServiceRequests(void)
 {
@@ -1823,6 +1874,12 @@ int main(void)
         NVIC_SystemReset();
       }
 
+      if (UART_Protocol_SelfTestRequested()) {
+        ds_health_t h;
+        Health_Run(&h);
+        UART_Protocol_SendHealth(&h);
+      }
+
       if (UART_Protocol_StatusRequested()) {
         ds_status_t st;
         st.proto_ver = PROTO_VERSION;
@@ -1982,6 +2039,12 @@ int main(void)
         while (skew >  CYC_PER_BUFCYCLE / 2) skew -= CYC_PER_BUFCYCLE;
         while (skew < -CYC_PER_BUFCYCLE / 2) skew += CYC_PER_BUFCYCLE;
         int32_t skew_us = skew / (int32_t)CPU_FREQ_MHZ;
+        /* Se guarda para el autodiagnóstico: hasta ahora el SYNC entre bancos
+         * sólo existía en esta línea del serie, o sea que verificarlo pedía un
+         * cable. Es de las métricas que más importan —milisegundos acá
+         * significan que el enfoque vertical no existe— y era la menos visible. */
+        sync_us_last = (int16_t)((skew_us > 32767) ? 32767 :
+                                 ((skew_us < -32768) ? -32768 : skew_us));
 
         static uint64_t last_fill_all = 0;
         uint64_t now_fill = fill_all_cycles;

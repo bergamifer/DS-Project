@@ -50,6 +50,16 @@
                                      * en un estado raro a fuerza de ajustes
                                      * en vivo, varios de los cuales se
                                      * guardan solos. */
+#define CMD_SELFTEST        0x0D    /* payload: none. Pide un AUTODIAGNÓSTICO:
+                                     * el STM32 vuelve a leer por I2C lo que los
+                                     * chips REALMENTE tienen adentro y contesta
+                                     * con ds_health_t (CMD_HEALTH). A diferencia
+                                     * del status —que es telemetría pasiva— esto
+                                     * es una prueba ACTIVA, y por eso hace falta:
+                                     * un DAC que perdió su configuración sigue
+                                     * produciendo underruns=0 y CPU normal. */
+#define CMD_HEALTH          0x0E    /* STM32 → ESP32, ds_health_t */
+
 /* ===== Actualización de firmware por WiFi (0x20-0x23) =====
  *
  * Los tres primeros NO se contestan desde el parser: el ACK lo manda el MAIN
@@ -84,7 +94,7 @@
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION       8   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION       9   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -98,7 +108,10 @@
                                  * v8: + fw_id / fw_build / ota_state / ota_pct.
                                  * Con actualización por WiFi, "¿qué binario
                                  * está corriendo?" deja de ser obvio: ya no
-                                 * es el último que uno flasheó a mano. */
+                                 * es el último que uno flasheó a mano.
+                                 * v9: + CMD_SELFTEST/CMD_HEALTH. ds_status_t NO
+                                 * cambió — lo que cambió es el repertorio de
+                                 * comandos, que también es contrato. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -155,6 +168,36 @@ typedef struct __attribute__((packed)) {
 } ds_fw_begin_t;
 
 _Static_assert(sizeof(ds_fw_begin_t) == 12, "ds_fw_begin_t must be 12 bytes");
+
+/**
+ * @brief Resultado del autodiagnóstico (CMD_HEALTH).
+ *
+ * Todo lo de acá se lee POR I2C en el momento de pedirlo, no es un valor
+ * cacheado del arranque. Ésa es la diferencia con ds_status_t y la razón de que
+ * exista: los contadores pasivos no ven un chip que perdió su configuración.
+ * Un PCM1690 al que se le fue el registro de formato deja de decodificar el
+ * TDM y saca ruido o silencio, y sin embargo `underruns` sigue en cero, el CPU
+ * sigue igual y el status entero se ve perfecto.
+ *
+ * Se mandan los VALORES LEÍDOS, no sólo un veredicto: un rojo que no se puede
+ * discutir es un rojo en el que no se confía. La página muestra las dos cosas.
+ */
+typedef struct __attribute__((packed)) {
+    uint8_t  dac_present;    /* bit N = el DAC N contesta por I2C */
+    uint8_t  dac_fmt[4];     /* registro 65 (FORMAT) de cada DAC — se espera 0x06 */
+    uint8_t  dac_att[4];     /* registro 72 (ATT ch1) — dB = −(255−att)/2 */
+    uint8_t  ak_present;     /* 1 = el AK5538VN contesta por I2C3 */
+    uint8_t  ak_regs[4];     /* R01..R04 — se espera R02=0x31 R03=0x40 R04=0x02 */
+    uint8_t  eeprom_present;
+    uint8_t  eeprom_ver;     /* versión de layout guardada */
+    int16_t  sync_us;        /* desfase entre los dos bancos de SAI. Vale µs
+                              * sueltos; milisegundos significa que las filas
+                              * 0-1 y 2-3 están tocando ventanas de tiempo
+                              * distintas y el enfoque vertical no existe. */
+    uint8_t  rsv[2];
+} ds_health_t;
+
+_Static_assert(sizeof(ds_health_t) == 20, "ds_health_t must be 20 bytes");
 
 /**
  * @brief Telemetry snapshot (CMD_STATUS response). Little-endian packed —
@@ -367,5 +410,17 @@ void UART_Protocol_FwReply(uint8_t ok);
  *        cancelar no escribe nada).
  */
 uint8_t UART_Protocol_GetFwAbort(void);
+
+/**
+ * @brief Poll for a CMD_SELFTEST request (cleared on read).
+ *
+ * El trabajo es del main loop: son lecturas I2C, y de I2C no se toca nada desde
+ * una ISR. Igual que el status, no lleva ACK — la trama CMD_HEALTH es la
+ * respuesta.
+ */
+uint8_t UART_Protocol_SelfTestRequested(void);
+
+/** @brief Manda una trama CMD_HEALTH. Sólo desde el main loop, como SendStatus. */
+void UART_Protocol_SendHealth(const ds_health_t *h);
 
 #endif /* UART_PROTOCOL_H */

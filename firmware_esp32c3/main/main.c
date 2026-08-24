@@ -74,6 +74,11 @@
 #define CMD_SET_AMPS     0x0A   // payload: uint8 (1=on, 0=off) — enable de los 32 PAM8302A
 #define CMD_FACTORY_RESET 0x0C  // sin payload — todo a valores de fabrica, y persiste
 #define CMD_SET_INGAIN   0x0B   // payload: uint8 dB (0..36) — ganancia de ENTRADA
+// Autodiagnostico: el STM32 vuelve a leer por I2C lo que los chips REALMENTE
+// tienen adentro. Es una prueba ACTIVA, no telemetria: un DAC que perdio su
+// configuracion sigue reportando underruns=0 y CPU normal.
+#define CMD_SELFTEST     0x0D   // sin payload
+#define CMD_HEALTH       0x0E   // STM32 -> ESP32, ds_health_t
 // Actualizacion de firmware del STM32 por WiFi. Los tres primeros NO se
 // contestan desde el parser del STM32: el ACK llega recien cuando termino de
 // escribir la flash, y ESE es el control de flujo — mientras no llega, no se
@@ -97,11 +102,25 @@
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    8
+#define PROTO_VERSION    9
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
 #define FW_CHUNK_MAX     (PROTO_MAX_PAYLOAD - 2)
+
+// Espejo de ds_health_t del STM32 (uart_protocol.h).
+typedef struct __attribute__((packed)) {
+    uint8_t  dac_present;    // bit N = el DAC N contesta por I2C
+    uint8_t  dac_fmt[4];     // registro 65 (FORMAT) — se espera 0x06
+    uint8_t  dac_att[4];     // registro 72 (ATT ch1) — dB = -(255-att)/2
+    uint8_t  ak_present;
+    uint8_t  ak_regs[4];     // R01..R04 — se espera R02=0x31 R03=0x40 R04=0x02
+    uint8_t  eeprom_present;
+    uint8_t  eeprom_ver;
+    int16_t  sync_us;        // desfase entre los dos bancos de SAI
+    uint8_t  rsv[2];
+} ds_health_t;
+_Static_assert(sizeof(ds_health_t) == 20, "ds_health_t debe ser 20 bytes");
 
 typedef struct __attribute__((packed)) {
     uint32_t len;
@@ -186,6 +205,8 @@ static SemaphoreHandle_t status_sem;   // CMD_STATUS recibido
 static volatile bool     last_ack_ok = false;
 static ds_status_t       last_status;  // valido tras tomar status_sem
 static uint16_t          last_status_len; // largo REAL de la trama (puede != sizeof)
+static ds_health_t       last_health;   // valido tras tomar health_sem
+static SemaphoreHandle_t health_sem;
 
 // Serializa las tramas hacia el STM32. Sin esto, el push periodico de la IP
 // (monitor task) puede intercalarse con la transaccion comando→ACK de un handler
@@ -336,6 +357,13 @@ static bool frame_feed(uint8_t b)
         if (fr_cmd == CMD_ACK || fr_cmd == CMD_NACK) {
             last_ack_ok = (fr_cmd == CMD_ACK);
             xSemaphoreGive(ack_sem);
+        } else if (fr_cmd == CMD_HEALTH && fr_len == sizeof(ds_health_t)) {
+            uint8_t x = 0;
+            for (uint16_t i = 0; i < fr_len; i++) x ^= fr_payload[i];
+            if (x == fr_cksum) {
+                memcpy(&last_health, fr_payload, sizeof(ds_health_t));
+                xSemaphoreGive(health_sem);
+            }
         } else if (fr_cmd == CMD_STATUS && fr_len >= 3 && fr_len <= PROTO_MAX_PAYLOAD) {
             /* Se acepta CUALQUIER largo razonable, no solo el exacto.
              *
@@ -992,6 +1020,122 @@ static esp_err_t volume_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// ============== GET /health — autodiagnostico ==============
+//
+// Le pide al STM32 que vuelva a LEER POR I2C lo que los chips tienen adentro y
+// arma un veredicto por cada cosa, con el numero atras.
+//
+// Por que no alcanza con /status: el status es telemetria pasiva. Un PCM1690 al
+// que se le fue el registro de formato deja de decodificar el TDM y saca ruido
+// o silencio — y sin embargo underruns sigue en cero, el CPU sigue igual y el
+// status entero se ve perfecto. Ningun contador ve eso; hay que ir a preguntar.
+//
+// Cada chequeo devuelve estado + valor + esperado. Un rojo que no se puede
+// discutir es un rojo en el que no se confia.
+
+// 2 = bien, 1 = sospechoso, 0 = mal.
+static int hchk(char *o, size_t n, int *first, const char *name, int st,
+                const char *val, const char *want)
+{
+    int k = snprintf(o, n, "%s{\"n\":\"%s\",\"st\":%d,\"v\":\"%s\",\"w\":\"%s\"}",
+                     *first ? "" : ",", name, st, val, want);
+    *first = 0;
+    return k;
+}
+
+static esp_err_t health_handler(httpd_req_t *req)
+{
+    xSemaphoreTake(health_sem, 0);              // drenar respuesta vieja
+    uart_send_frame(CMD_SELFTEST, NULL, 0);
+
+    char buf[1400];
+    int  p = 0;
+
+    if (xSemaphoreTake(health_sem, 3000 / portTICK_PERIOD_MS) != pdTRUE) {
+        snprintf(buf, sizeof(buf),
+                 "{\"ok\":false,\"message\":\"el STM32 no contesto el autodiagnostico\"}");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, buf, strlen(buf));
+        return ESP_OK;
+    }
+
+    const ds_health_t *h = &last_health;
+    int first = 1, worst = 2;
+    char v[80], w[48];
+
+    p += snprintf(buf + p, sizeof(buf) - p, "{\"ok\":true,\"checks\":[");
+
+    // --- los cuatro PCM1690 ---
+    for (int d = 0; d < 4; d++) {
+        char name[16];
+        snprintf(name, sizeof(name), "DAC%d", d);
+        int present = (h->dac_present >> d) & 1;
+        int st;
+        if (!present) {
+            st = 0;
+            snprintf(v, sizeof(v), "no contesta por I2C");
+        } else if (h->dac_fmt[d] != 0x06) {
+            /* El que importa de verdad: sin FORMAT=0x06 el chip no decodifica
+             * el TDM8 y saca ruido, con toda la telemetria en verde. */
+            st = 0;
+            snprintf(v, sizeof(v), "FORMAT=0x%02X (deberia ser 0x06)", h->dac_fmt[d]);
+        } else {
+            st = 2;
+            int db10 = -((255 - h->dac_att[d]) * 10) / 2;
+            snprintf(v, sizeof(v), "FORMAT ok, atenuacion %d.%d dB",
+                     db10 / 10, abs(db10 % 10));
+        }
+        if (st < worst) worst = st;
+        p += hchk(buf + p, sizeof(buf) - p, &first, name, st, v, "FORMAT 0x06");
+    }
+
+    // --- AK5538VN ---
+    {
+        int st;
+        if (!h->ak_present) { st = 0; snprintf(v, sizeof(v), "no contesta por I2C3"); }
+        else if (h->ak_regs[1] != 0x31 || h->ak_regs[2] != 0x40 || h->ak_regs[3] != 0x02) {
+            st = 1;
+            snprintf(v, sizeof(v), "R02=0x%02X R03=0x%02X R04=0x%02X",
+                     h->ak_regs[1], h->ak_regs[2], h->ak_regs[3]);
+        } else {
+            st = 2;
+            snprintf(v, sizeof(v), "TDM256 y group delay corto confirmados");
+        }
+        if (st < worst) worst = st;
+        p += hchk(buf + p, sizeof(buf) - p, &first, "ADC AK5538VN", st, v,
+                  "R02=0x31 R03=0x40 R04=0x02");
+    }
+
+    // --- EEPROM ---
+    {
+        int st = h->eeprom_present ? 2 : 1;
+        snprintf(v, sizeof(v), h->eeprom_present
+                 ? "presente, layout v%d" : "no responde (la config no sobrevive al reinicio)",
+                 h->eeprom_ver);
+        if (st < worst) worst = st;
+        p += hchk(buf + p, sizeof(buf) - p, &first, "EEPROM", st, v, "presente");
+    }
+
+    // --- SYNC entre bancos ---
+    {
+        int a = h->sync_us < 0 ? -h->sync_us : h->sync_us;
+        /* Se midieron 1-4 us en operacion normal. Decenas ya es raro;
+         * milisegundos significa que las filas 0-1 y 2-3 estan tocando ventanas
+         * de tiempo distintas y el enfoque vertical directamente no existe. */
+        int st = (a <= 20) ? 2 : ((a <= 200) ? 1 : 0);
+        snprintf(v, sizeof(v), "%d us", h->sync_us);
+        if (st < worst) worst = st;
+        p += hchk(buf + p, sizeof(buf) - p, &first, "SYNC entre bancos", st, v, "pocos us");
+    }
+
+    (void)w;
+    p += snprintf(buf + p, sizeof(buf) - p, "],\"worst\":%d}", worst);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, buf, strlen(buf));
+    return ESP_OK;
+}
+
 // ============== POST /firmware — actualizacion del STM32 por WiFi ==============
 //
 // El cuerpo del POST es el .bin crudo (build/ds11_beamforming.bin), tal cual.
@@ -1418,6 +1562,17 @@ static const char INDEX_HTML[] =
 "hace falta un preamplificador. Al terminar, el equipo reproduce un tono "
 "enfocado ah&iacute;. Si el resultado sale en rojo, los focos anteriores "
 "quedan intactos.</div></div>"
+/* Autodiagnostico. Va arriba de las entradas porque es lo primero que uno
+ * quiere saber al llegar: si algo esta mal, el resto de los numeros mienten. */
+"<div class=card><h2>Diagn&oacute;stico</h2>"
+"<div class=row><button onclick=doHealth()>Revisar el equipo</button>"
+"<span class=val id=hvsum></span></div>"
+"<ol class=chk id=hlist style='margin-top:10px'></ol>"
+"<div style='font-size:.75em;color:#888;margin-top:6px'>Vuelve a leer por I2C lo "
+"que los chips <b>realmente</b> tienen adentro &mdash; no es la telemetr&iacute;a "
+"de siempre. Un DAC que perdi&oacute; su configuraci&oacute;n saca ruido con "
+"<i>underruns</i> en cero y todo lo dem&aacute;s en verde: eso no lo ve ning&uacute;n "
+"contador, hay que ir a preguntarle al chip.</div></div>"
 "<div class=card><h2>Entradas ADC (peak)</h2><div class=meter id=meter></div>"
 "<div id=st>esperando estado...</div></div>"
 "<div class=card><h2>Volver a cero</h2>"
@@ -1593,6 +1748,18 @@ static const char INDEX_HTML[] =
  * de a una, asi que cada poll competiria con la carga y ademas se veria como
  * "sin conexion" justo cuando todo va bien. */
 "let fwBusy=false;"
+/* Un renglon por chequeo: el veredicto Y el numero que lo respalda, para que un
+ * rojo se pueda discutir en vez de solo creer. Misma disciplina que el
+ * checklist del AUTOFOCUS. */
+"function doHealth(){const L=document.getElementById('hlist'),S=document.getElementById('hvsum');"
+"S.textContent='midiendo...';S.style.color='#9cf';L.innerHTML='';"
+"fetch('/health').then(r=>r.json()).then(d=>{"
+"if(!d.ok){S.textContent=d.message||'sin respuesta';S.style.color='#f84';return;}"
+"const C=['#f84','#fc4','#6d6'],T=['\\u2717','\\u26a0','\\u2713'];"
+"L.innerHTML=d.checks.map(c=>'<li style=\"color:'+C[c.st]+'\">'+T[c.st]+' <b>'+c.n+'</b> \\u2014 '+c.v+'</li>').join('');"
+"S.textContent=d.worst==2?'todo en orden':(d.worst==1?'con reservas':'HAY ALGO MAL');"
+"S.style.color=C[d.worst];"
+"}).catch(()=>{S.textContent='sin conexion';S.style.color='#f84';});}"
 "function doFw(){const f=document.getElementById('fwfile').files[0];"
 "const m=document.getElementById('fwmsg'),bw=document.getElementById('fwbarw'),b=document.getElementById('fwbar');"
 "if(!f){m.textContent='eleg\\u00ed un archivo .bin primero';return;}"
@@ -1769,6 +1936,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/ping",    .method = HTTP_GET,  .handler = ping_handler    },
             { .uri = "/firmware",.method = HTTP_POST, .handler = firmware_handler},
             { .uri = "/firmware-esp", .method = HTTP_POST, .handler = firmware_esp_handler },
+            { .uri = "/health",  .method = HTTP_GET,  .handler = health_handler  },
         };
         for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
             esp_err_t e = httpd_register_uri_handler(server, &uris[i]);
@@ -1967,6 +2135,7 @@ void app_main(void)
 
     // Semaforos request/response del protocolo binario (antes del monitor task)
     ack_sem = xSemaphoreCreateBinary();
+    health_sem = xSemaphoreCreateBinary();
     status_sem = xSemaphoreCreateBinary();
     uart_tx_mutex = xSemaphoreCreateRecursiveMutex();
 
