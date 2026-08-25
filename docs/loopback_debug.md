@@ -280,3 +280,247 @@ ambiente.
    (20 kΩ → +23 dB) subiría el punto de operación digital ~26 dB, con la mejora
    de relación señal-ruido que eso implica. **De paso corre el pasaalto de
    723 Hz a 36 Hz**, y el eje vertical dejaría de trabajar al borde de la banda.
+
+---
+
+## 8. RESULTADOS 2026-08-25 — primera medición eléctrica del lazo
+
+Placa **nueva** (la segunda DS11, primera con los cuatro PCM1690 poblados y
+respondiendo). J13 soldado y cableado a una entrada del RJ45. Sin 24 V: la placa
+corre de USB, así que **no hay amplificador en el camino** — se mide DAC → ADC,
+que es exactamente lo que J13 promete.
+
+### Configuración y hallazgos de entrada
+
+| | |
+|---|---|
+| Entrada real | **4** (no la 0, que era la estimación). El modo mide las ocho y lo descubrió solo |
+| Polaridad | **+** (no invertida) |
+| Volumen | **hace falta subirlo**. A −40 dB (el default correcto) el chirp no supera el umbral: `pico=1` en las ocho. A 0 dB, `q≈1130`. J13 toma antes del amplificador, así que la atenuación digital le pega de lleno |
+
+> ⚠️ Volver a **−40 dB** al terminar. Con 24 V y amps encendidos, 0 dB mete al
+> PAM8302A (A_V = +49 dB) unos 40 dB adentro del recorte.
+
+### La latencia absoluta del lazo
+
+**7313 – 7399 µs**, o sea ~351–355 muestras. Es la vuelta completa
+TX DMA → PCM1690 → J13 → AK5538 → RX DMA.
+
+### Repetibilidad de la MEDICIÓN: mejor que 81 ns
+
+16 lecturas seguidas sin tocar nada dieron **el mismo valor hasta el último
+dígito** (`t=355.17 smp`), mientras `q` variaba entre 1125 y 1149 — o sea que la
+correlación se recalcula de verdad, y aun así el retardo no se mueve ni 1/256 de
+muestra. El instrumento no es el límite de nada de lo que sigue.
+
+### 🔴 La latencia NO es determinística entre arranques — pero es cuantizada
+
+26 reinicios, midiendo una vez por arranque:
+
+| estado | muestras | µs | veces |
+|---|---|---|---|
+| A | 351,02 | 7312,9 | 14 (54 %) |
+| B | 354,04 | 7375,8 | 4 (15 %) |
+| C | 355,17 | 7399,4 | 8 (31 %) |
+
+- **Dispersión total: 4,17 muestras = 86,9 µs = 29,8 mm de camino acústico.**
+- Dentro de cada estado, ±0,01 muestras (±0,2 µs).
+- Saltos entre estados: 3,02 y 1,13 muestras. **No son múltiplos enteros** — el
+  mecanismo todavía no está explicado.
+- Sólo aparecieron **tres** estados en 26 arranques.
+
+### Qué significa
+
+**`multinode.md` §2 predecía "hasta ~medio buffer, ms" (2500 µs). El valor real es
+87 µs: 29 veces menos.** Esa parte del análisis era demasiado pesimista.
+
+**Pero 87 µs no es despreciable.** Dos nodos que arranquen en estados distintos
+quedan con 30 mm de diferencia de camino, que a 2,1 kHz —el borde de la banda
+espacial útil documentada— son **66° de error de fase**. Para un beam conjunto eso
+degrada de verdad.
+
+**La buena noticia es que sea cuantizado.** Un error discreto de tres estados es
+mucho más fácil de atacar que una dispersión continua: sugiere una carrera con
+tres desenlaces en el arranque, y el "arranque determinístico" (nivel 1 de
+`multinode.md` §2 — arrancar RX primero y disparar los TX en su primer callback)
+debería colapsarlo a un solo estado. **Y ahora hay con qué verificarlo**: este
+mismo modo mide si funcionó.
+
+### Alcance de esta medición — mejor de lo que parecía
+
+> **Corrección del 2026-08-25.** La primera versión de esta sección decía que los
+> reinicios por NRST no reseteaban los codecs y que por eso la dispersión real
+> podía ser mayor. **Estaba mal**, y la pregunta de Fernando ("¿se pueden resetear
+> el ADC y los DAC por software?") lo destapó.
+
+Los 26 reinicios fueron por NRST vía SWD, pero eso **sí incluye un POR completo de
+los codecs**: `main.c:3036` y `main.c:3042` bajan `DAC_RST` (PC11, compartido por
+los cuatro PCM1690) y `AK_PDN` (PC7) como primera acción del init de GPIO, y los
+liberan recién con los tiempos del datasheet (12 ms tras RST, 15 ms tras PDN).
+El datasheet del AK5538 confirma que un ciclo de PDN devuelve **todos los
+registros a default**.
+
+O sea que cada uno de esos 26 arranques resetéo de verdad los cinco chips. **Los
+tres estados son una propiedad real de la secuencia de arranque, no un artefacto
+de haber reseteado en caliente.**
+
+Lo único que un corte de alimentación agregaría por encima de esto: el colapso y
+re-asentamiento de los rieles analógicos, el POR propio del STM32 (distinto de un
+reset por pin) y el arranque en frío del cristal. Todo de segundo orden para esta
+medición.
+
+### Siguiente paso para explicar el mecanismo
+
+Los saltos de 3,02 y 1,13 muestras no son múltiplos enteros y no hay explicación.
+Como los group delays de PCM1690 y AK5538 son constantes de datasheet, lo que
+varía tiene que estar **del lado del STM32**. El experimento que lo cierra es el
+**nivel 2 de `multinode.md` §2**: registrar `NDTR` de los DMA de RX y TX en el
+instante del chirp y ver si el estado correlaciona con la fase relativa de los
+DMA. Es una adición chica de firmware y convierte la conjetura en un dato.
+
+### Lo que esto NO midió
+
+Sigue faltando el **skew entre los cuatro bancos**, que es lo que más valor tiene
+(§5.1): J13 da un solo canal (el 24, banco 3), así que 1 de 8 entradas ve el
+chirp y no hay contra qué comparar. Hacen falta los adaptadores de §4 en los otros
+tres bancos — y ésos sí necesitan 24 V, porque toman de la salida de parlante.
+
+---
+
+## 9. RESUELTO 2026-08-25 — los tres estados son la fase de los DMA
+
+§8 dejó abierto por qué la latencia cae en tres estados. Como los group delays de
+PCM1690 y AK5538 son constantes de datasheet, la sospecha era la fase relativa
+RX↔TX dentro del STM32. **Ahora es un dato, no una sospecha.**
+
+### El instrumento
+
+En el instante exacto de armar la captura (`main.c`, fill del banco 24, cuando
+`lb_chirp_pos == 0`) se leen los dos contadores de DMA y se imprimen junto al
+retardo:
+
+```c
+lb_ndtr_rx = __HAL_DMA_GET_COUNTER(&hdma_sai3_b);   /* RX del AK5538  */
+lb_ndtr_tx = __HAL_DMA_GET_COUNTER(&hdma_sai2_b);   /* TX del banco 24 */
+```
+
+Los dos DMA están programados con la misma cuenta (3840 palabras = 480 muestras
+de doble buffer), así que las posiciones son comparables sin escalar. `NDTR`
+cuenta hacia abajo, de modo que la posición es `(3840 − NDTR) / 8` y la fase es
+la resta, normalizada a `[0, 480)` porque es circular.
+
+### El resultado: correlación total
+
+20 arranques:
+
+| RX−TX | veces | latencia (muestras) |
+|---|---|---|
+| ~78 | 6 | **351,14** |
+| 81 | 8 | **354,13** |
+| 82 | 6 | **355,29** |
+
+**La fase de los DMA determina la latencia por completo.** Tres estados de fase,
+tres estados de latencia, mapeo uno a uno, sin una sola excepción en 20 arranques.
+
+Detalles que confirman la lectura:
+
+- Dentro de un arranque la fase no se mueve: dos medidas consecutivas dieron
+  `RX=80 TX=2` y `RX=320 TX=242` —medio buffer aparte— y **`RX−TX=78` en las dos**.
+- Los valores 77 y 78 dan la **misma** latencia: la fase se lee con ±1 de ruido,
+  porque los dos `NDTR` se leen con ~10 ciclos de diferencia y el DMA avanza en
+  el medio. Son el mismo estado.
+- 3 unidades de fase → 2,99 muestras de latencia. Uno a uno.
+
+### Lo que esto habilita
+
+**1. El nivel 1 de `multinode.md` §2 queda justificado y cuantificado.** Arrancar
+los TX en el primer callback del RX fija la fase → un solo estado. La mejora
+esperable:
+
+| | dispersión entre nodos |
+|---|---|
+| hoy | 4,17 muestras = 87 µs = **29,8 mm** |
+| dentro de un estado | 0,03 muestras = 0,6 µs = **0,21 mm** |
+
+**140× menos.** Y ahora hay con qué verificar que el arreglo funcionó.
+
+**2. El nivel 2 no necesita cable.** Éste es el hallazgo práctico grande: la fase
+RX−TX se lee de un registro, en cualquier momento, **sin loopback, sin J13, sin
+adaptador y sin micrófono**. El cable de J13 hizo falta para *descubrir* la
+relación; no hace falta para *usarla*. En una instalación de 10-16 cajas, cada
+nodo puede leer su propia fase al arrancar y saber en qué estado quedó —
+compensable en el offset de la delay line, o al menos reportable por telemetría.
+
+### Lo que queda abierto
+
+El salto de fase 81→82 da 1,16 muestras de latencia en vez de 1,00, mientras que
+78→81 da 2,99 sobre 3. Probablemente sea sesgo del ruido de lectura: leer los dos
+`NDTR` con interrupciones deshabilitadas y sin nada en el medio debería cerrarlo.
+No bloquea nada — el mapeo estado↔estado es unívoco igual.
+
+---
+
+## 10. ARREGLADO 2026-08-25 — arranque determinístico del RX
+
+§9 dejó el mecanismo explicado: la fase RX↔TX de los DMA determina la latencia.
+Acá está el arreglo, y la verificación de que funcionó.
+
+### La causa
+
+El TX no se puede mover: **SAI1_A genera el MCLK** que los cuatro PCM1690 y el
+AK5538 necesitan para completar su POR, así que tiene que arrancar primero. Lo
+que quedaba suelto era el RX, y arrancaba *"cuando el boot llegaba"* — después de
+un `UART_Print` de ~3,3 ms bloqueantes y de una lectura de EEPROM **con ramas de
+distinta duración según se detecte o no**. La fase terminaba dependiendo de
+cuánto había tardado el camino de boot.
+
+### El arreglo
+
+Enganchar el arranque del RX a un borde conocido del TX. `NDTR` cuenta hacia
+abajo y al recargarse sube, así que un `now > prev` es el wrap del buffer
+circular — un borde que ocurre cada 10 ms y es idéntico en todos los arranques:
+
+```c
+uint32_t prev = __HAL_DMA_GET_COUNTER(&hdma_sai2_b);
+for (;;) {
+    uint32_t now = __HAL_DMA_GET_COUNTER(&hdma_sai2_b);
+    if (now > prev) { rx_aligned = 1; break; }   /* wrapeó */
+    prev = now;
+    if ((HAL_GetTick() - t0) > 50u) break;       /* el TX no corre */
+}
+status = HAL_SAI_Receive_DMA(&hsai_BlockB3, ...);
+```
+
+El timeout existe para que un TX que no arrancó no cuelgue el boot: si pasa, se
+arranca el RX igual (peor fase, pero equipo vivo) y **se reporta en el log** —
+`fase SIN ALINEAR` — para que no sea un fallo silencioso.
+
+### Verificación
+
+| | arranques | dispersión |
+|---|---|---|
+| **antes** | 46 | 4,17 muestras = 87 µs = **29,8 mm** (tres estados) |
+| **después** | 25 | 0,03 muestras = 0,6 µs = **0,21 mm** (un estado) |
+
+**140× menos**, que es exactamente lo que predecía la dispersión intra-estado de
+§9. La fase quedó en 0 en **41 de 41** arranques medidos (16 leyendo el heartbeat
++ 25 con el loopback).
+
+> La latencia absoluta cambió de ~351 a ~513,67 muestras. Es esperable: se movió
+> el instante en que arranca el RX, así que el lazo mide otra cosa. Lo que
+> importa es que ahora **es la misma en todos los arranques**.
+
+### Un artefacto del modo 19, que NO se arregló
+
+En 1 de 25 arranques el loopback informó `t=273,67` en vez de `513,67`:
+**exactamente 240,00 muestras menos, o sea medio buffer justo.**
+
+No es el pipeline. La evidencia: **ese arranque también midió fase 0**, y §9
+estableció que la fase determina la latencia uno a uno. Si el pipeline hubiera
+cambiado 240 muestras, la fase habría cambiado con él.
+
+Lo más probable es una carrera en el armado de la captura: `lb_capturing = 1` se
+pone desde el fill (contexto de main loop) y el callback del RX empieza a copiar
+en la mitad siguiente. Si el armado cae muy cerca del borde de una mitad, la
+captura arranca una mitad después → 240 muestras. **Queda anotado, sin arreglar**:
+es un artefacto de un modo de banco, no afecta al equipo, y aparece 1 de cada 25.

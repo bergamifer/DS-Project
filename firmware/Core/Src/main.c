@@ -758,6 +758,55 @@ static uint32_t lb_corr_lag = 0;
 static int64_t  lb_best_mag = 0, lb_mag_sum = 0;
 static int32_t  lb_best_lag = 0;
 static int8_t   lb_best_sign = 1;
+/* Fase de los DMA en el instante de armar el chirp. Se llenan en el fill del
+ * banco 24 y se imprimen en el informe; ver el comentario largo allá. Los dos
+ * DMA están programados con la misma cuenta (AUDIO_BUFFER_SIZE*2 =
+ * ADC_BUFFER_SIZE*2 = 3840 palabras), así que las posiciones son directamente
+ * comparables sin escalar. */
+#define LB_DMA_WORDS    (AUDIO_BUFFER_SIZE * 2)
+static volatile uint32_t lb_ndtr_rx = 0, lb_ndtr_tx = 0;
+
+/** @brief Convierte dos lecturas de NDTR en la fase RX-TX, en muestras.
+ *
+ * NDTR cuenta hacia ABAJO desde la cuenta programada, así que la posición del
+ * DMA es (total - NDTR), y dividida por los canales da el índice de muestra
+ * dentro del doble buffer. La resta se normaliza a [0, nsamp) porque es una fase
+ * circular: sin envolver, el mismo desfasaje se leería como +470 o como -10
+ * según dónde caiga.
+ */
+static int32_t DMA_PhaseFrom(uint32_t ndtr_rx, uint32_t ndtr_tx)
+{
+    int32_t nsamp = (int32_t)(LB_DMA_WORDS / AUDIO_CHANNELS);
+    int32_t d = (int32_t)((LB_DMA_WORDS - ndtr_rx) / ADC_CHANNELS)
+              - (int32_t)((LB_DMA_WORDS - ndtr_tx) / AUDIO_CHANNELS);
+    while (d < 0)       d += nsamp;
+    while (d >= nsamp)  d -= nsamp;
+    return d;
+}
+
+/** @brief Fase RX-TX de los DMA, medida AHORA.
+ *
+ * Este número determina la latencia del pipeline de este nodo — medido sobre 20
+ * arranques con mapeo uno a uno (docs/loopback_debug.md §9).
+ *
+ * Lo importante: sale de dos registros. **No hace falta loopback, ni J13, ni
+ * adaptador, ni micrófono.** El cable hizo falta para descubrir la relación, no
+ * para usarla: cualquier nodo de una instalación de 10-16 cajas puede reportar
+ * el suyo y saber en qué estado arrancó (multinode.md §2, nivel 2).
+ *
+ * Se lee con las interrupciones apagadas para que ningún ISR caiga entre las dos
+ * lecturas — el DMA avanza aunque el CPU esté en otra cosa.
+ */
+static int32_t DMA_PhaseSamples(void)
+{
+    uint32_t nrx, ntx;
+    uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    nrx = __HAL_DMA_GET_COUNTER(&hdma_sai3_b);
+    ntx = __HAL_DMA_GET_COUNTER(&hdma_sai2_b);
+    __set_PRIMASK(pm);
+    return DMA_PhaseFrom(nrx, ntx);
+}
 /* Resultados por ENTRADA */
 static int32_t  lb_lag_q8[LB_NUM_IN];
 static int8_t   lb_sign[LB_NUM_IN];
@@ -1493,8 +1542,47 @@ int main(void)
   UART_Print("AK5538VN: starting SAI3_B RX DMA...\r\n");
   memset(audio_buffer_3b_rx, 0, sizeof(audio_buffer_3b_rx));
   __DSB();
+
+  /* ===== Arranque DETERMINÍSTICO del RX: engancharlo a un borde del TX =====
+   *
+   * La fase relativa de los DMA de RX y TX determina POR COMPLETO la latencia
+   * del pipeline. No es una hipótesis: se midió sobre 20 arranques y el mapeo es
+   * uno a uno, sin excepciones (docs/loopback_debug.md §9).
+   *
+   * Sin esto, esa fase quedaba librada a cuánto tardó el boot en llegar hasta
+   * acá — y el camino es variable: el print de arriba son ~3,3 ms bloqueantes, y
+   * la lectura de EEPROM de más arriba tiene ramas de distinta duración según se
+   * detecte o no. Resultado medido: tres estados, 4,17 muestras de dispersión =
+   * 87 µs = 30 mm de camino acústico. Entre nodos de una instalación eso son
+   * 66° de error de fase a 2,1 kHz — no es despreciable para un beam conjunto.
+   *
+   * El TX no se puede mover: SAI1_A genera el MCLK que los PCM1690 y el AK5538
+   * necesitan para completar su POR, así que tiene que arrancar primero. Lo que
+   * sí se puede fijar es el RX.
+   *
+   * Se espera a que el DMA del banco 24 dé la vuelta —NDTR cuenta hacia abajo y
+   * al recargarse SUBE, así que un `now > prev` es el wrap— y se arranca el RX
+   * justo ahí. Ese borde ocurre cada 10 ms y es idéntico en todos los arranques,
+   * así que la fase deja de depender del camino de boot.
+   *
+   * El timeout existe para que un TX que no arrancó no cuelgue el boot: si pasa,
+   * se sigue igual y se arranca el RX sin alinear — peor fase, pero equipo vivo.
+   * Se reporta abajo para que no sea un fallo silencioso. */
+  uint8_t rx_aligned = 0;
+  {
+    uint32_t t0   = HAL_GetTick();
+    uint32_t prev = __HAL_DMA_GET_COUNTER(&hdma_sai2_b);
+    for (;;) {
+      uint32_t now = __HAL_DMA_GET_COUNTER(&hdma_sai2_b);
+      if (now > prev) { rx_aligned = 1; break; }      /* wrapeó */
+      prev = now;
+      if ((HAL_GetTick() - t0) > 50u) break;          /* el TX no corre */
+    }
+  }
   status = HAL_SAI_Receive_DMA(&hsai_BlockB3, (uint8_t*)audio_buffer_3b_rx, ADC_BUFFER_SIZE * 2);
-  sprintf(uart_buf, "SAI3_B RX DMA: %s\r\n", status == HAL_OK ? "OK" : "FAIL");
+  sprintf(uart_buf, "SAI3_B RX DMA: %s (fase %s)\r\n",
+          status == HAL_OK ? "OK" : "FAIL",
+          rx_aligned ? "alineada al TX" : "SIN ALINEAR - el TX no wrapeo");
   UART_Print(uart_buf);
 
   // Release AK5538 from PDN: HIGH = Normal operation (per AK5538VN datasheet "L=PDN, H=Normal")
@@ -2145,9 +2233,11 @@ int main(void)
         cpu_fills_x10 = (uint16_t)(cpu_x10 > 65535 ? 65535 : cpu_x10);
 
         snprintf(uart_buf, sizeof(uart_buf),
-                 "     SYNC bancos: %ld us (%ld cyc) | CPU fills: %lu.%lu%%\r\n",
+                 "     SYNC bancos: %ld us (%ld cyc) | CPU fills: %lu.%lu%% | "
+                 "fase RX-TX: %ld\r\n",
                  (long)skew_us, (long)skew,
-                 (unsigned long)(cpu_x10 / 10), (unsigned long)(cpu_x10 % 10));
+                 (unsigned long)(cpu_x10 / 10), (unsigned long)(cpu_x10 % 10),
+                 (long)DMA_PhaseSamples());
         UART_Print(uart_buf);
       }
 
@@ -3764,6 +3854,21 @@ static void LB_Process(void) {
 
   /* ===== Informe ===== */
   UART_Print("\r\nLOOPBACK (chirp por ch0/8/16/24) ---------------------------\r\n");
+  /* Fase de los DMA al armar. NDTR cuenta hacia ABAJO desde la cuenta programada,
+   * así que la posición de lectura/escritura es (total - NDTR), y dividido por
+   * los canales da el índice de muestra dentro del doble buffer (0..479).
+   *
+   * RX-TX se normaliza al rango [0, 480): es una fase circular, y sin envolver
+   * el mismo desfasaje se leería como +470 o como -10 según dónde caiga. */
+  {
+    int32_t pos_rx = (int32_t)((LB_DMA_WORDS - lb_ndtr_rx) / ADC_CHANNELS);
+    int32_t pos_tx = (int32_t)((LB_DMA_WORDS - lb_ndtr_tx) / AUDIO_CHANNELS);
+    sprintf(uart_buf,
+            "  fase DMA al armar: RX=%ld TX=%ld de %ld muestras  RX-TX=%ld\r\n",
+            (long)pos_rx, (long)pos_tx, (long)(LB_DMA_WORDS / AUDIO_CHANNELS),
+            (long)DMA_PhaseFrom(lb_ndtr_rx, lb_ndtr_tx));
+    UART_Print(uart_buf);
+  }
   /* La referencia es la primera entrada CON señal, no la entrada 0: con un solo
    * cable puesto en la entrada 4, anclar en la 0 dejaría todo sin referencia. */
   int32_t ref_q8 = 0; uint8_t have_ref = 0, ref_i = 0, n_ok = 0;
@@ -4196,7 +4301,31 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
        * justamente para medir desfasajes entre bancos, así que se mediría el
        * error introducido acá. Es el mismo error que tuvo mf_frame. */
       if (ch_offset == 24) {
-        if (lb_chirp_pos == 0) { lb_cap_count = 0; lb_capturing = 1; }
+        if (lb_chirp_pos == 0) {
+          lb_cap_count = 0;
+          /* Fase de los DMA EN EL INSTANTE de armar, antes de nada más.
+           *
+           * Por qué: sobre 26 arranques la latencia del lazo cae en TRES estados
+           * discretos separados 3,02 y 1,13 muestras (docs/loopback_debug.md §8).
+           * Los group delays del PCM1690 y del AK5538 son constantes de datasheet,
+           * así que lo que varía tiene que ser la fase relativa RX↔TX dentro del
+           * STM32 — pero eso era una conjetura. NDTR la convierte en dato: si el
+           * estado correlaciona con esta diferencia, está explicado, y de paso
+           * queda el número con el que compensar por nodo (multinode.md §2 nivel 2).
+           *
+           * Se leen con las interrupciones apagadas y sin nada en el medio: si
+           * un ISR cayera entre las dos lecturas, el DMA habría avanzado y la
+           * fase saldría corrida. Aun así quedan ~10 ciclos de CPU de diferencia
+           * entre una y otra, contra 10.000 que dura una muestra. */
+          {
+            uint32_t pm = __get_PRIMASK();
+            __disable_irq();
+            lb_ndtr_rx = __HAL_DMA_GET_COUNTER(&hdma_sai3_b);
+            lb_ndtr_tx = __HAL_DMA_GET_COUNTER(&hdma_sai2_b);
+            __set_PRIMASK(pm);
+          }
+          lb_capturing = 1;
+        }
         lb_chirp_pos += samples;
         if (lb_chirp_pos >= CAL_CHIRP_LEN) lb_state = LB_CAPT;
       }

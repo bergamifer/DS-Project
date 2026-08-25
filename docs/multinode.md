@@ -87,12 +87,41 @@ ningún cable de clock.**
 
 1. **La latencia por nodo debe ser constante y conocida.** El offset RX-DMA↔TX-DMA se
    congela al arrancar y puede diferir entre nodos (hasta ~medio buffer, ms). Es un
-   offset **constante** (no deriva). Insight clave: los group delays de los conversores
+   offset **constante** (no deriva).
+
+   > ✅ **MEDIDO 2026-08-25** — `loopback_debug.md` §8. El "hasta medio buffer, ms"
+   > de acá era **29× pesimista**: sobre 26 arranques, la latencia del lazo cae en
+   > **tres estados discretos** dentro de **4,17 muestras = 87 µs = 30 mm**, no
+   > 2500 µs. Pero el problema es real igual: 30 mm son **66° de error de fase a
+   > 2,1 kHz** entre dos nodos que arranquen en estados distintos, así que el nivel
+   > 1 sigue haciendo falta. Que sea cuantizado en tres estados es buena noticia:
+   > apunta a una carrera de arranque con tres desenlaces, no a una dispersión
+   > continua. Los reinicios fueron por NRST, pero **eso incluye POR completo de
+   > los cinco codecs** (el init baja PC11/PC7 antes que nada), así que el
+   > resultado vale.
+   >
+   > ✅ **MECANISMO EXPLICADO, mismo día** — `loopback_debug.md` §9. Se instrumentó
+   > el firmware para leer `NDTR` de los DMA de RX y TX en el instante del chirp:
+   > sobre 20 arranques, **la fase RX−TX determina la latencia por completo**, con
+   > mapeo uno a uno y sin excepciones. O sea que el nivel 1 de acá abajo es
+   > exactamente el arreglo correcto, y llevaría la dispersión entre nodos de
+   > **29,8 mm a 0,21 mm (140×)**.
+   >
+   > 🔑 **Y el nivel 2 no necesita cable.** La fase RX−TX sale de un registro:
+   > sin loopback, sin J13, sin adaptador, sin micrófono. El cable hizo falta para
+   > *descubrir* la relación, no para *usarla*. Cada uno de los 10-16 nodos puede
+   > leer su propia fase al arrancar y saber en qué estado quedó.
+
+   Insight clave: los group delays de los conversores
    son constantes de datasheet idénticas en todas las placas — lo único variable es la
    fase RX↔TX dentro del STM32, visible por firmware. Jerarquía de soluciones (2026-07-05):
-   - **Nivel 1 — arranque determinístico** (solo firmware): arrancar RX primero, esperar
-     su primer callback de half-complete, arrancar los 4 TX en ese flanco → misma
-     latencia en todos los nodos por construcción, jitter sub-µs.
+   - **Nivel 1 — arranque determinístico** (solo firmware). ✅ **IMPLEMENTADO Y
+     VERIFICADO 2026-08-25** — `loopback_debug.md` §10. La receta original decía
+     "arrancar RX primero", pero **eso es imposible**: SAI1_A genera el MCLK que
+     los PCM1690 y el AK5538 necesitan para su POR, así que el TX va primero por
+     obligación. Lo que sí se puede fijar es el RX, enganchándolo al wrap del DMA
+     del TX. Resultado medido: la dispersión entre arranques pasó de **29,8 mm a
+     0,21 mm (140×)**, y la fase quedó en 0 en 41 de 41 arranques.
    - **Nivel 2 — medición por registros** (gratis): leer NDTR del DMA RX y TX en el
      mismo instante → fase relativa exacta en muestras → compensar en el offset de la
      delay line. Verificación/auto-corrección del nivel 1.

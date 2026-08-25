@@ -282,3 +282,80 @@ Fundamento y consecuencias: `hardware/DS/DS12_PLANNING.md` §0.5.
   los canales 16-31 suenan con sus defaults pero no se pueden ajustar ni
   mutear individualmente desde la web. No bloquea nada del primer encendido;
   está en el backlog.
+
+---
+
+## 6. Segunda DS11 — estado y qué le falta (2026-08-25)
+
+La segunda placa entró en servicio el 2026-08-25. Es la **primera con los cuatro
+PCM1690 poblados y respondiendo**. `192.168.100.70`, ESP32 MAC `08:92:72:1e:1f:30`.
+
+### Lo que ya está
+
+| | |
+|---|---|
+| STM32 | bootloader en `0x08000000` + app en `0x08020000`, con la instrumentación de `NDTR` (§9 de `loopback_debug.md`) |
+| ESP32 | build del 2026-08-23, proto v9, OTA con rollback |
+| `/health` | los 7 chequeos en verde, los cuatro DAC incluidos |
+| Loopback | J13 soldado, **entrado por la entrada 4**, polaridad **+** |
+| Estado seguro | −40 dB, modo 0, amplificadores apagados |
+
+### ⚠️ Lo que le falta, en orden
+
+**1. ~~`device_id` y mDNS colisionan~~ ✅ ARREGLADO 2026-08-25.** Los dos salen
+ahora del MAC del ESP32, que ya es único y no hay que administrar: esta placa es
+**`DS_1E1F30` en `ds-1e1f30.local`**.
+
+> ⚠️ **`domosonica.local` ya no resuelve.** Es deliberado: con dos placas
+> encendidas resolvía a cualquiera de las dos. Se prefirió romperlo con dos
+> placas y las herramientas a mano antes que con dieciséis en una sala. La IP
+> funciona siempre, y `tools/captura.py` acepta `--host` o la variable `DS_HOST`.
+
+**2. No tiene 24 V.** Hoy corre de USB. Sin 24 V no hay amplificadores, así que no
+hay escucha, y **no se puede medir el skew entre bancos**: los adaptadores de §4
+toman de la salida de parlante, que sin 24 V no entrega nada. Es lo que bloquea
+la única medición pendiente de valor en una sola placa.
+
+**3. Trampa operativa del volumen.** El loopback (modo 19) **necesita 0 dB** — a
+−40 dB el chirp no supera el umbral y las ocho entradas informan `pico=1`. Pero
+0 dB con amplificadores encendidos mete al PAM8302A unos 40 dB adentro del
+recorte. **Son incompatibles**: nunca dejar 0 dB si se van a encender los amps.
+Volver a −40 dB al terminar de medir.
+
+**4. ~~El nivel 1 de `multinode.md` no está implementado~~ ✅ HECHO 2026-08-25.**
+`loopback_debug.md` §10. La dispersión entre arranques pasó de **29,8 mm a
+0,21 mm (140×)** y la fase quedó en 0 en 41 de 41 arranques. El heartbeat ahora
+publica `fase RX-TX`, que se lee **sin cable de loopback** — es el número con el
+que cada nodo de una instalación sabe en qué estado arrancó.
+
+### Cómo se flashea de cero
+
+`st-flash` **no sirve en esta Mac**: escribe una vez y después el ST-Link queda
+enumerado pero no reclamable (libusb pide entitlements o root). Usar
+CubeProgrammer, que trae driver propio — y sirve además para loops de reinicio:
+
+```bash
+CLI="/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI"
+"$CLI" -c port=SWD mode=UR -w firmware/build_boot/ds11_boot.bin 0x08000000 -v
+"$CLI" -c port=SWD mode=UR -w firmware/build/ds11_beamforming.bin 0x08020000 -v
+"$CLI" -c port=SWD mode=UR -rst
+```
+
+ESP32 de cero, con los binarios de `firmware_esp32c3/build` (esptool v4.9 usa
+comandos con guion bajo):
+
+```bash
+ESPTOOL=~/.espressif/python_env/idf6.0_py3.13_env/bin/esptool.py
+$ESPTOOL -p /dev/cu.usbmodem21301 --chip esp32c3 --before default_reset --after hard_reset \
+  write_flash --flash_mode dio --flash_freq 80m --flash_size 4MB \
+  0x0 bootloader/bootloader.bin 0x8000 partition_table/partition-table.bin \
+  0xd000 ota_data_initial.bin 0x10000 ds11_beamform_c3.bin
+```
+
+### Dónde sale el debug (DS11 ≠ DS9)
+
+- **UART7** (PE7/PE8) → J7 pines 7-8 = **VCP del ST-Link**. Ahí sale *todo*: el
+  bootloader y la app. Es la consola.
+- **UART4** (PA0/PA1) → ESP32, y sólo lleva el protocolo binario.
+- **No hay contención.** La regla de DS9 de desconectar el serie del ST-Link
+  antes de usar el ESP32 **no aplica** a DS11.
