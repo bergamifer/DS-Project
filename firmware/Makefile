@@ -425,7 +425,7 @@ flash-todo: boot all
 
 # Flasheo por WiFi, sin cable. Requiere el bootloader ya instalado (make boot-flash).
 # El equipo queda mudo durante la carga y se reinicia solo al terminar.
-OTA_HOST ?= domosonica.local
+OTA_HOST ?= ds-1e1f30.local
 ota: all
 	@echo "Subiendo $(BUILD_DIR)/$(TARGET).bin a http://$(OTA_HOST) ..."
 	@curl -sS --max-time 240 -X POST --data-binary @$(BUILD_DIR)/$(TARGET).bin \
@@ -457,3 +457,43 @@ ota-esp:
 -include $(wildcard $(BUILD_DIR)/*.d)
 
 # *** EOF ***
+
+#######################################
+# CubeProgrammer y esptool
+#######################################
+# Por que estan aca y no sueltos en la linea de comandos: los dos se invocan con
+# rutas absolutas con espacios, y ninguna regla de permisos de prefijo las cubre
+# bien — cada llamada terminaba pidiendo autorizacion. Detras de `make` quedan
+# tapadas por la regla que ya existe, y de paso la ruta queda documentada.
+#
+# ⚠️ st-flash NO sirve en esta Mac: escribe una vez y despues el ST-Link queda
+# enumerado pero no reclamable (libusb pide entitlements o root). Usar estos.
+CUBE ?= /Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI
+ESPTOOL ?= $(HOME)/.espressif/python_env/idf6.0_py3.13_env/bin/esptool.py
+ESP_PORT ?= /dev/cu.usbmodem21301
+ESP_BUILD ?= ../firmware_esp32c3/build
+
+.PHONY: reset flash-cube boot-cube todo-cube esp-flash
+
+# Reset limpio del STM32. Sirve para loops de medicion por arranque.
+reset:
+	@"$(CUBE)" -c port=SWD mode=UR -rst
+
+flash-cube: all
+	@"$(CUBE)" -c port=SWD mode=UR -w $(BUILD_DIR)/$(TARGET).bin 0x08020000 -v
+	@"$(CUBE)" -c port=SWD mode=UR -rst
+
+boot-cube: boot
+	@"$(CUBE)" -c port=SWD mode=UR -w $(BOOT_BUILD)/$(BOOT_TARGET).bin 0x08000000 -v
+
+# Placa virgen: bootloader + aplicacion, en ese orden.
+todo-cube: boot-cube flash-cube
+
+# ESP32 de cero (bootloader + tabla de particiones + otadata + app).
+esp-flash:
+	@$(ESPTOOL) -p $(ESP_PORT) --chip esp32c3 --before default_reset --after hard_reset \
+	  write_flash --flash_mode dio --flash_freq 80m --flash_size 4MB \
+	  0x0 $(ESP_BUILD)/bootloader/bootloader.bin \
+	  0x8000 $(ESP_BUILD)/partition_table/partition-table.bin \
+	  0xd000 $(ESP_BUILD)/ota_data_initial.bin \
+	  0x10000 $(ESP_BUILD)/ds11_beamform_c3.bin
