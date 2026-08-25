@@ -3869,6 +3869,18 @@ static void LB_Process(void) {
             (long)DMA_PhaseFrom(lb_ndtr_rx, lb_ndtr_tx));
     UART_Print(uart_buf);
   }
+  /* El retardo Q8 comandado, para poder cruzarlo con el medido sin suponer cuál
+   * estaba puesto. Sólo se imprime si hay alguno: con 0 el modo es el de siempre
+   * y la línea sería ruido visual. */
+  {
+    uint16_t dq = beam_config.delays[lb_emit_ch[LB_NUM_EMIT - 1]];
+    if (dq) {
+      sprintf(uart_buf, "  retardo Q8 comandado en ch%u: %u  (%u.%02u muestras)\r\n",
+              (unsigned)lb_emit_ch[LB_NUM_EMIT - 1], (unsigned)dq,
+              (unsigned)(dq >> 8), (unsigned)((dq & 0xFF) * 100 / 256));
+      UART_Print(uart_buf);
+    }
+  }
   /* La referencia es la primera entrada CON señal, no la entrada 0: con un solo
    * cable puesto en la entrada 4, anclar en la 0 dejaría todo sin referencia. */
   int32_t ref_q8 = 0; uint8_t have_ref = 0, ref_i = 0, n_ok = 0;
@@ -4286,9 +4298,45 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
       for (uint8_t p = 0; p < LB_NUM_EMIT; p++) {
         if ((lb_emit_ch[p] & ~7u) == ch_offset) local = lb_emit_ch[p] & 7u;
       }
+      /* Retardo fraccional opcional sobre el chirp, para AUDITAR la
+       * interpolación Q8 de punta a punta.
+       *
+       * Por qué existe: el equipo dice tener 81,38 ns de resolución de retardo
+       * (Q8 = 1/256 de muestra) y eso nunca se verificó contra el mundo físico.
+       * Si la interpolación estuviera sutilmente mal, TODOS los beams estarían
+       * sutilmente mal y no hay ninguna bandera de error que lo delate. El
+       * loopback mide con esa misma resolución y su piso está por debajo de
+       * 81 ns (docs/loopback_debug.md §8), así que es el instrumento adecuado.
+       *
+       * La fórmula es DELIBERADAMENTE la misma del fill real —
+       * `s0 + ((s1-s0)*fr >> 8)`— y no una copia "equivalente": si se
+       * reimplementara acá, la prueba verificaría esta copia en vez del código
+       * que de verdad sale por los parlantes.
+       *
+       * De dónde sale el valor: `beam_config.delays[]` es settable por
+       * `POST /command` y el loopback no lo usa para nada, así que en ESTE modo
+       * se reinterpreta como Q8 en vez de muestras enteras. Es un abuso, y por
+       * eso está acotado a un modo de banco: evita tocar el protocolo, el ESP32
+       * y el número de modos para una medición de laboratorio. Con delays en 0
+       * —el default— el comportamiento es idéntico al de siempre.
+       *
+       * ⚠️ Acotar el barrido a ≤2 muestras (512 en Q8): el chirp se emite en una
+       * ventana de CAL_CHIRP_LEN, así que un retardo mayor le corta la cola. Con
+       * 2 de 480 muestras el corrimiento del pico es despreciable, y a cambio la
+       * ventana no cambia y las medidas siguen siendo comparables con las de §8. */
+      int32_t dq8 = (local == 0xFF) ? 0
+                  : (int32_t)beam_config.delays[ch_offset + local];
       for (uint32_t i = 0; i < samples; i++) {
-        uint32_t k = lb_chirp_pos + i;
-        int32_t sv = (k < CAL_CHIRP_LEN) ? cal_chirp[k] : 0;
+        uint32_t k  = lb_chirp_pos + i;
+        int32_t  sv = 0;
+        int32_t  t  = ((int32_t)k << 8) - dq8;
+        if (t >= 0) {
+          uint32_t i0 = (uint32_t)t >> 8;
+          int32_t  fr = t & 0xFF;
+          int32_t  s0 = (i0     < CAL_CHIRP_LEN) ? cal_chirp[i0]     : 0;
+          int32_t  s1 = (i0 + 1 < CAL_CHIRP_LEN) ? cal_chirp[i0 + 1] : 0;
+          sv = s0 + (((s1 - s0) * fr) >> 8);
+        }
         for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
           buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? sv : 0;
         }

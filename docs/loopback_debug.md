@@ -524,3 +524,82 @@ pone desde el fill (contexto de main loop) y el callback del RX empieza a copiar
 en la mitad siguiente. Si el armado cae muy cerca del borde de una mitad, la
 captura arranca una mitad después → 240 muestras. **Queda anotado, sin arreglar**:
 es un artefacto de un modo de banco, no afecta al equipo, y aparece 1 de cada 25.
+
+---
+
+## 11. Los retardos fraccionales Q8, verificados contra el mundo físico (2026-08-25)
+
+El equipo dice tener **81,38 ns de resolución de retardo** (Q8 = 1/256 de muestra)
+y eso **nunca se había verificado**. Si la interpolación estuviera sutilmente mal,
+todos los beams estarían sutilmente mal y no hay ninguna bandera de error que lo
+delate: es la matemática central del instrumento, sin auditar.
+
+El loopback mide con esa misma resolución y su piso está por debajo de 81 ns
+(§8), así que es el instrumento adecuado. Se le agregó al modo 19 un retardo
+fraccional sobre el chirp, **con la misma fórmula del fill real** —
+`s0 + ((s1-s0)*fr >> 8)`, no una copia equivalente: si se reimplementara, la
+prueba verificaría la copia en vez del código que sale por los parlantes.
+
+Se comanda por `POST /command` reinterpretando `beam_config.delays[]` como Q8
+dentro de este modo (el loopback no lo usa para otra cosa). Con 0 —el default— el
+comportamiento es idéntico al de siempre.
+
+### Resultado — dos barridos, sin alimentación de 24 V
+
+| Q8 | comandado | medido | error | error | error |
+|---|---|---|---|---|---|
+| 16 | 0,0625 | 0,060 | −0,002 | −0,05 µs | −0,02 mm |
+| 32 | 0,1250 | 0,125 | +0,000 | 0,00 µs | 0,00 mm |
+| 64 | 0,2500 | 0,240 | −0,010 | −0,21 µs | −0,07 mm |
+| 128 | 0,5000 | 0,480 | **−0,020** | **−0,42 µs** | **−0,14 mm** |
+| 192 | 0,7500 | 0,735 | −0,015 | −0,31 µs | −0,11 mm |
+| 256 | 1,0000 | 0,990 | −0,010 | −0,21 µs | −0,07 mm |
+| 512 | 2,0000 | 1,995 | −0,005 | −0,10 µs | −0,04 mm |
+
+**Los retardos fraccionales funcionan.** Error máximo **0,020 muestras = 0,42 µs
+= 0,14 mm = 0,31° a 2,1 kHz**, y los dos barridos reproducen a ≤0,03 muestras.
+
+Un paso de **1/16 de muestra** (0,0625) se resolvió con 0,002 de error: el
+steering sub-muestra es real y medible, no una cifra de papel.
+
+### Y contesta una pregunta abierta del propio código
+
+El comentario de `tx_delay_q8` dice: *"the first rung of the sub-sample ladder
+(**polyphase FIR only if measurements ever demand it**)"*.
+
+**Esta medición dice que no lo demandan.** La forma del error —cero en muestras
+enteras, máximo en la mitad— es la firma exacta de la interpolación lineal, y su
+peor caso son 0,14 mm contra 80 mm de separación entre parlantes. Un FIR
+polifásico sería trabajo sin efecto audible ni medible.
+
+---
+
+## 12. OTA verificado en la segunda placa (2026-08-25)
+
+Los dos chips se habían flasheado por cable, así que **el camino OTA nunca había
+corrido en esta placa**. Para una instalación de 10-16 cajas es *el* mecanismo de
+recuperación, y uno sin probar no es un mecanismo de recuperación.
+
+`make ota OTA_HOST=ds-1e1f30.local` → 85548 bytes, CRC `63F143BB`, imagen
+verificada, reinicio automático, bootloader aplicándola, cabecera de staging
+borrada, firmware nuevo corriendo. **Funcionó de punta a punta.**
+
+> ⚠️ `OTA_HOST` por defecto en el Makefile sigue siendo `domosonica.local`, que ya
+> no resuelve. Hay que pasar `OTA_HOST=` hasta que se actualice el default.
+
+### Una lección de método
+
+Al verificarlo casi lo doy por roto. Leí `stm32_uptime_ms` después del OTA, vi
+3658 s y concluí que no había reiniciado — cuando en realidad había reiniciado 68
+minutos antes y yo había tardado eso en volver a mirar.
+
+**Una lectura suelta de uptime no distingue "nunca reinició" de "reinició hace
+rato".** Lo resolvió el registro continuo del soak, que muestrea cada 30 s:
+
+```
+14:55:17  uptime 2695s -> 34s    (flasheo por ST-Link)
+15:41:40  uptime 2746s -> 43s    <- el OTA
+16:49:46  uptime 4093s -> 13s    (reset manual)
+```
+
+Para detectar reinicios hay que **vigilar**, no consultar.
