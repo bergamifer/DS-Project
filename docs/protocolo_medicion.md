@@ -212,7 +212,7 @@ desplazamiento fijo habría sido un archivo de ceros. `crudo = muestra << shift`
 
 ### Primera medición: el piso de ruido de las 8 entradas
 
-Sin nada conectado, 2048 muestras (2026-08-23):
+Primera captura, 2048 muestras (2026-08-23):
 
 | entrada | pico | RMS (dBFS) |
 |---|---|---|
@@ -222,14 +222,87 @@ Sin nada conectado, 2048 muestras (2026-08-23):
 | 6 | 165 | −106,4 |
 | 7 | 121 | −107,6 |
 
-**Las entradas 4 y 5 tienen ~10 dB más de ruido que las 0-3**, y las 6-7 quedan
-en el medio. Coincide con los `adc_pk` que se venían viendo todo el tiempo
-(`[85, 88, 92, 82, 468, 431, 164, 161]`), pero ahora está cuantificado y con la
-distribución medida en vez de un pico suelto.
+Las entradas 4-7 tenían ~10 dB más de ruido que las 0-3. La primera lectura fue
+que el gradiente seguía la separación física de los dos conectores RJ45 y que
+había algo que mirar con osciloscopio. **Era el cable, no la placa** — ver abajo.
 
-Las 0-3 y las 4-7 son **dos conectores RJ45 distintos** (§5 de la guía de
-operación), así que el gradiente sigue la separación física del conexionado.
-Todavía no hay explicación; queda anotado para mirar con osciloscopio.
+### El piso de ruido mide el cableado, no el conversor (2026-08-24)
+
+La captura se había anotado como "sin nada conectado" y eso era falso: cuatro
+entradas tenían cable. Fernando lo aclaró y el resto se resolvió midiendo.
+
+**Cómo se identificó cada entrada, sin estar en la placa**: el jack de la Mac
+estaba ocupado por el miniplug y era la salida por defecto, así que un tono
+inyectado ahí entra a la DS11 y no suena por los parlantes. Se reprodujo un WAV
+estéreo con **L = 492,19 Hz y R = 1007,81 Hz** (bins exactos de la FFT a
+48k/2048, así no hay leakage) y la captura dijo cuál era cuál sin ambigüedad:
+entrada 6 → 492,2 Hz, entrada 7 → 1007,8 Hz, ambas a −46,5 dBFS.
+
+> Truco reutilizable: **frecuencia distinta por canal = etiqueta**. Sirve para
+> verificar cualquier conexionado sin tocar la placa ni saber de antemano dónde
+> entró cada cosa.
+
+Resultado, captura de 8192 muestras (170 ms = 8 ciclos de red), en dBFS:
+
+| banda | 0-3 (nada) | 4-5 (cable al aire) | 6-7 (cable a la Mac) |
+|---|---|---|---|
+| **línea de 50 Hz** | −131 … −142 | **−106,6 / −116,2** | −138 |
+| 3er armónico (150 Hz) | −140 … −145 | **−114,2 / −120,1** | −134 |
+| ancho de banda 5k-20k | −114,3 ± 0,1 | −103,3 / −103,9 | −105,1 / −105,9 |
+
+Tres firmas distintas, las tres explicadas:
+
+- **0-3, nada conectado → −113,4 dBFS.** Es el piso real del AK5538. Las cuatro
+  entradas caen dentro de **0,2 dB** entre sí: el conversor está sano.
+- **4-5, cable con la punta al aire → línea de 50 Hz 30 dB por encima.** Una
+  punta flotante de alta impedancia es una antena de red excelente. Es la
+  entrada más ruidosa de las ocho y la única con armónicos de red.
+- **6-7, cable conectado a la salida de la Mac → pico en Nyquist, sin red.** La
+  impedancia baja de la fuente cortocircuita la captación de 50 Hz (queda tan
+  limpia como las entradas vacías); lo que sube es ruido ultrasónico, que es la
+  firma del *noise shaping* del DAC sigma-delta de la Mac.
+
+La elevación de banda ancha (~10 dB) aparece en **las cuatro entradas
+cableadas**, con cable conectado o no: la agrega el cable, no el circuito.
+
+**No hay nada que arreglar en la placa, y no hace falta el osciloscopio.** La
+conclusión que sí queda en pie, y ahora confirmada: el piso del conversor son
+**−113,4 dBFS**, unos 20 dB mejor que una fuente de 16 bits con dither
+(≈ −93 dBFS) — el número que usa `docs/bypass_digital_veredicto.md` §5.
+
+**Corolario de método**: al medir piso de ruido, anotar el estado de cada entrada
+(vacía / cable al aire / cable a fuente). Sin ese dato la medición no significa
+nada, y una entrada con el cable suelto se lee como una placa defectuosa.
+
+### El riesgo de medir con la computadora enchufada
+
+Advertencia de Fernando, y es correcta: si hay entradas cableadas a la
+computadora, **cualquier sonido suelto cae dentro de la ventana de captura** —una
+llamada de WhatsApp, una notificación, un audio— y se lee como piso de ruido. Una
+captura sola no puede distinguir un piso de un accidente: son 43 o 171 ms.
+
+Por eso `captura.py` tiene **`--repetir N`**: toma N capturas, analiza la mediana
+(robusta, un outlier no la mueve) e imprime el rango por entrada, que es la
+evidencia de que no hubo ninguno. Avisa si alguna entrada varía más de 6 dB.
+
+    python3 tools/captura.py -n 8192 --repetir 5     # así se mide piso de ruido
+
+Verificación de las cifras de arriba, 5 capturas de 8192 (2026-08-24):
+
+| entrada | rango entre capturas |
+|---|---|
+| 0-3 (vacías) | **0,1 – 0,5 dB** |
+| 4-5 (cable al aire) | 0,5 – 0,8 dB |
+| 6-7 (cable a la Mac) | 1,4 dB |
+
+Sin outliers. Un sonido suelto habría movido 6-7 decenas de dB, no 1,4 — el
+audio a nivel audible está unos 60 dB por encima de este piso, no es sutil.
+
+**Las dos conclusiones que importan son inmunes por construcción de todos modos**:
+los −113,4 dBFS del conversor salen de las entradas 0-3, que no tienen nada
+conectado, y la línea de 50 Hz sale de las 4-5, cuyo miniplug está desenchufado
+de la computadora. Ninguna de las dos puede recibir audio de la Mac. Lo único que
+dependía de las entradas 6-7 era la firma ultrasónica del DAC de la fuente.
 
 ### Formato
 
