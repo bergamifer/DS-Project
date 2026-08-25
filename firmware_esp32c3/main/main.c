@@ -25,6 +25,7 @@
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_wifi.h"
+#include "esp_mac.h"
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_http_server.h"
@@ -43,7 +44,35 @@
 // WiFi credentials live in secrets.h (gitignored). Copy secrets.h.example to
 // secrets.h and fill in your network — keeps passwords out of the public repo.
 #include "secrets.h"
-#define DEVICE_ID        "DS_01"
+
+/* Identidad ÚNICA por placa, derivada del MAC del ESP32.
+ *
+ * Antes esto era `#define DEVICE_ID "DS_01"` y el hostname mDNS era
+ * "domosonica", los dos constantes de compilación. Con una placa no molestaba;
+ * con dos encendidas a la vez **las dos se llamaban igual y las dos se
+ * anunciaban igual**: `domosonica.local` resolvía a cualquiera de las dos y la
+ * app no podía distinguirlas. Para una instalación de 10-16 nodos es inviable.
+ *
+ * El MAC ya es único y no hace falta administrarlo ni grabarlo en ningún lado.
+ * Se usan los tres bytes bajos: MAC 08:92:72:1e:1f:30 -> DS_1E1F30 /
+ * ds-1e1f30.local.
+ *
+ * ⚠️ Consecuencia deliberada: **`domosonica.local` ya no resuelve.** Se prefirió
+ * romperlo ahora, con dos placas y las herramientas a mano, antes que con
+ * dieciséis montadas en una sala. La IP sigue funcionando siempre. */
+static char device_id[16]  = "DS_000000";
+static char mdns_host[20]  = "ds-000000";
+
+static void device_identity_init(void)
+{
+    uint8_t mac[6] = {0};
+    /* El MAC de fábrica del WiFi: disponible antes de levantar la radio. */
+    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) return;
+    snprintf(device_id, sizeof(device_id), "DS_%02X%02X%02X",
+             mac[3], mac[4], mac[5]);
+    snprintf(mdns_host, sizeof(mdns_host), "ds-%02x%02x%02x",
+             mac[3], mac[4], mac[5]);
+}
 
 // UART0: link con STM32. PCB: GPIO0→PA1(STM32 RX), GPIO1→PA0(STM32 TX)
 #define STM32_UART_NUM   UART_NUM_0
@@ -726,8 +755,8 @@ static esp_err_t command_handler(httpd_req_t *req)
 
     char resp[256];
     snprintf(resp, sizeof(resp),
-        "{\"status\":\"%s\",\"device_id\":\"" DEVICE_ID "\",\"message\":\"%s\"}",
-        ok ? "ok" : "error",
+        "{\"status\":\"%s\",\"device_id\":\"%s\",\"message\":\"%s\"}",
+        ok ? "ok" : "error", device_id,
         ok ? "Config aplicada por el STM32"
            : "JSON invalido, o el STM32 no la acepto (ver log serie)");
 
@@ -791,7 +820,7 @@ static esp_err_t status_handler(httpd_req_t *req)
         const char *mname = (s->mode_idx < NUM_MODES)
                           ? MODE_NAMES[s->mode_idx] : "?";
         snprintf(buf, sizeof(buf),
-            "{\"stm32\":\"ok\",\"device_id\":\"" DEVICE_ID "\","
+            "{\"stm32\":\"ok\",\"device_id\":\"%s\","
             "\"proto_ver\":%u,\"mode\":%u,\"mode_name\":\"%s\",\"num_modes\":%u,"
             "\"rx_az\":%d,\"focus\":{\"fx\":%d,\"fy\":%d,\"fz\":%d},"
             "\"underruns\":%lu,\"sai_errors\":%lu,\"ovf\":%u,\"cal_state\":%u,"
@@ -803,6 +832,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"fw_id\":\"%08lX\",\"fw_build\":%lu,\"ota_state\":%u,\"ota_pct\":%u,"
             "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
+            device_id,
             s->proto_ver, s->mode_idx, mname, s->num_modes,
             s->rx_az_deg, s->fx_mm, s->fy_mm, s->fz_mm,
             (unsigned long)s->underruns, (unsigned long)s->sai_errors,
@@ -829,9 +859,9 @@ static esp_err_t status_handler(httpd_req_t *req)
         /* Sin respuesta del STM32 no hay uptime suyo que informar; el que va
          * es el de este chip, y por eso lleva su nombre. */
         snprintf(buf, sizeof(buf),
-            "{\"stm32\":\"timeout\",\"device_id\":\"" DEVICE_ID "\","
+            "{\"stm32\":\"timeout\",\"device_id\":\"%s\","
             "%s,\"uptime_ms\":%lu}",
-            self,
+            device_id, self,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
     }
     httpd_resp_set_type(req, "application/json");
@@ -2026,7 +2056,9 @@ static esp_err_t root_handler(httpd_req_t *req)
 
 static esp_err_t ping_handler(httpd_req_t *req)
 {
-    const char *resp = "{\"status\":\"ok\",\"device_id\":\"" DEVICE_ID "\"}";
+    char resp[64];
+    snprintf(resp, sizeof(resp),
+             "{\"status\":\"ok\",\"device_id\":\"%s\"}", device_id);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp, strlen(resp));
     return ESP_OK;
@@ -2164,10 +2196,14 @@ static void wifi_init(void)
     {
         esp_err_t merr = mdns_init();
         if (merr == ESP_OK) {
-            mdns_hostname_set("domosonica");
-            mdns_instance_name_set("Domosonica DS11");
-            mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
-            printf("[ESP32] mDNS: http://domosonica.local\n");
+            char inst[48];
+            snprintf(inst, sizeof(inst), "Domosonica %s", device_id);
+            mdns_hostname_set(mdns_host);
+            mdns_instance_name_set(inst);
+            mdns_txt_item_t txt[] = { {"id", device_id} };
+            mdns_service_add(NULL, "_http", "_tcp", 80, txt, 1);
+            printf("[ESP32] mDNS: http://%s.local  (id %s)\n",
+                   mdns_host, device_id);
         } else {
             printf("[ESP32] mDNS no arranco (%s) — usar la IP\n",
                    esp_err_to_name(merr));
@@ -2215,12 +2251,17 @@ void app_main(void)
     gpio_set_level(BLINK_GPIO, 0);
     xTaskCreate(led_blink_task, "led_blink", 1024, NULL, 3, NULL);
 
+    /* La identidad primero: el banner, el mDNS y todas las respuestas HTTP la
+     * usan, y sale del MAC, que esta disponible sin levantar la radio. */
+    device_identity_init();
+
     // Esperar USB Serial/JTAG
     vTaskDelay(2000 / portTICK_PERIOD_MS);
 
     printf("\n");
     printf("[ESP32] ============================================\n");
     printf("[ESP32]  ESP32-C3-MINI-1 — DS11 Beamforming Bridge  \n");
+    printf("[ESP32]  %s  ->  http://%s.local\n", device_id, mdns_host);
     printf("[ESP32] ============================================\n");
     printf("[ESP32] UART1 RX=GPIO%d ← STM32 PA1 | TX=GPIO%d → STM32 PA0\n",
            STM32_UART_RX, STM32_UART_TX);
