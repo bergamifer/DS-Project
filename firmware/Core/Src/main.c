@@ -874,14 +874,28 @@ static int32_t  lb_peak[LB_NUM_IN];
  * puntos son −53 dB de armónicos, y la detección coherente ni los ve. */
 #define FS_SETTLE     4800u   /* 100 ms de asentamiento: 6τ del acople de entrada */
 #define FS_WINDOW     9600u   /* 200 ms de medición — múltiplo exacto de 240 */
-#define FS_LIVE_MIN   100     /* cuentas en la referencia para llamar viva a una entrada */
+/* Cuentas en la referencia para llamar viva a una entrada. Bajo a propósito:
+ * con 100 el barrido de volumen se cortaba en −24 dB —tapando justo el rango
+ * operativo de −40 dB (§3)— cuando el piso real de la detección coherente son
+ * 1-3 cuentas, medido en las entradas sin cable. Con 10 llega a −45 dB. Debajo
+ * de ~15 cuentas el error crece a más de 1 dB: el barrido informa el nivel y
+ * quien lo lee decide, en vez de que un umbral decida por él. */
+#define FS_LIVE_MIN   10
 #define FS_PAUSE_MS   2000u
 /* Log-espaciadas de 20 Hz a 20 kHz, con 723 (el pasaalto del amp, §2.1) y 800
  * (el modo 17) agregadas aunque este camino no las vea: si alguna vez se mide
  * con los adaptadores, la grilla es la misma y las corridas se comparan. */
-#define FS_NUM_PTS    22
-#define FS_REF_IDX    12      /* 1000 Hz — el 0 dB de la tabla */
-static const uint16_t fs_freqs[FS_NUM_PTS] = {
+#define FS_NUM_BASE   22
+/* Cada punto se mide DOS veces, a f y a f+FS_DF, para sacar el retardo de grupo
+ * de la diferencia de fase. La separación no es libre: el retardo se resuelve
+ * sin ambigüedad sólo si Δφ < π, o sea τ < 1/(2·Δf). Con 40 Hz eso son 12,5 ms
+ * = 600 muestras, contra los ~274 medidos en §13 — 2,2× de margen. Más chico
+ * daría más margen pero menos resolución en la fase; más grande promedia el
+ * retardo sobre una banda demasiado ancha. */
+#define FS_DF         40
+#define FS_NUM_PTS    (FS_NUM_BASE * 2)
+#define FS_REF_BASE   12      /* 1000 Hz — el 0 dB de la tabla */
+static const uint16_t fs_base[FS_NUM_BASE] = {
      20,   30,   45,   63,   90,  125,  180,  250,  355,  500,
     723,  800, 1000, 1400, 2000, 2800, 4000, 5600, 8000,11200,
   16000,20000
@@ -894,21 +908,48 @@ static volatile uint32_t fs_next_ms = 0;
 static uint32_t fs_tx_phase = 0;            /* fase del emisor  (contexto de fill) */
 static uint32_t fs_rx_phase = 0;            /* fase del detector (contexto RX) */
 static int64_t  fs_i[ADC_CHANNELS], fs_q[ADC_CHANNELS];
-static uint32_t fs_mag[FS_NUM_PTS][ADC_CHANNELS];
+/* I y Q normalizados, no la magnitud: con los dos se saca amplitud Y fase, y la
+ * fase es la que da el retardo de grupo. Guardar sólo el módulo la tiraba. */
+static float fs_fi[FS_NUM_PTS][ADC_CHANNELS];
+static float fs_fq[FS_NUM_PTS][ADC_CHANNELS];
+/* Fase del EMISOR al abrir cada punto. No se fuerza a cero: se anota.
+ *
+ * El retardo de grupo sale de restar las fases de las dos sub-medidas de un
+ * punto, y eso sólo funciona si las dos comparten origen. La primera versión lo
+ * conseguía poniendo `fs_tx_phase = 0` al abrir cada punto — y funcionaba para
+ * la fase, pero **rompía la amplitud**: medido en A/B contra el mismo firmware
+ * sin esa línea, 4 kHz caía 34%, 2 kHz 19% y 1 kHz 10%, de forma perfectamente
+ * repetible en 7 barridos, mientras el resto de la tabla no se movía. El
+ * mecanismo exacto quedó sin identificar (ver docs/loopback_debug.md §15).
+ *
+ * Anotar la fase en vez de pisarla da el mismo origen común SIN tocar un solo
+ * sample emitido, así que la amplitud queda como estaba y el retardo también
+ * sale. La corrección es sumarle 2π·fs_tx0/(48·65536) a la fase detectada. */
+static uint32_t fs_tx0[FS_NUM_PTS];
 
 /** @brief Incremento de fase Q16 sobre la tabla de 48 entradas, para fs_freqs[i].
  *  Idéntico al de Tone_NextSample: a 1 kHz da exactamente una entrada por
  *  muestra (48 muestras por ciclo a 48 kHz). Lo usan el emisor y el detector,
  *  así que las dos frecuencias son la misma por construcción y la magnitud no
  *  deriva por más larga que sea la ventana. */
+static inline uint16_t FS_FreqOf(uint8_t i) {
+  return (uint16_t)(fs_base[i >> 1] + ((i & 1u) ? FS_DF : 0u));
+}
 static inline uint32_t FS_Inc(uint8_t i) {
   /* El clamp no es paranoia: lo leen el emisor y el detector desde
    * Service_Fills, que corre ANIDADO dentro de UART_Print mientras el informe
    * se imprime. Ahí fs_idx vale FS_NUM_PTS por un rato y sin este clamp se
-   * indexa fs_freqs[] fuera de rango — HardFault con BFAR justo pasado el
-   * final del DTCM, que es exactamente como se descubrió. */
+   * indexa la tabla fuera de rango — HardFault con BFAR justo pasado el final
+   * del DTCM, que es exactamente como se descubrió. */
   if (i >= FS_NUM_PTS) i = 0;
-  return ((uint32_t)fs_freqs[i] << 16) / 1000u;
+  return ((uint32_t)FS_FreqOf(i) << 16) / 1000u;
+}
+/** @brief La frecuencia REAL del punto, no la nominal.
+ *  `inc` es entero, así que 1040 Hz pedidos son 1039,99 Hz emitidos. La
+ *  diferencia es despreciable para la amplitud y NO lo es para el retardo de
+ *  grupo, que divide por Δf: usar el nominal metería un sesgo de escala. */
+static inline float FS_FreqReal(uint8_t i) {
+  return (float)FS_Inc(i) * 1000.0f / 65536.0f;
 }
 /** @brief Un punto de la tabla de seno, interpolado, con la fase en Q16. */
 static inline int32_t FS_Sine(uint32_t ph) {
@@ -922,7 +963,8 @@ static inline int32_t FS_Sine(uint32_t ph) {
 _Static_assert(FS_SETTLE % AUDIO_BUFFER_SAMPLES == 0
                && FS_WINDOW % AUDIO_BUFFER_SAMPLES == 0,
                "los puntos tienen que cerrar en un borde de mitad");
-_Static_assert(FS_REF_IDX < FS_NUM_PTS, "la referencia esta fuera de la tabla");
+_Static_assert(FS_REF_BASE < FS_NUM_BASE, "la referencia esta fuera de la tabla");
+_Static_assert(FS_NUM_PTS <= 255, "fs_idx es uint8_t");
 
 /* Extra right-shift applied to the -6dBFS sine table.
  * Now 0: the PAM8302A clipping headroom is handled by the PCM1690's own
@@ -2184,6 +2226,18 @@ int main(void)
         st.sai_errors = sai_error_total + error_count;
         st.ovf = (uint8_t)HAL_GPIO_ReadPin(AK_OVF_PORT, AK_OVF_PIN);
         st.cal_state = (uint8_t)cal_state;
+        /* Con signo, envuelta alrededor de 0 — no en [0,480) como la usa el
+         * informe del loopback. Motivo: la fase real es 0 ±1 muestra de ruido
+         * de lectura (§9), y en el rango sin signo ese −1 sale como **479**.
+         * Un consumidor que compare nodos leería medio buffer de diferencia
+         * donde hay una muestra. Para telemetría, lo útil es la distancia a
+         * cero, y el campo ya es int16 justamente para eso. */
+        {
+          int32_t ph = DMA_PhaseSamples();
+          int32_t half = (int32_t)(LB_DMA_WORDS / AUDIO_CHANNELS) / 2;
+          if (ph > half) ph -= (int32_t)(LB_DMA_WORDS / AUDIO_CHANNELS);
+          st.dma_phase = (int16_t)ph;
+        }
         st.master_vol_db = beam_config.master_vol_db;
         st.in_gain_db = in_gain_db;
         st.adc_ovf_count = adc_ovf_latch;
@@ -4094,6 +4148,11 @@ static volatile uint8_t fs_paused = 0;
  *  magnitud sqrt(I²+Q²) no depende de dónde arranque. */
 static void FS_StartPoint(void) {
   for (uint32_t c = 0; c < ADC_CHANNELS; c++) { fs_i[c] = 0; fs_q[c] = 0; }
+  /* Se ANOTA la fase del emisor, no se pisa: la fase medida vale
+   * θ = ωD − φ_tx0, y ese término se cancela entre las dos sub-medidas de un
+   * punto sólo si se conoce. Conocerlo cuesta 4 bytes; forzarlo a cero costaba
+   * la amplitud. */
+  if (fs_idx < FS_NUM_PTS) fs_tx0[fs_idx] = fs_tx_phase;
   fs_rx_phase = 0;
   fs_n = 0;
   fs_point_ready = 0;
@@ -4101,40 +4160,87 @@ static void FS_StartPoint(void) {
 
 /** @brief Entrar al modo: barrido desde el primer punto. */
 static void FS_Start(void) {
-  memset(fs_mag, 0, sizeof(fs_mag));
+  memset(fs_fi, 0, sizeof(fs_fi));
+  memset(fs_fq, 0, sizeof(fs_fq));
   fs_idx = 0;
   fs_tx_phase = 0;
   fs_paused = 0;
   FS_StartPoint();
 }
 
-/** @brief Imprime la tabla, una por entrada que haya visto señal.
+/** @brief Magnitud del punto i en la entrada c, en cuentas de 24 bits. */
+static inline float FS_Mag(uint8_t i, uint8_t c) {
+  return 2.0f * sqrtf(fs_fi[i][c] * fs_fi[i][c] + fs_fq[i][c] * fs_fq[i][c]);
+}
+
+/** @brief dB con signo y un decimal en `dst` (>=10 bytes).
+ *  nano.specs no soporta %f. Está en una sola función a propósito: hecho a mano
+ *  en cada sitio, el error clásico es que −0,3 salga "+0.3" porque −3/10 da 0 y
+ *  el signo se pierde. */
+static void FS_FmtDb(char *dst, float db) {
+  int32_t d10 = (int32_t)(db * 10.0f + (db >= 0.0f ? 0.5f : -0.5f));
+  char sg = (d10 < 0) ? '-' : '+';
+  if (d10 < 0) d10 = -d10;
+  sprintf(dst, "%c%ld.%01ld", sg, (long)(d10 / 10), (long)(d10 % 10));
+}
+
+/** @brief Retardo de grupo del punto base k, en muestras.
+ *
+ * Sale de la diferencia de fase entre las dos sub-medidas: con
+ * I = Σx·cos(ωn) y Q = Σx·sin(ωn), para x = A·cos(ωn+φ) queda atan2(Q,I) = −φ,
+ * y un retardo puro τ da φ = −ωτ. O sea atan2(Q,I) = ωτ y τ = Δθ/(2πΔf).
+ *
+ * El desenvolvimiento a (−π,π] es lo que fija el rango: ver el comentario de
+ * FS_DF. Devuelve 0 si el punto no tiene señal, para no informar ruido.
+ */
+static float FS_GroupDelay(uint8_t k, uint8_t c) {
+  uint8_t i0 = (uint8_t)(k * 2), i1 = (uint8_t)(k * 2 + 1);
+  if (FS_Mag(i0, c) < FS_LIVE_MIN || FS_Mag(i1, c) < FS_LIVE_MIN) return 0.0f;
+  /* +φ_tx0 en cada término: es el origen del emisor, que no es cero porque el
+   * acumulador corre libre entre puntos. 48·65536 es una vuelta entera. */
+  const float TURN = 48.0f * 65536.0f;
+  float d = (atan2f(fs_fq[i1][c], fs_fi[i1][c]) + 6.28318531f * (float)fs_tx0[i1] / TURN)
+          - (atan2f(fs_fq[i0][c], fs_fi[i0][c]) + 6.28318531f * (float)fs_tx0[i0] / TURN);
+  while (d >  3.14159265f) d -= 6.28318531f;
+  while (d < -3.14159265f) d += 6.28318531f;
+  float df = FS_FreqReal(i1) - FS_FreqReal(i0);
+  if (df <= 0.0f) return 0.0f;
+  return (d / (6.28318531f * df)) * (float)AUDIO_SAMPLE_RATE;
+}
+
+/** @brief Imprime la tabla, una por entrada que haya visto señal, más la
+ *         diafonía hacia las otras siete.
  *
  * Igual que el LOOPBACK, el firmware DESCUBRE por dónde entró en vez de exigir
- * que se lo declaren: se conecta el cable donde sea y el informe dice qué
- * entrada lo vio. "Viva" se decide con el nivel en 1 kHz, no en el extremo del
- * barrido, porque ahí abajo la respuesta puede haber caído legítimamente. */
+ * que se lo declaren. "Viva" se decide con el nivel en 1 kHz, no en el extremo
+ * del barrido, porque ahí abajo la respuesta puede haber caído legítimamente. */
 static void FS_Report(void) {
+  /* Holgados a propósito: el compilador acota %ld por el peor caso de un
+   * long, no por el rango real, y con buffers justos avisa por overflow. */
+  char dbs[24], taus[32];
   UART_Print("\r\nBARRIDO DE FRECUENCIA (ch0/8/16/24, tono -6 dBFS) ---------\r\n");
-  uint8_t n_ok = 0;
+  uint8_t live = 0xFF, n_ok = 0;
   for (uint8_t c = 0; c < ADC_CHANNELS; c++) {
-    uint32_t ref = fs_mag[FS_REF_IDX][c];
+    float ref = FS_Mag(FS_REF_BASE * 2, c);
     if (ref < FS_LIVE_MIN) continue;
+    if (live == 0xFF) live = c;
     n_ok++;
     sprintf(uart_buf, "  entrada%u (c%u): 0 dB = %lu cuentas @ %u Hz\r\n",
-            (unsigned)(c + 1), (unsigned)c, (unsigned long)ref,
-            (unsigned)fs_freqs[FS_REF_IDX]);
+            (unsigned)(c + 1), (unsigned)c, (unsigned long)(ref + 0.5f),
+            (unsigned)fs_base[FS_REF_BASE]);
     UART_Print(uart_buf);
-    for (uint8_t k = 0; k < FS_NUM_PTS; k++) {
-      float r = (float)fs_mag[k][c] / (float)ref;
+    for (uint8_t k = 0; k < FS_NUM_BASE; k++) {
+      float m = FS_Mag((uint8_t)(k * 2), c);
+      float r = m / ref;
       if (r < 1e-6f) r = 1e-6f;                  /* piso de -120 dB, no -inf */
-      float db = 20.0f * log10f(r);
-      int32_t d10 = (int32_t)(db * 10.0f + (db >= 0.0f ? 0.5f : -0.5f));
-      char sg = (d10 < 0) ? '-' : '+';
-      int32_t ad = (d10 < 0) ? -d10 : d10;
-      sprintf(uart_buf, "  %7lu Hz  %8lu  %c%ld.%01ld dB\r\n",
-              (unsigned long)fs_freqs[k], (unsigned long)fs_mag[k][c],
-              sg, (long)(ad / 10), (long)(ad % 10));
+      FS_FmtDb(dbs, 20.0f * log10f(r));
+      float tau = FS_GroupDelay(k, c);
+      int32_t t100 = (int32_t)(tau * 100.0f + (tau >= 0.0f ? 0.5f : -0.5f));
+      char sg = (t100 < 0) ? '-' : '+';
+      if (t100 < 0) t100 = -t100;
+      sprintf(taus, "%c%ld.%02ld", sg, (long)(t100 / 100), (long)(t100 % 100));
+      sprintf(uart_buf, "  %7lu Hz  %8lu  %s dB   tau %s smp\r\n",
+              (unsigned long)fs_base[k], (unsigned long)(m + 0.5f), dbs, taus);
       UART_Print(uart_buf);
     }
   }
@@ -4143,10 +4249,43 @@ static void FS_Report(void) {
                "  senal, masa aparte); si medis por parlante hacen falta 24 V.\r\n"
                "  Nivel en la referencia por entrada: ");
     for (uint8_t c = 0; c < ADC_CHANNELS; c++) {
-      sprintf(uart_buf, "c%u=%lu ", (unsigned)c, (unsigned long)fs_mag[FS_REF_IDX][c]);
+      sprintf(uart_buf, "c%u=%lu ", (unsigned)c,
+              (unsigned long)(FS_Mag(FS_REF_BASE * 2, c) + 0.5f));
       UART_Print(uart_buf);
     }
     UART_Print("\r\n");
+    return;
+  }
+
+  /* Diafonía hacia las entradas que NO tienen cable. Se compara contra el canal
+   * excitado A LA MISMA FRECUENCIA, no contra su valor en 1 kHz: si la respuesta
+   * del excitado cayera en un extremo, medir contra 1 kHz inventaría diafonía
+   * donde sólo hay menos señal de referencia.
+   *
+   * ⚠️ Un número cerca del piso de ruido NO es diafonía medida: con ~2600
+   * cuentas de excitación y ~6 de ruido después de la detección coherente, el
+   * piso está en torno a −53 dB. Si todas las entradas mudas dan lo mismo y no
+   * depende de la frecuencia, eso es el piso, no acoplamiento. */
+  UART_Print("  diafonia vs el canal excitado (peor caso | en 1 kHz):\r\n");
+  for (uint8_t c = 0; c < ADC_CHANNELS; c++) {
+    if (c == live) continue;
+    float worst = -200.0f; uint16_t at = 0; float cnt = 0.0f;
+    for (uint8_t k = 0; k < FS_NUM_BASE; k++) {
+      float m = FS_Mag((uint8_t)(k * 2), c);
+      float d = FS_Mag((uint8_t)(k * 2), live);
+      if (d <= 0.0f) continue;
+      float r = m / d;
+      if (r < 1e-7f) r = 1e-7f;
+      float db = 20.0f * log10f(r);
+      if (db > worst) { worst = db; at = fs_base[k]; cnt = m; }
+    }
+    FS_FmtDb(dbs, worst);
+    float r1k = FS_Mag(FS_REF_BASE * 2, c) / FS_Mag(FS_REF_BASE * 2, live);
+    if (r1k < 1e-7f) r1k = 1e-7f;
+    FS_FmtDb(taus, 20.0f * log10f(r1k));
+    sprintf(uart_buf, "    c%u  %s dB @ %5u Hz (%lu cuentas) | %s dB\r\n",
+            (unsigned)c, dbs, (unsigned)at, (unsigned long)(cnt + 0.5f), taus);
+    UART_Print(uart_buf);
   }
 }
 
@@ -4170,10 +4309,8 @@ static void FS_Process(void) {
    * rango en float. Queda en cuentas de 24 bits, la misma escala que ADCpk. */
   const float den = (float)FS_WINDOW * 4194304.0f;
   for (uint8_t c = 0; c < ADC_CHANNELS; c++) {
-    float fi = (float)fs_i[c] / den;
-    float fq = (float)fs_q[c] / den;
-    float a  = 2.0f * sqrtf(fi * fi + fq * fq);
-    fs_mag[fs_idx][c] = (uint32_t)(a + 0.5f);
+    fs_fi[fs_idx][c] = (float)fs_i[c] / den;
+    fs_fq[fs_idx][c] = (float)fs_q[c] / den;
   }
   fs_idx++;
   if (fs_idx < FS_NUM_PTS) { FS_StartPoint(); return; }

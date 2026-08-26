@@ -119,7 +119,7 @@
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION       9   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      10   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -285,7 +285,15 @@ typedef struct __attribute__((packed)) {
     uint32_t fw_build;       /* v8: epoch unix de la compilación */
     uint8_t  ota_state;      /* v8: ota_state_t — 0 idle, 1 recibiendo, 2 lista, 3 error */
     uint8_t  ota_pct;        /* v8: avance de la carga, 0..100 */
-} ds_status_t;               /* 73 + 10 = 83 bytes */
+    /* v9 — la fase RX↔TX de los DMA, en muestras, medida AHORA.
+     *
+     * Es el nivel 2 de multinode.md §2 y sale de dos registros: no necesita
+     * loopback, ni J13, ni adaptador, ni micrófono (loopback_debug.md §9). Cada
+     * nodo de una instalación puede decir por HTTP en qué estado de fase
+     * arrancó — que es lo único que hacía falta para compensarlo. Se imprimía en
+     * el heartbeat desde agosto, o sea que hasta ahora pedía un cable serie. */
+    int16_t  dma_phase;      /* v9: fase RX-TX en muestras, 0..479 */
+} ds_status_t;               /* 73 + 10 + 2 = 85 bytes */
 
 /* Estado REAL, no el nominal.
  *
@@ -310,7 +318,7 @@ typedef struct __attribute__((packed)) {
  * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18
  * midiendo underruns, cuando el contador BAJÓ de 6 a 0 — un contador monótono
  * que retrocede es un reboot, y no había con qué confirmarlo. */
-_Static_assert(sizeof(ds_status_t) == 83, "ds_status_t must be 83 bytes");
+_Static_assert(sizeof(ds_status_t) == 85, "ds_status_t must be 85 bytes");
 /* ⚠️ Un payload por encima de PROTO_MAX_PAYLOAD hace que el ESP32 descarte la
  * trama por larga y el endpoint quede mudo SIN dar error — de ahí los asserts. */
 _Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,

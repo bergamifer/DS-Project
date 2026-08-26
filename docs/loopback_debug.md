@@ -844,3 +844,185 @@ después, más un clamp en el índice.
 > Vale como regla general de esta base: **cualquier cosa que imprima por UART
 > está cediendo el control al pipeline de audio en el medio.** El estado tiene
 > que ser válido *antes* de la primera línea, no después de la última.
+
+---
+
+## 15. Cuatro medidas más sin alimentar la placa (2026-08-25)
+
+Con los 19-20 V todavía sin conectar quedaban bloqueados la escucha del `-O2`, el
+skew entre bancos y todo lo acústico. Esto es lo que **sí** se pudo cerrar con
+ST-Link, HTTP y el cable de J13.
+
+### 15.0 ⚠️ Antes que nada: el volumen guardado estaba en 0 dB
+
+Apareció al verificar, y es lo primero que había que arreglar **antes** de
+enchufar la alimentación, no después. Del log de arranque de la placa:
+
+```
+VOLUME: 0 dB al boot (ATDA=0xFF)
+```
+
+`PCM1690_Init` **sí** escribe −24 dB, pero después `Apply_Master_Volume()` lo
+pisa con el valor persistido en EEPROM (`main.c`, "Restore saved master volume"),
+y en esta placa ese valor era **0**. El default de `Config_LoadDefaults` ya es
+−40 dB —la recomendación de §3 está implementada— pero **nunca se aplica si la
+EEPROM tiene otra cosa**.
+
+Contra la cuenta de §3: a −24 dB el PAM8302A ya está 12 dB adentro del recorte.
+A 0 dB son **36 dB**. Se dejó en **−40 dB**, verificado contra un reinicio
+(`VOLUME: -40 dB al boot (ATDA=0xAF)`).
+
+> Lección: un default correcto en el código no es un default correcto en la
+> placa. Lo que gobierna es la EEPROM, y sólo el log de arranque lo dice.
+
+### 15.1 Linealidad de la atenuación del PCM1690 — §5.4, la mitad medible
+
+Barriendo el volumen y midiendo el punto de 1 kHz por J13 con el detector
+coherente del modo 20:
+
+| pedido | cuentas | medido | error |
+|---|---|---|---|
+| 0 dB | 2579 | 0,00 | +0,00 |
+| −12 | 644 | −12,05 | −0,05 |
+| −24 | 161 | −24,09 | −0,09 |
+| −27 | 115 | −27,02 | −0,02 |
+| −30 | 82 | −29,95 | +0,05 |
+| −33 | 58 | −32,96 | +0,04 |
+| −36 | 41 | −35,97 | +0,03 |
+| **−40** | 26 | **−39,93** | **+0,07** |
+| −43 | 18 | −43,12 | −0,12 |
+| −46 | 13 | −45,95 | +0,05 |
+
+**La atenuación digital es exacta dentro de ±0,13 dB de 0 a −46 dB**, sumando
+también un barrido en pasos de 3 dB de 0 a −24. El control de volumen hace
+exactamente lo que dice, y el punto de operación recomendado (−40 dB) cae dentro
+del rango verificado.
+
+⚠️ **No contesta §5.4 entera.** Dónde deja de ser lineal *el amplificador* —el
+volumen máximo utilizable del instrumento— sigue necesitando alimentación: J13
+mide antes del PAM8302A.
+
+> El primer barrido se cortó en −24 dB, y no por ruido: el umbral de "entrada
+> viva" del propio modo estaba en 100 cuentas, o sea 24 dB por encima del piso
+> real de 1-3 cuentas. **El instrumento se estaba censurando solo justo en el
+> rango que importaba.** Bajado a 10.
+
+### 15.2 Retardo de grupo contra frecuencia
+
+§8 y §9 **asumen** que los group delays del PCM1690 y del AK5538 son constantes
+de datasheet, y toda la conclusión de §9 se apoya en esa premisa. Ahora está
+medida: el modo 20 mide cada punto dos veces, a f y a f+40 Hz, y saca el retardo
+de la diferencia de fase.
+
+| | |
+|---|---|
+| retardo en banda media (723 Hz – 8 kHz) | **513,76 muestras** |
+| dispersión sobre 6 barridos | **≤0,15 muestras** |
+
+**Dos cruces que valen más que el número:**
+
+**1. Contra el loopback de §13.** La correlación de chirp daba **513,67**. Dos
+instrumentos independientes —correlación en el tiempo contra pendiente de fase en
+frecuencia— coinciden en **0,09 muestras = 1,9 µs**.
+
+**2. Contra la amplitud de §14, sin ajustar nada.** El exceso de retardo a baja
+frecuencia tiene que ser el del pasaalto de 16,0 Hz que §14 sacó de la *amplitud*.
+Prediciendo con ese polo, promediado sobre el mismo par f..f+40:
+
+| f | exceso medido | predicho por el polo de 16 Hz | residuo |
+|---|---|---|---|
+| 30 Hz | +53,68 | +50,66 | +3,02 |
+| 45 | +31,45 | +29,71 | +1,74 |
+| 90 | +10,77 | +10,21 | +0,55 |
+| 250 | +1,78 | +1,68 | +0,10 |
+| 500 | +0,41 | +0,45 | −0,04 |
+| 1000 | +0,03 | +0,12 | −0,08 |
+
+De 250 Hz para arriba el residuo es **≤0,14 muestras**. Amplitud y fase describen
+el mismo polo, medidos por caminos distintos.
+
+**Arriba, en cambio, no cierra — y eso es el hallazgo.** A 16 kHz el exceso es
++0,96 muestras y a 20 kHz **+2,42**, cuando el polo de 29,4 kHz predice ~0
+respecto de la banda media (su contribución es casi plana). **Ese exceso no es la
+red RC: son los filtros digitales de los conversores.** Son 2,42 muestras =
+50 µs = 17 mm de camino acústico a 20 kHz.
+
+**Lo que importa para §9:** en la banda donde el instrumento trabaja de verdad
+(500 Hz – 2,8 kHz) el retardo es constante dentro de **±0,2 muestras = 4 µs =
+1,4 mm**. Tratar los group delays como constantes está **justificado, y ahora
+medido**.
+
+### 15.3 Diafonía entre entradas del ADC
+
+Con el tono entrando sólo por entrada5, las otras siete:
+
+| entrada | peor caso | a qué frecuencia | cuentas |
+|---|---|---|---|
+| c0 | −56,9 dB | 20 Hz | 3 |
+| c1 | −62,5 | 125 Hz | 2 |
+| c2 | −66,2 | 30 Hz | 1 |
+| c3 | −68,0 | 45 Hz | 1 |
+| c5 | −63,2 | 30 Hz | 2 |
+| c6 | −63,1 | 20 Hz | 1 |
+| c7 | −57,9 | 20 Hz | 3 |
+
+Todas en 1-3 cuentas, y el peor caso cae **siempre en 20-125 Hz**. Eso es la
+firma del piso de ruido (1/f), no de acoplamiento: si fuera diafonía real
+seguiría a la señal, no al ruido. **La diafonía del ADC queda acotada a
+<−57 dB**, que es el piso de la medición, no un valor medido.
+
+⚠️ **No reproduce ni refuta los −38 dB del 2026-08-18.** Aquélla era otra
+configuración —la Mac excitando c6/c7, con el par partido del pinout de J9 y el
+retorno de masa común como sospechosos— y hace falta esa fuente para repetirla.
+Lo que sí hace es **acotar al conversor**: con esta excitación el ADC no acopla
+ni cerca de −38 dB, así que el sospechoso queda del lado del cableado.
+
+### 15.4 La fase RX↔TX, por HTTP — nivel 2 de multinode
+
+§9 dejó el hallazgo práctico: la fase sale de **dos registros**, sin loopback,
+sin J13, sin adaptador y sin micrófono. Estaba sólo en el heartbeat, o sea que
+leerla pedía un cable serie. Ahora viaja en `/status` (protocolo **v10**,
+85 bytes, campo `dma_phase`):
+
+```json
+{"proto_ver":10, "dma_phase":0, "status_len":85, ...}
+```
+
+Cualquier nodo de una instalación de 10-16 cajas puede decir por red en qué
+estado de fase arrancó. **Eso era todo lo que faltaba para el nivel 2.**
+
+> Detalle que apareció midiendo: la primera versión informaba la fase en
+> `[0, 480)` y leía **`0` o `479`** alternando. Son los ±1 de ruido de lectura de
+> §9 — pero `479` se lee como **medio buffer de diferencia** en vez de una
+> muestra. El campo se pasó a **con signo, envuelto alrededor de cero**, que es
+> la forma en que se va a comparar entre nodos.
+
+### Un instrumento que casi miente: la fase del emisor
+
+Para que las dos sub-medidas de cada punto compartan origen de fase, la primera
+versión ponía `fs_tx_phase = 0` al abrir cada punto. **El retardo salió perfecto
+y la amplitud se rompió**, de forma perfectamente repetible en 7 barridos:
+
+| f | con reset | sin reset | |
+|---|---|---|---|
+| 1000 Hz | 2358 | 2617 | **−10 %** |
+| 2000 Hz | 2105 | 2607 | **−19 %** |
+| 4000 Hz | 1704 | 2583 | **−34 %** |
+| 20000 Hz | 1465 | 2136 | **−31 %** |
+| el resto de la tabla | — | — | ±2 % |
+
+Un A/B con y sin esa única línea lo dejó sin ambigüedad: con reset, retardo bueno
+y amplitud rota; sin reset, amplitud buena y retardo basura.
+
+**La solución fue anotar la fase del emisor en vez de pisarla.** El mismo origen
+común se consigue guardando `fs_tx_phase` al abrir el punto y sumándolo a la fase
+detectada al informar — **sin cambiar un solo sample emitido**. Con eso salen las
+dos cosas en el mismo barrido, que es lo que está commiteado.
+
+> ⚠️ **Pregunta abierta, a propósito.** *Por qué* pisar la fase degradaba la
+> amplitud, y sólo en frecuencias cuyo incremento de tabla es una potencia de dos
+> (250, 500, 1000, 2000, 4000 Hz) pero no en 8000 ni 16000, **no quedó
+> identificado**. No bloquea nada —el camino que se usa no toca la emisión— pero
+> queda escrito con los datos del A/B en vez de enterrado. Si alguna vez se toca
+> el generador de tonos, esto es un aviso: **el modo 20 puede medir una amplitud
+> equivocada sin ninguna bandera de error.**

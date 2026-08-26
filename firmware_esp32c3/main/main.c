@@ -213,8 +213,9 @@ typedef struct __attribute__((packed)) {
     uint32_t fw_build;        // v8: epoch unix de esa compilacion
     uint8_t  ota_state;       // v8: 0 idle, 1 recibiendo, 2 lista, 3 error
     uint8_t  ota_pct;         // v8: avance de la carga, 0..100
+    int16_t  dma_phase;       // v9: fase RX-TX de los DMA en muestras (multinode nivel 2)
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 83, "ds_status_t debe ser 83 bytes");
+_Static_assert(sizeof(ds_status_t) == 85, "ds_status_t debe ser 85 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 #define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
@@ -831,6 +832,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"cpu_fills_pct\":%u.%u,"
             "\"mic_live\":%u,\"cal_prog\":%u,\"cal_ok\":%u,\"cal_saved\":%s,"
             "\"fw_id\":\"%08lX\",\"fw_build\":%lu,\"ota_state\":%u,\"ota_pct\":%u,"
+            "\"dma_phase\":%d,"
             "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             device_id,
@@ -853,6 +855,9 @@ static esp_err_t status_handler(httpd_req_t *req)
             (s->state_flags & STATE_F_CALIB) ? "true" : "false",
             (unsigned long)s->fw_id, (unsigned long)s->fw_build,
             s->ota_state, s->ota_pct,
+            /* Vale sólo si la trama llego completa: un STM32 con firmware
+             * viejo manda 83 bytes y este campo seria basura de pila. */
+            (last_status_len >= sizeof(ds_status_t)) ? (int)s->dma_phase : -1,
             self, (unsigned)last_status_len,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
