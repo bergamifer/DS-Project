@@ -95,6 +95,14 @@ cada uno diferencial de punta a punta.
 
 ### 2.1 ⚠️ Dos números que salen de acá y no son menores
 
+> ⚠️ **LOS DOS NÚMEROS DE ESTA SECCIÓN ESTÁN MAL — CORREGIDOS EN §19.3.**
+> Medido el 2026-08-26 con el lazo cerrado: la ganancia es **+29 dB** (no +49) y
+> el pasaalto está en **~70 Hz** (no en 723 Hz). El factor 10 está en la
+> resistencia efectiva de ganancia. Tres medidas independientes coinciden.
+> **En 800 Hz la respuesta es plana**, así que la advertencia sobre el modo 17
+> que sigue más abajo tampoco vale. Leer §19.3 antes de usar nada de acá.
+
+
 **El pasaalto de entrada del amplificador está en ~723 Hz.**
 
 ```
@@ -121,6 +129,14 @@ equipo — la sección que sigue.
 ---
 
 ## 3. ⚠️ El volumen de fábrica está unos 16 dB demasiado alto
+
+> ⚠️ **ESTA SECCIÓN SE APOYA EN LOS +49 dB DE §2.1, QUE SON +29 dB.** Ver
+> §19.3 y §19.4. Con la ganancia real **sobran ~20 dB de margen**: a −40 dB el
+> amplificador entrega del orden de 600 mV, no 3,2 V. La conclusión de abajo
+> —que hay que bajar el volumen— apunta en la dirección correcta pero con la
+> magnitud equivocada. **El techo real quedó sin medir** (§19.5): hay que
+> hacerlo con los parlantes desconectados.
+
 
 Encadenando los números del esquemático:
 
@@ -240,6 +256,12 @@ Por cada canal a medir, entre un par de salida de parlante y un par de entrada:
 
 La §4.2 dice qué construir; faltaba **a qué conector va**. Sale de recorrer
 `DS.txt` de JSPK → FB → PAM8302 → VOUT del PCM1690, y de J9 → AK5538.
+
+> ⚠️ **La fila del banco 16 no coincidió con la placa real — ver §19.0.** El
+> cruce existe, pero **el número serigrafiado y la posición física no van
+> juntos en ese par**: medido con el walker, ch16 sale por el conector que en
+> la placa se lee **JSPK09**. Para conectarse, usar la posición y confirmar con
+> el walker, no la etiqueta.
 
 **Salida — qué banco es cada JSPK.** Cada conector lleva dos canales
 consecutivos: pines **1/2 = el par** y **4/3 = el impar**.
@@ -1519,3 +1541,184 @@ La placa quedó corriendo **HEAD (`2CA685DB`)** por OTA. Antes informaba
 `897BDF5C`: el arreglo de §17 se había flasheado desde el árbol de trabajo
 *antes* de commitearlo, así que el `fw_id` era el del commit anterior y no había
 forma de saber desde afuera qué estaba corriendo. Ahora coincide.
+
+---
+
+## 19. RESULTADOS 2026-08-26 (noche) — el lazo cerrado, por fin
+
+Adaptadores resoldados y funcionando. **Se hizo la medición de §5.1**, la que más
+falta hacía. Y de paso se cayeron dos números del análisis de esquemático de
+§2.1 que venían gobernando cómo se opera el equipo.
+
+Base: **84 informes completos** del modo 19 con las cinco entradas, volumen
+−35 dB, más barridos del modo 20 a seis niveles.
+
+### 19.0 El mapeo, medido en vez de supuesto
+
+Con el **walker** (un canal por segundo) y la excitación de los modos 19/20 se
+determinó qué canal excita cada entrada. **No coincide con lo que yo había
+deducido del netlist para el banco 16, y el usuario tenía razón:**
+
+| entrada | canal | banco | conector (según el usuario) |
+|---|---|---|---|
+| c0 | ch0 | 0 | JSPK01 |
+| c1 | ch8 | 8 | JSPK05 |
+| c2 | **ch16** | 16 | **JSPK09** |
+| c3 | ch24 | 24 | JSPK13 |
+| c4 | ch24 | — | J13 (toma directa del DAC) |
+
+§4.3 decía que ch16 sale por **JSPK10**. La medición dice que sale por el
+conector que el usuario llama **JSPK09**. La conclusión no es que el trazado del
+cobre estuviera mal —el cruce existe— sino que **el número serigrafiado y la
+posición física no van juntos en ese par**, que es exactamente lo que
+`ds11_upgrades.md` avisaba al decir que el orden de los JSPK es parte del diseño
+del arnés. **Para conectarse hay que usar la posición, no la etiqueta.**
+
+> Lección de método: §4.3 salió de leer un archivo de diseño y se escribió con
+> confianza. Alcanzó un walker de 32 segundos para corregirla. Cuando existe la
+> posibilidad de medir, medir gana.
+
+### 19.1 🔴 EL SKEW ENTRE BANCOS — la medición de §5.1
+
+Retardo absoluto del lazo, por banco, en el **terminal de parlante** (o sea
+incluyendo amplificador y adaptador), 84 informes:
+
+| | t medio (muestras) | sigma |
+|---|---|---|
+| banco 0 | 513,888 | 0,034 |
+| banco 8 | 514,179 | 0,031 |
+| banco 16 | 513,961 | 0,030 |
+| banco 24 | 513,967 | 0,009 |
+| J13 (ch24, antes del amp) | 513,580 | **0,000** |
+
+**Los tres bancos con adaptadores iguales** (0, 16, 24 — ver §19.2 por qué el 8
+queda afuera):
+
+| par | skew | |
+|---|---|---|
+| **banco 24 − banco 16** | **+0,12 µs** | los dos en SAI2 (master + esclavo) |
+| banco 16 − banco 0 | +1,52 µs | SAI2 contra SAI1 |
+| banco 24 − banco 0 | +1,63 µs | SAI2 contra SAI1 |
+
+**Dos resultados, y los dos importan:**
+
+1. **El sincronismo master↔esclavo dentro de un SAI es de 0,12 µs.** SAI2_A
+   (banco 16) y SAI2_B (banco 24) salen a la misma muestra, medido del lado
+   analógico. La arquitectura de arrancar el esclavo antes que el master
+   (descubrimiento 5 de la memoria) queda **verificada eléctricamente**, no por
+   sus consecuencias.
+2. **Entre los dos bloques SAI hay ~1,5 µs.** Es la primera medición del lado
+   que importa: hasta hoy los "4 µs" salían de comparar marcas de `DWT->CYCCNT`
+   en los callbacks de DMA, o sea de cuándo se entera el software. El
+   `SYNC bancos` que informa el heartbeat venía diciendo **1-2 µs** en esta
+   sesión — **y coincide**. El invariante queda confirmado.
+
+Para dimensionarlo: 1,5 µs son **0,5 mm de camino acústico**, contra los 80 mm
+de separación entre parlantes. **No afecta el beamforming.** El equipo está
+mejor sincronizado de lo que su propia documentación suponía.
+
+### 19.2 ⚠️ El adaptador del banco 8 está mal armado — y dos síntomas lo prueban
+
+El banco 8 daba **+6,05 µs** contra el banco 0, cincuenta veces el skew de los
+otros. No es el hardware: **es su adaptador**, y hay dos medidas independientes
+que lo dicen.
+
+| | banco 8 | los otros tres |
+|---|---|---|
+| nivel (a −40 dB) | **+12,7 dB más alto** | iguales entre sí |
+| respuesta en 20 kHz | **−4,90 dB** | −1,90 / −1,90 / −2,00 dB |
+| corte implícito | **~13,8 kHz** | ~26,9 kHz |
+
+Y acá está la prueba cruzada, que es lo que convierte la sospecha en
+diagnóstico. Un polo en 13,8 kHz contra uno en 26,9 kHz predice una diferencia
+de retardo de grupo de:
+
+```
+1/(2π·13800) − 1/(2π·26900) = 11,53 − 5,92 = 5,62 µs
+```
+
+**Medido por correlación: +6,05 µs.** Coinciden dentro de 0,43 µs, y son dos
+mediciones que no comparten nada: una es amplitud contra frecuencia, la otra es
+tiempo por correlación cruzada. **El "skew" del banco 8 es su propio filtro.**
+
+**Qué revisar**: el más probable es la **resistencia de shunt de 1 kΩ** de ese
+adaptador — si quedó de 4,7 kΩ, sube el nivel y baja el corte, que es
+exactamente el par de síntomas. Con el téster, entre los dos pines del RJ45 de
+ese adaptador tiene que dar **1 kΩ**, no 4,7 kΩ.
+
+> Esto es §4.2 cobrándose lo que avisaba: *"la tolerancia no importa mientras
+> los adaptadores sean iguales"*. No lo son, y el error entró justo en la
+> medición que el instrumento existe para hacer. **La medición relativa no
+> perdona un instrumento desparejo** — pero, bien hecha, lo delata sola.
+
+### 19.3 🔴 La ganancia del amplificador es +29 dB, no +49. Y el pasaalto está en 72 Hz, no en 723
+
+§2.1 derivó del esquemático dos números que resultaron **equivocados por un
+factor de 10** en la resistencia efectiva de ganancia. Tres mediciones
+independientes, todas consistentes entre sí:
+
+| | §2.1 dice (R_I = 1k) | R_I = 10k daría | **medido** |
+|---|---|---|---|
+| ganancia | +49,07 dB | +29,07 dB | **+29 dB** |
+| pasaalto | 723 Hz | 72,3 Hz | **~70 Hz** |
+| nivel contra J13 | +22,71 dB | +2,71 dB | **+2,70 dB** |
+
+La respuesta del amplificador solo (canal amplificado menos J13, que es el mismo
+ch24 antes del amp):
+
+| Hz | 20 | 30 | 45 | **63** | 90 | 125 | 250 | 500 | **723** | **800** | 2000 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| dB | −10,8 | −7,9 | −5,2 | **−3,5** | −2,1 | −1,1 | −0,3 | 0,0 | **0,0** | **0,0** | 0,0 |
+
+**−3 dB cae en ~70 Hz. En 723 Hz la respuesta es plana.** No hay ningún
+pasaalto de 723 Hz en el camino real.
+
+⚠️ El netlist **sí dice 1 kΩ** (R38/R39, verificado). O sea que el factor 10 no
+está en el valor del componente sino en el modelo: lo más probable es que el
+PAM8302A tenga su propia resistencia de entrada interna en serie con la externa,
+y que la fórmula `2·(142k/R_I)` de §2.1 pida el total y no sólo la externa.
+**Queda para confirmar en la mesa** —midiendo R38 con el téster, o contra el
+datasheet del chip—, pero lo medido no depende de cuál sea el mecanismo.
+
+### 19.4 Qué queda corregido de §2.1 y §3
+
+- **El modo 17 está bien.** §2.1 avisaba que su tono de 800 Hz trabajaba *"a
+  media octava del borde de la banda"*, con −2,6 dB y 42° de corrimiento.
+  **Medido: 0,00 dB en 800 Hz.** La preocupación se cae.
+- **La dispersión entre canales en 800 Hz se cae con ella.** §2.1 estimaba
+  ±2,8° (~10 µs) por tolerancia de los capacitores. Con el corte en 72 Hz, en
+  800 Hz estamos una década arriba y la sensibilidad a tolerancias es
+  despreciable — que es justamente por qué los bancos 0, 16 y 24 coinciden tan
+  bien.
+- ⚠️ **§3 hay que rehacerla.** "El volumen de fábrica está unos 16 dB demasiado
+  alto" se dedujo con +49 dB de ganancia. Con +29 dB **sobran ~20 dB de
+  margen**: a −40 dB el amplificador entrega del orden de **600 mV**, no
+  3,2 V. El equipo viene corriendo muy por debajo de lo que puede.
+
+### 19.5 Linealidad, y dónde estaría el techo
+
+La razón entre el canal amplificado y J13 se mantiene en **+2,70 a +2,75 dB**
+de −55 a −34 dB (verificado con control de datos viejos: `c4` tiene que escalar
+con el volumen y se comprueba en cada punto). Sin compresión, sin recorte.
+
+Extrapolando con la ganancia medida, el amplificador llegaría a su techo de
+~3,2 V<sub>rms</sub> alrededor de **−19 dB de volumen**. **No se midió**: había
+un parlante conectado y llevarlo ahí son ~4 W sobre un driver chico. Queda como
+la única parte de §5.4 pendiente, y hay que hacerla **con los parlantes
+desconectados**.
+
+### 19.6 El amplificador, aislado por primera vez
+
+J13 y el adaptador del JSPK13 miden **el mismo canal 24**, antes y después del
+amplificador, **en la misma captura**. Eso da su retardo directo:
+
+```
+JSPK13 (después del amp) − J13 (antes) = +0,3867 muestras = +8,06 µs
+```
+
+Es lo que §4 había anticipado como el uso más valioso de tener las dos tomas, y
+es un número que no se podía obtener de ninguna otra forma.
+
+> Detalle que da confianza en todo lo demás: **J13 tiene sigma = 0,000 muestras
+> sobre 84 informes**. El instrumento no se mueve. Los sigma de 0,03 de los
+> canales amplificados son del amplificador y su adaptador, no del método.
