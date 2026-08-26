@@ -1141,3 +1141,74 @@ Mac excitando c6/c7 por el par partido de J9. Lo que §16.3 agrega es que **el
 conversor y el ruteo interno están 35 dB mejor que eso**, así que el sospechoso
 queda firmemente del lado del cable y el conector.
 
+---
+
+## 17. El error de fase entre bancos: real, disparaba, y no contaminaba (2026-08-26)
+
+Antes de creerle a §5.1 (skew entre bancos) había que descartar que **el propio
+modo introdujera** el desfasaje que quiere medir. Resultado: **el error existe y
+dispara, pero nunca durante una medición.** §5.1 se puede correr con confianza.
+
+### 17.1 Qué estaba mal
+
+`Service_Fills` llena las dos mitades de cada banco en **bloques `if`
+separados**, y recorre los cuatro bancos en orden 0→8→16→24. Los emisores del
+modo 19 (chirp) y del 20 (tono) leían una posición **compartida** y sólo la
+avanzaban en el banco 24 — a propósito, para que dentro de una pasada los cuatro
+emitieran el mismo trozo.
+
+Eso vale mientras cada pasada llene **una** mitad por banco. Si el lazo principal
+se demora más de 5 ms, la pasada llena **las dos**:
+
+| | primera mitad | segunda mitad |
+|---|---|---|
+| bancos 0, 8, 16 | trozo P | **trozo P otra vez** |
+| banco 24 | trozo P | **trozo P+240** |
+
+**240 muestras (5 ms) de desfasaje entre el banco 24 y los otros tres** — contra
+los microsegundos que §5.1 quiere resolver. Silencioso: ninguna bandera de error.
+
+### 17.2 Cómo se comprobó
+
+Contador `dbl_fill[4]`, que cuenta las pasadas en que un banco llenó sus dos
+mitades, publicado en el heartbeat:
+
+```
+dblfill: b0=7 b8=7 b16=7 b24=7
+```
+
+| prueba | resultado |
+|---|---|
+| Arranque | **7 pasadas dobles**, iguales en los cuatro bancos |
+| 12 reinicios seguidos | siempre 7, y siempre **ya alcanzado antes de la primera captura** |
+| 63 informes de loopback | **no incrementa** |
+| 145 barridos del modo 20 | **no incrementa** |
+| Guardado de EEPROM real (~12 ms) en plena medición | **no incrementa**, captura limpia |
+| Primeras capturas de los 12 arranques | `t` entre 513,58 y 513,60, `q` entre 1526 y 1536 — sin una sola anomalía |
+
+**Por qué no dispara en operación:** todos los caminos bloqueantes conocidos
+ceden. `UART_Print` llama a `Service_Fills` entre carácter y carácter (el arreglo
+del 2026-08-14 contra los "pops"), y `EEPROM_Yield`, `UART_Protocol_Yield` y
+`OTA_Yield` hacen lo mismo. Las 7 pasadas dobles caen en la inicialización,
+cuando esas cesiones todavía no están en juego.
+
+> Vale registrar que **el arreglo de los "pops" del 2026-08-14 estaba
+> protegiendo, sin saberlo, la validez de las mediciones de skew.** Si alguien
+> alguna vez "optimiza" `UART_Print` volviéndolo bloqueante, no va a romper el
+> sonido: va a romper el instrumento, en silencio.
+
+### 17.3 El arreglo
+
+Cada banco lleva **su propia posición** (`lb_bank_pos[4]`, `fs_bank_ph[4]`) y la
+avanza cuando llena una mitad. El resultado deja de depender de cómo
+`Service_Fills` agrupe las mitades. El estado (armado, fin de chirp) sigue
+gobernado por el banco 24, que es como se calibró §13.
+
+Verificado idéntico en el caso normal: `t=513,58`, `q≈1533`, antes y después.
+
+> **Por qué arreglarlo si no disparaba.** Porque la protección era accidental:
+> depende de que *todo* camino bloqueante futuro se acuerde de ceder. Un
+> `HAL_Delay` nuevo en cualquier lado reintroduce 5 ms de skew en el modo que
+> mide skew, sin ninguna señal. El costo del arreglo fue un arreglo de cuatro
+> posiciones.
+

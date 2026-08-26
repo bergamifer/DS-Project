@@ -758,6 +758,17 @@ static int16_t  lb_capture[LB_NUM_IN][LB_CAPTURE_LEN];
 static volatile uint16_t lb_cap_count = 0;
 static volatile uint8_t  lb_capturing = 0;
 static volatile uint16_t lb_chirp_pos = 0;
+/* Posición de emisión POR BANCO. Antes los cuatro leían lb_chirp_pos y sólo el
+ * banco 24 lo avanzaba, para que dentro de una pasada de Service_Fills los
+ * cuatro emitieran el mismo trozo. Eso vale mientras cada pasada llene UNA
+ * mitad por banco — pero si el lazo se demora más de 5 ms, la pasada llena las
+ * DOS: los bancos 0/8/16 emiten el mismo trozo dos veces mientras el 24 avanza
+ * dos veces, y quedan 240 muestras desfasados. Con una posición propia por
+ * banco el resultado no depende de cómo se agrupen las mitades en la pasada.
+ * Medido: pasa 7 veces por arranque (contador dbl_fill), siempre antes de la
+ * primera captura — pero un guardado de EEPROM bloquea ~12 ms y lo dispararía
+ * en plena medición, metiendo 5 ms de skew en el modo que mide skew. */
+static volatile uint16_t lb_bank_pos[4] = {0,0,0,0};
 static volatile uint32_t lb_next_ms = 0;
 /* Estado de la correlación, persistente entre pasadas (igual que el scan) */
 static uint8_t  lb_probe = 0;
@@ -906,6 +917,7 @@ static volatile uint8_t  fs_point_ready = 0;
 static volatile uint32_t fs_n = 0;          /* muestras dentro del punto (contexto RX) */
 static volatile uint32_t fs_next_ms = 0;
 static uint32_t fs_tx_phase = 0;            /* fase del emisor  (contexto de fill) */
+static uint32_t fs_bank_ph[4] = {0,0,0,0};  /* fase por banco — ver lb_bank_pos */
 static uint32_t fs_rx_phase = 0;            /* fase del detector (contexto RX) */
 static int64_t  fs_i[ADC_CHANNELS], fs_q[ADC_CHANNELS];
 /* I y Q normalizados, no la magnitud: con los dos se saca amplitud Y fase, y la
@@ -1024,6 +1036,12 @@ static const uint32_t dimmer_channels[DIMMER_NUM_PHASES] = {
 // ===== ISR → Main loop deferred processing flags =====
 // ISR sets flag, main loop processes buffer and clears flag
 // This keeps ISR execution < 20 cycles (vs ~50000 with sinf())
+/* Cuántas veces una pasada de Service_Fills llenó LAS DOS mitades del mismo
+ * banco. Importa porque el avance del emisor (chirp del modo 19, tono del 20)
+ * vive en el banco 24: en una pasada doble, los bancos 0/8/16 emiten el mismo
+ * trozo dos veces mientras el 24 avanza dos veces, y quedan 240 muestras
+ * desfasados. Justo el error que el modo 19 existe para medir. */
+static volatile uint32_t dbl_fill[4] = {0,0,0,0};
 static volatile uint8_t need_fill_first_half = 0;
 static volatile uint8_t need_fill_second_half = 0;
 static volatile uint8_t need_fill_2a_first_half = 0;
@@ -1400,8 +1418,10 @@ static void Service_Fills(void) {
   }
 
   // SAI1_A: channels 0-7
+  uint8_t did_first_0 = 0;
   if (need_fill_first_half) {
     need_fill_first_half = 0;
+    did_first_0 = 1;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
     Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0);
@@ -1413,6 +1433,7 @@ static void Service_Fills(void) {
     fill_all_cycles += dt;
     fill_sample_count++;
   }
+  if (need_fill_second_half && did_first_0) dbl_fill[0]++;
   if (need_fill_second_half) {
     need_fill_second_half = 0;
     __DSB();
@@ -1428,14 +1449,17 @@ static void Service_Fills(void) {
   }
 
   // SAI1_B: channels 8-15 (DAC1 U3)
+  uint8_t did_first_1 = 0;
   if (need_fill_1b_first_half) {
     need_fill_1b_first_half = 0;
+    did_first_1 = 1;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
     Fill_Audio_Beamform(&audio_buffer_1b[0], AUDIO_BUFFER_SAMPLES, 8);
     __DSB();
     fill_all_cycles += DWT->CYCCNT - t0;
   }
+  if (need_fill_1b_second_half && did_first_1) dbl_fill[1]++;
   if (need_fill_1b_second_half) {
     need_fill_1b_second_half = 0;
     __DSB();
@@ -1446,14 +1470,17 @@ static void Service_Fills(void) {
   }
 
   // SAI2_A: channels 16-23 (DAC2 U1)
+  uint8_t did_first_2 = 0;
   if (need_fill_2a_first_half) {
     need_fill_2a_first_half = 0;
+    did_first_2 = 1;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
     Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
     __DSB();
     fill_all_cycles += DWT->CYCCNT - t0;
   }
+  if (need_fill_2a_second_half && did_first_2) dbl_fill[2]++;
   if (need_fill_2a_second_half) {
     need_fill_2a_second_half = 0;
     __DSB();
@@ -1464,14 +1491,17 @@ static void Service_Fills(void) {
   }
 
   // SAI2_B: channels 24-31 (DAC3 U4)
+  uint8_t did_first_3 = 0;
   if (need_fill_2b_first_half) {
     need_fill_2b_first_half = 0;
+    did_first_3 = 1;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
     Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
     __DSB();
     fill_all_cycles += DWT->CYCCNT - t0;
   }
+  if (need_fill_2b_second_half && did_first_3) dbl_fill[3]++;
   if (need_fill_2b_second_half) {
     need_fill_2b_second_half = 0;
     __DSB();
@@ -2465,6 +2495,15 @@ int main(void)
                 "     ADCpk: c0=%ld c1=%ld c2=%ld c3=%ld c4=%ld c5=%ld c6=%ld c7=%ld | RXdma=%lu/s\r\n",
                 (long)pk[0], (long)pk[1], (long)pk[2], (long)pk[3],
                 (long)pk[4], (long)pk[5], (long)pk[6], (long)pk[7], rx_per_sec);
+  {
+    /* Pasadas dobles por banco — ver dbl_fill. Con los cuatro en 0 el emisor
+     * de los modos 19/20 no puede haber desfasado los bancos. */
+    char db[96];
+    snprintf(db, sizeof(db), "     dblfill: b0=%lu b8=%lu b16=%lu b24=%lu\r\n",
+             (unsigned long)dbl_fill[0], (unsigned long)dbl_fill[1],
+             (unsigned long)dbl_fill[2], (unsigned long)dbl_fill[3]);
+    UART_Print(db);
+  }
         UART_Print(uart_buf);
 
         /* Las dos saturaciones, separadas. Sólo se imprime si alguna ocurrió,
@@ -3948,6 +3987,7 @@ static void LB_Process(void) {
   if (lb_state == LB_WAIT) {
     if ((int32_t)(HAL_GetTick() - lb_next_ms) >= 0) {
       lb_chirp_pos = 0;
+      lb_bank_pos[0] = lb_bank_pos[1] = lb_bank_pos[2] = lb_bank_pos[3] = 0;
       lb_state = LB_ARM;
     }
     return;
@@ -4164,6 +4204,7 @@ static void FS_Start(void) {
   memset(fs_fq, 0, sizeof(fs_fq));
   fs_idx = 0;
   fs_tx_phase = 0;
+  fs_bank_ph[0] = fs_bank_ph[1] = fs_bank_ph[2] = fs_bank_ph[3] = 0;
   fs_paused = 0;
   FS_StartPoint();
 }
@@ -4458,6 +4499,7 @@ static void UI_ApplyState(uint8_t idx) {
   lb_enabled = st->loopb;
   if (st->loopb) {                   // entrar al modo arranca una medición ya
     lb_chirp_pos = 0;
+    lb_bank_pos[0] = lb_bank_pos[1] = lb_bank_pos[2] = lb_bank_pos[3] = 0;
     lb_capturing = 0;
     lb_state = LB_ARM;
   } else {
@@ -4741,7 +4783,8 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
       return;
     }
     uint32_t inc = FS_Inc(fs_idx);
-    uint32_t ph  = fs_tx_phase;
+    uint8_t  bk  = (uint8_t)(ch_offset >> 3);
+    uint32_t ph  = fs_bank_ph[bk];
     for (uint32_t i = 0; i < samples; i++) {
       int32_t sv = FS_Sine(ph);
       ph += inc;
@@ -4750,10 +4793,10 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
         buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? sv : 0;
       }
     }
-    /* ⚠️ La fase avanza en el ÚLTIMO banco (24), nunca en el primero — misma
-     * regla y mismo motivo que lb_chirp_pos: Service_Fills corre los cuatro en
-     * orden 0→8→16→24 dentro de la misma pasada, y si avanzara en el 0 los
-     * otros tres emitirían el trozo siguiente y quedarían desfasados entre sí. */
+    /* Cada banco lleva su propia fase, así que el resultado no depende de cómo
+     * Service_Fills agrupe las mitades en la pasada. fs_tx_phase queda como
+     * maestro (lo lee FS_StartPoint para anotar el origen en fs_tx0). */
+    fs_bank_ph[bk] = ph;
     if (ch_offset == 24) fs_tx_phase = ph;
     return;
   }
@@ -4798,7 +4841,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
       int32_t dq8 = (local == 0xFF) ? 0
                   : (int32_t)beam_config.delays[ch_offset + local];
       for (uint32_t i = 0; i < samples; i++) {
-        uint32_t k  = lb_chirp_pos + i;
+        uint32_t k  = lb_bank_pos[ch_offset >> 3] + i;
         int32_t  sv = 0;
         int32_t  t  = ((int32_t)k << 8) - dq8;
         if (t >= 0) {
@@ -4812,7 +4855,12 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
           buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? sv : 0;
         }
       }
-      /* ⚠️ El avance va en el ÚLTIMO banco (24), nunca en el primero.
+      lb_bank_pos[ch_offset >> 3] += (uint16_t)samples;
+      /* El estado (armado y fin de chirp) sigue gobernado por el banco 24, que
+       * es como se calibró §13; lo que ya no depende del banco es la POSICIÓN
+       * que emite cada uno — ver lb_bank_pos.
+       *
+       * ⚠️ El avance de estado va en el ÚLTIMO banco (24), nunca en el primero.
        * Service_Fills corre los cuatro en orden 0→8→16→24 dentro de la misma
        * pasada. Avanzando en el banco 0, los otros tres leerían lb_chirp_pos ya
        * adelantado y emitirían el trozo SIGUIENTE del chirp: los bancos
