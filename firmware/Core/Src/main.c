@@ -4261,10 +4261,33 @@ static void FS_Report(void) {
   char dbs[24], taus[32];
   UART_Print("\r\nBARRIDO DE FRECUENCIA (ch0/8/16/24, tono -6 dBFS) ---------\r\n");
   uint8_t live = 0xFF, n_ok = 0;
+  /* La referencia de la diafonía es la entrada MÁS FUERTE, no la primera que
+   * pasa el umbral.
+   *
+   * Antes era la primera y con FS_LIVE_MIN en 100 nunca falló: ninguna entrada
+   * muda llegaba a 100 cuentas. Al bajar el umbral a 10 (§15.1, para que el
+   * barrido de volumen no se censurara solo en −24 dB) se abrió este agujero:
+   * con excitación alta la diafonía sola alcanza para que una entrada sin cable
+   * cruce las 10 cuentas, y si su índice es menor que el del canal excitado se
+   * queda con la referencia. Medido el 2026-08-26 con el tono a −12 dB: c2 marcó
+   * 11 cuentas de ruido, ganó la referencia por ser índice 2 contra el 4 del
+   * canal real, y la tabla informó **+149 dB** de diafonía para c4 — el canal
+   * excitado, con 4,27 millones de cuentas, "acoplando" hacia el ruido.
+   *
+   * El máximo no tiene ese modo de falla: la excitación está decenas de dB
+   * arriba de cualquier acoplamiento, así que gane quien gane el umbral, el
+   * canal con cable siempre es el más grande. El umbral sigue decidiendo qué
+   * entradas se IMPRIMEN, que es para lo que se bajó. */
+  {
+    float best = 0.0f;
+    for (uint8_t c = 0; c < ADC_CHANNELS; c++) {
+      float ref = FS_Mag(FS_REF_BASE * 2, c);
+      if (ref >= FS_LIVE_MIN && ref > best) { best = ref; live = c; }
+    }
+  }
   for (uint8_t c = 0; c < ADC_CHANNELS; c++) {
     float ref = FS_Mag(FS_REF_BASE * 2, c);
     if (ref < FS_LIVE_MIN) continue;
-    if (live == 0xFF) live = c;
     n_ok++;
     sprintf(uart_buf, "  entrada%u (c%u): 0 dB = %lu cuentas @ %u Hz\r\n",
             (unsigned)(c + 1), (unsigned)c, (unsigned long)(ref + 0.5f),

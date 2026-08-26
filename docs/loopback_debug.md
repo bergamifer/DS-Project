@@ -1288,3 +1288,162 @@ Verificado idéntico en el caso normal: `t=513,58`, `q≈1533`, antes y después
 > mide skew, sin ninguna señal. El costo del arreglo fue un arreglo de cuatro
 > posiciones.
 
+
+---
+
+## 18. RESULTADOS 2026-08-26 (tarde) — el adaptador no entrega nada, y lo que sí salió
+
+Con los cuatro adaptadores armados (4,7k / 1k / 2,2 nF, §4.2) y conectados por
+primera vez. **La medición de skew entre bancos NO se pudo hacer**: por los
+adaptadores no llega señal. Lo que sigue es la evidencia de que el problema está
+del lado del cableado y no de la placa, más dos resultados que sí salieron de
+la sesión.
+
+### 18.1 🔴 Las cuatro entradas del adaptador están mudas
+
+| | |
+|---|---|
+| **Esperado en c0-c3** a −40 dB | del orden de **10⁶ cuentas** (§4.2: el amp cerca de su techo entrega 307 mV al ADC) |
+| **Medido** | **11 a 18 cuentas** — el piso de ruido |
+| Faltante | ~**100 dB** |
+
+No es "poca señal": es **circuito abierto**. Las pruebas que lo acotan:
+
+- **Con detección coherente**, que tiene ~40 dB de ganancia de proceso y ve muy
+  por debajo del ruido: c0=1, c1=2, c2=120, c3=210 cuentas contra
+  **4.266.938** del canal de J13. Si hubiera algo conectado y muy atenuado,
+  aparecería. No aparece.
+- **Barriendo el volumen 28 dB** (−40 → −12): c4 sube ×25,4 exacto y c0-c3 **no
+  se mueven**. Una conexión mala pero existente escalaría; el ruido no.
+- **Con los amplificadores encendidos**, verificado por `/status` (`amps:true`),
+  no por suposición.
+- `adc_ovf = 0`: no es que sature y se lea raro.
+
+**Lo que queda descartado** (o sea, la placa está bien):
+
+- **El DAC anda**: J13 (ch24) escala perfecto sobre 28 dB — ver §18.2.
+- **Las entradas c0-c3 convierten**: muestran diafonía desde c4 con el mismo
+  patrón que c5/c6, que son entradas sanas. No están muertas.
+- **El emisor llega a los cuatro bancos**: el chirp se escribe directo al buffer
+  de TX (`buffer[i*AUDIO_CHANNELS + ch]`), sin pasar por mutes ni ganancias, y
+  `SYNC bancos` sigue informando los cuatro.
+
+**Lo que falta comprobar, y sólo se puede con la placa en la mano** — en orden,
+porque el primero parte el problema al medio:
+
+1. **Escuchar.** Modo 19, amps ON, volumen −40: cuatro parlantes (los de
+   JSPK01/05/10/13) tienen que chirpear cada 2 s. Si suenan, el amplificador
+   anda y el problema es **100 % del adaptador o del cable**. Si hay silencio,
+   el problema es el amplificador o su alimentación.
+2. **El adaptador con el téster, desenchufado de todo.** Tres números:
+
+   | entre | tiene que dar |
+   |---|---|
+   | los dos pines del JST | **10,4 kΩ** (4,7k + 1k + 4,7k) |
+   | los dos pines del RJ45 | **1 kΩ** (la resistencia de shunt) |
+   | pin 1 del JST ↔ pin (+) del RJ45 | **4,7 kΩ** |
+
+   Si el primero da infinito, falta una soldadura. Si el segundo da infinito,
+   el shunt está abierto y no habría divisor. Si da ~0, hay un puente.
+3. **+5VA presente.** Es el riel de los 32 PAM8302A y **no tiene test point**:
+   se mide en el pad **+ de C290** (`ds11_errata.md` falla #2 — C290 está
+   removido, así que el pad está accesible). Tiene que haber ~5 V con los
+   19-20 V puestos. Si no hay, los amps no tienen de dónde sacar la señal y el
+   síntoma sería exactamente éste: DAC perfecto, amplificadores mudos.
+
+> **Por qué el orden importa**: la prueba 1 cuesta cinco segundos y decide si
+> hay que mirar el adaptador (2) o la placa (3). Hacer las tres a ciegas es
+> trabajo de más.
+
+⚠️ **Cuando el adaptador funcione, ojo con el nivel.** Con +49 dB de ganancia
+del PAM8302A (§2.1) y el divisor de −20,3 dB, a −40 dB de volumen la entrada
+queda **cerca de saturar**, no cómoda. Subir desde MÁS abajo —−50, −55— mirando
+`adc_pk`, y no dar por buena la recomendación de "−20 dB" de §4.3, que se
+calculó suponiendo que la señal no llegaba.
+
+### 18.2 La atenuación es lineal también arriba, y la cadena no depende del nivel
+
+Salió gratis: el barrido de diagnóstico se corrió a −12 dB y a −40 dB, 3 y 4
+barridos completos por nivel. **Es la primera vez que se mide el mismo camino a
+dos niveles muy distintos.**
+
+| | |
+|---|---|
+| referencia a −12 dB | 4.266.938 cuentas |
+| referencia a −40 dB | 167.898 cuentas |
+| razón medida | **28,10 dB** contra 28,00 comandados → **error +0,10 dB** |
+
+§15.1 ya había medido la linealidad del atenuador (±0,13 dB de 0 a −46 dB) pero
+**siempre sobre el mismo nivel absoluto de entrada**. Esto la confirma con la
+entrada 28 dB más caliente, a −5,9 dBFS, o sea cerca del techo del ADC.
+
+Y lo que más vale, comparando las dos curvas punto por punto:
+
+- **De 63 Hz a 20 kHz las dos respuestas son idénticas dentro de 0,1 dB.**
+- **De 250 Hz para arriba el retardo de grupo coincide dentro de 0,01 muestras.**
+
+O sea: **la cadena DAC→ADC no depende del nivel**. Ni compresión, ni distorsión
+que aparezca al subir, ni corrimiento de fase con la amplitud. Eso estaba
+*supuesto* en toda medición relativa hecha por el lazo —cambiar el volumen no
+cambia la función de transferencia— y hasta hoy no se había verificado.
+
+> El único punto que no coincide es 20 Hz (tau +590 contra −599). Es el
+> envolvimiento de fase del par de sub-medidas separadas 40 Hz, no una
+> discrepancia: a 20 Hz el retardo de grupo por ese método es ambiguo. Los
+> 21 puntos restantes coinciden.
+
+### 18.3 Un instrumento que mentía con la excitación alta — arreglado
+
+El barrido a −12 dB informó **+149 dB de diafonía** para c4. Un número imposible
+que delató un error real en `FS_Report`.
+
+**La causa**: la referencia de la diafonía era *la primera entrada que pasa el
+umbral*, por índice. Con `FS_LIVE_MIN` en 100 nunca falló —ninguna entrada muda
+llegaba a 100 cuentas—. Al bajarlo a **10** en §15.1 (para que el barrido de
+volumen no se censurara solo en −24 dB) se abrió el agujero: con excitación alta
+**la propia diafonía alcanza para que una entrada sin cable cruce las 10
+cuentas**, y si su índice es menor que el del canal excitado, se queda con la
+referencia. A −12 dB, **c2 con 11 cuentas de ruido le ganó la referencia a c4
+con 4,27 millones**, y todo salió normalizado contra el ruido.
+
+**El arreglo**: la referencia pasa a ser la entrada **más fuerte**, no la
+primera. No tiene ese modo de falla —la excitación está decenas de dB sobre
+cualquier acoplamiento— y el umbral sigue decidiendo qué entradas se imprimen,
+que es para lo que se bajó.
+
+> Es una regresión introducida al arreglar otra cosa, y no la habría encontrado
+> ninguna medición a volumen de trabajo: sólo aparece con la excitación alta.
+> Lo que la delató fue un número **absurdo** (+149 dB), no uno sutilmente
+> equivocado — por eso conviene que los informes muestren la unidad física y no
+> sólo un índice: un +149 dB salta, un "0,93" no.
+
+### 18.4 La mejor diafonía medida hasta ahora
+
+Con la referencia arreglada y 28 dB más de excitación que §16.3, varias entradas
+salen del piso de ruido y pasan a ser **medidas** de verdad:
+
+| entrada | §16.3 (−40 dB) | ahora (−12 dB) | qué significa |
+|---|---|---|---|
+| c0 | −80,6 (15 cta) | **−103,3** (1 cta) | seguía siendo piso; el real está aún más abajo |
+| c1 | −74,5 (32 cta) | **−96,6** (2 cta) | ídem |
+| c2 | −84,1 (10 cta) | **−90,8** (120 cta) | ahora sí medido |
+| c3 | −79,1 (18 cta) | **−86,0** (210 cta) | ahora sí medido |
+| c5 | −73,7 (34 cta) | **−73,7** (863 cta) | **idéntico** → acoplamiento real |
+| c6 | −83,5 (11 cta) | **−83,8** (271 cta) | **idéntico** → real |
+| c7 | −97,9 (2 cta) | **−97,5** (56 cta) | **idéntico** → real |
+
+La prueba de que c5/c6/c7 son acoplamiento y no ruido es que **repiten el mismo
+dB con 28 dB más de excitación** (0,3 dB de diferencia). Un piso de ruido no
+hace eso: se queda donde está y el número relativo baja, que es exactamente lo
+que hicieron c0 y c1.
+
+Confirma §16.3: **c5 es el peor caso a −73,7 dB en 20 kHz**, es vecina del canal
+excitado y sube con la frecuencia — firma capacitiva. En la banda de trabajo
+sigue por debajo de −99 dB.
+
+### 18.5 Firmware
+
+La placa quedó corriendo **HEAD (`2CA685DB`)** por OTA. Antes informaba
+`897BDF5C`: el arreglo de §17 se había flasheado desde el árbol de trabajo
+*antes* de commitearlo, así que el `fw_id` era el del commit anterior y no había
+forma de saber desde afuera qué estaba corriendo. Ahora coincide.
