@@ -1657,11 +1657,19 @@ ese adaptador tiene que dar **1 kΩ**, no 4,7 kΩ.
 factor de 10** en la resistencia efectiva de ganancia. Tres mediciones
 independientes, todas consistentes entre sí:
 
-| | §2.1 dice (R_I = 1k) | R_I = 10k daría | **medido** |
-|---|---|---|---|
-| ganancia | +49,07 dB | +29,07 dB | **+29 dB** |
-| pasaalto | 723 Hz | 72,3 Hz | **~70 Hz** |
-| nivel contra J13 | +22,71 dB | +2,71 dB | **+2,70 dB** |
+> ⚠️ **CORRECCIÓN DEL MISMO DÍA, unas horas después.** La primera versión de
+> esta sección decía "**la ganancia es +29 dB**" y presentaba tres medidas que
+> coincidían. **Una de las tres tenía un signo cambiado en mi cuenta**: J13 ve
+> *la mitad* de la diferencial, así que la razón amp/J13 es 6 dB **más grande**,
+> no más chica. Con el signo bien, esa vía da **+17 dB**, no +29. La ganancia
+> exacta queda **sin cerrar** — ver §20. Lo que NO cambia es que **no son los
+> +49 dB de §2.1**, y que el pasaalto está en 68 Hz.
+
+| | §2.1 dice (R_I = 1k) | **medido** |
+|---|---|---|
+| ganancia | +49,07 dB | **entre +17 y +29 dB — sin cerrar (§20)** |
+| pasaalto | 723 Hz | **68,0 Hz** (ajuste de 1 polo, 0,07 dB rms) |
+| nivel contra J13 | +22,71 dB | **+2,70 dB** |
 
 La respuesta del amplificador solo (canal amplificado menos J13, que es el mismo
 ch24 antes del amp):
@@ -1678,7 +1686,8 @@ está en el valor del componente sino en el modelo: lo más probable es que el
 PAM8302A tenga su propia resistencia de entrada interna en serie con la externa,
 y que la fórmula `2·(142k/R_I)` de §2.1 pida el total y no sólo la externa.
 **Queda para confirmar en la mesa** —midiendo R38 con el téster, o contra el
-datasheet del chip—, pero lo medido no depende de cuál sea el mecanismo.
+datasheet del chip—, pero **el pasaalto de 68 Hz no depende de cuál sea el
+mecanismo**: es una medición directa, y sola ya invalida los 723 Hz.
 
 ### 19.4 Qué queda corregido de §2.1 y §3
 
@@ -1722,3 +1731,103 @@ es un número que no se podía obtener de ninguna otra forma.
 > Detalle que da confianza en todo lo demás: **J13 tiene sigma = 0,000 muestras
 > sobre 84 informes**. El instrumento no se mueve. Los sigma de 0,03 de los
 > canales amplificados son del amplificador y su adaptador, no del método.
+
+---
+
+## 20. La estructura de ganancia, hasta donde llega la evidencia (2026-08-26)
+
+§3 quedó invalidada por §19.3 y hay que reemplazarla por algo. Esta sección
+separa **lo medido** de **lo derivado**, porque en el medio apareció una
+discrepancia que no se cierra sin un voltímetro.
+
+### 20.1 Lo que está medido y no se discute
+
+| | valor | cómo |
+|---|---|---|
+| **Pasaalto del amplificador** | **68,0 Hz** | ajuste de 1 polo, **0,07 dB rms sobre 14 puntos** |
+| **Respuesta en 800 Hz** (modo 17) | **0,00 dB** | directo |
+| **Apareamiento entre bancos** | **0,11 dB** en la banda (≥250 Hz) | 3 bancos, 3 barridos |
+| **Razón amplificador / J13** | **+2,70 dB** | validado contra datos viejos |
+| **Linealidad** | sin compresión de −55 a −34 dB | razón constante en 0,03 dB |
+
+**Los 723 Hz de §2.1 están mal, y eso no depende de ningún modelo.** El ajuste
+de un polo a 68 Hz es tan bueno (0,07 dB rms) que la forma de la curva no deja
+lugar a otra lectura.
+
+### 20.2 La discrepancia que no cierra: cuánto amplifica realmente
+
+Dos caminos independientes hacia la ganancia, y **no coinciden**:
+
+| camino | qué usa | resultado |
+|---|---|---|
+| **A** — del pasaalto | 68,0 Hz con C = 220 nF → R_I ≈ **10,6 kΩ**, y `2·(142k/R_I)` | **+28,5 dB** |
+| **B** — del nivel | razón amp/J13 = +2,70 dB, divisor 1/10,4, J13 ve la mitad | **+17,0 dB** |
+
+Once dB y medio de diferencia. **Ninguno de los dos es despreciable y no sé cuál
+tiene razón.** Las dos explicaciones candidatas:
+
+1. **El ADC carga el shunt del adaptador.** La entrada tiene **470 Ω en serie
+   por pata** (§4.1), o sea ~940 Ω, que en paralelo con el shunt de 1 kΩ lo
+   baja a ~484 Ω. El divisor deja de ser 1/10,4 y pasa a ~**1/20**. Con eso el
+   camino B da +22,9 dB y la brecha se parte al medio.
+2. **El feedback interno del PAM8302A no es 142 kΩ.** El camino A depende de
+   ese número de datasheet; el pasaalto no.
+
+> ⚠️ **Consecuencia práctica para §4.2, independiente de todo lo anterior**: si
+> el ADC carga el shunt, **el adaptador atenúa ~1/20 y no 1/10,4**, o sea unos
+> 6 dB más de lo diseñado. No afecta ninguna medición *relativa* —es igual en
+> los cuatro— pero sí cualquier cuenta de nivel absoluto.
+
+**Cómo se cierra**: un voltímetro en AC sobre los pines 1-2 de un JSPK, con un
+tono conocido y el volumen anotado. Un solo número y las dos vías quedan
+arbitradas. Es la misma medición que cierra §20.3.
+
+### 20.3 El techo, y qué volumen usar mientras tanto
+
+El volumen al que el amplificador empieza a recortar depende de la ganancia, que
+es justo lo que no está cerrado:
+
+| si la ganancia es | recorta con los modos de tono en |
+|---|---|
+| +29 dB | volumen ≈ **−22 dB** |
+| +23 dB | volumen ≈ **−16 dB** |
+| +17 dB | volumen ≈ **−10 dB** |
+
+**En los tres casos el techo está MUY por encima de los −40 dB de hoy.** Lo que
+sí se puede afirmar sin cerrar la discrepancia:
+
+- **Hay como mínimo 18 dB de margen sin usar.** Verificado, no derivado: a
+  −34 dB no hay ni rastro de compresión, y ése ya es 6 dB arriba del punto de
+  trabajo.
+- **La recomendación de §3 de bajar el default de fábrica de −24 a −40 dB se
+  apoyaba en números equivocados.** Con la ganancia real, −24 dB no está
+  "12 dB adentro del recorte" — en el peor de los tres escenarios está **2 dB
+  por debajo** del techo, y en el mejor, 14 dB.
+- **No hay razón para tocar nada hoy.** −40 dB funciona y es conservador. Si en
+  algún momento hace falta más nivel acústico, está disponible.
+
+> **Lo que esto le costó a la operación**: el equipo viene funcionando 18 dB o
+> más por debajo de lo que puede, por una cuenta de esquemático que nadie
+> verificó durante meses. No rompió nada —errar por lo bajo es el lado bueno
+> para equivocarse— pero es exactamente el tipo de número que conviene medir
+> antes de construir decisiones encima.
+
+### 20.4 Método: dos errores míos en el mismo día, y qué los encontró
+
+Vale anotarlo porque los dos se escaparon del mismo modo y los agarró la misma
+disciplina.
+
+1. **La referencia de diafonía** (§18.3) informó **+149 dB**. Un número
+   imposible.
+2. **La ganancia de §19.3**: afirmé "+29 dB" diciendo que tres medidas
+   coincidían. Una tenía **un signo cambiado** — J13 ve la mitad de la
+   diferencial, así que la razón es 6 dB más **grande**, no más chica. Al
+   corregirlo, esa vía da +17 dB y las tres ya no coinciden.
+
+El segundo es el peor de los dos: **no daba un número absurdo, daba uno
+plausible** — y encima "confirmado" por una coincidencia que yo mismo había
+fabricado. Lo encontró volver a hacer la cuenta por un camino distinto para
+otra cosa. **Una coincidencia entre dos vías sólo vale si las vías son
+realmente independientes**; si una se derivó de la otra, la coincidencia no
+prueba nada, y en este caso yo había escrito la fórmula de la vía B para que
+diera lo mismo que la A.
