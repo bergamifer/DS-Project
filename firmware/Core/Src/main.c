@@ -366,6 +366,7 @@ typedef struct {
   uint8_t sweep;                  // eje del barrido automático: 0 no, 1 = X, 2 = Y
   uint8_t calfoc;                 // 1 = usa el foco MEDIDO por AUTOFOCUS, no el geométrico
   uint8_t loopb;                  // 1 = LOOPBACK: medición eléctrica del camino de salida
+  uint8_t fsweep;                 // 1 = BARRIDO DE FRECUENCIA por el lazo (Test D)
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor",                  .monitor = 1 },
@@ -478,6 +479,12 @@ static const ui_state_t ui_states[] = {
   // adaptadores pasivos (docs/loopback_debug.md). Informa por el serie cada 2 s.
   // Sin adaptadores conectados dice "sin senal" y no hace nada más.
   { .name = "LOOPBACK electrico (bancos 0/8/16/24 -> ADC 0-3)", .loopb = 1 },
+  // BARRIDO DE FRECUENCIA: tampoco suena para nadie. Emite un tono por canal de
+  // cada banco y lo detecta coherentemente en las ocho entradas, punto por punto
+  // de 20 Hz a 20 kHz. Con el cable de J13 mide la cadena DAC → ADC SIN
+  // amplificadores ni 24 V; ver el comentario largo en FS_SETTLE para qué NO
+  // alcanza a ver. Informa la tabla completa cada ~7 s.
+  { .name = "BARRIDO DE FRECUENCIA por el lazo (20 Hz - 20 kHz)", .fsweep = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 static volatile uint8_t ui_state_idx = 0;
@@ -838,6 +845,85 @@ static int32_t  lb_peak[LB_NUM_IN];
 /* Umbral de pico en escala de 16 bits: MIC_LIVE_THRESH está en 24 bits. */
 #define LB_PEAK_MIN   (MIC_LIVE_THRESH >> 8)
 
+/* ===== BARRIDO DE FRECUENCIA por el lazo (Test D) =============================
+ *
+ * Qué mide: amplitud contra frecuencia de la cadena DAC → ADC, emitiendo un
+ * tono por los mismos canales que el LOOPBACK y detectándolo coherentemente en
+ * las ocho entradas. Con el cable de J13 puesto, eso es la salida del PCM1690
+ * del canal 24 tomada antes del amplificador — así que **no hace falta 24 V ni
+ * amplificadores**, que es justamente lo que hoy está bloqueado.
+ *
+ * ⚠️ Alcance, para no leer de más el resultado. J13 pincha entre la R serie de
+ * 1 kΩ y el capacitor de acople de 220 nF, y con la placa sin 24 V el PAM8302A
+ * está apagado. O sea que este barrido **NO ve el pasaalto de 723 Hz** de §2.1
+ * —ése lo forman el acople y la entrada del amplificador— ni nada del clase D.
+ * Lo que se mide es DAC + cable + entrada del ADC. Confirmar los 723 Hz sigue
+ * necesitando los adaptadores de §4.2 y alimentación.
+ *
+ * Por qué detección coherente y no pico. El pico mide señal MÁS ruido, y en los
+ * extremos del barrido —donde la respuesta cae— eso es un piso que miente:
+ * la curva se aplana en el ruido en vez de seguir bajando. Correlacionando
+ * contra seno y coseno de la MISMA frecuencia, el ruido se promedia a cero y la
+ * ventana de 9600 muestras da ~40 dB de ganancia de proceso. Además la magnitud
+ * sqrt(I²+Q²) no depende de la fase, así que no hay que alinear nada con el
+ * retardo del lazo (273,7 muestras, §13).
+ *
+ * La referencia sale de `sine_table_1khz`, la MISMA tabla y la misma
+ * interpolación que usan los modos de tono: si se reimplementara acá, el
+ * barrido mediría su propia copia. El error de la interpolación lineal sobre 48
+ * puntos son −53 dB de armónicos, y la detección coherente ni los ve. */
+#define FS_SETTLE     4800u   /* 100 ms de asentamiento: 6τ del acople de entrada */
+#define FS_WINDOW     9600u   /* 200 ms de medición — múltiplo exacto de 240 */
+#define FS_LIVE_MIN   100     /* cuentas en la referencia para llamar viva a una entrada */
+#define FS_PAUSE_MS   2000u
+/* Log-espaciadas de 20 Hz a 20 kHz, con 723 (el pasaalto del amp, §2.1) y 800
+ * (el modo 17) agregadas aunque este camino no las vea: si alguna vez se mide
+ * con los adaptadores, la grilla es la misma y las corridas se comparan. */
+#define FS_NUM_PTS    22
+#define FS_REF_IDX    12      /* 1000 Hz — el 0 dB de la tabla */
+static const uint16_t fs_freqs[FS_NUM_PTS] = {
+     20,   30,   45,   63,   90,  125,  180,  250,  355,  500,
+    723,  800, 1000, 1400, 2000, 2800, 4000, 5600, 8000,11200,
+  16000,20000
+};
+static volatile uint8_t  fs_enabled = 0;
+static volatile uint8_t  fs_idx = 0;
+static volatile uint8_t  fs_point_ready = 0;
+static volatile uint32_t fs_n = 0;          /* muestras dentro del punto (contexto RX) */
+static volatile uint32_t fs_next_ms = 0;
+static uint32_t fs_tx_phase = 0;            /* fase del emisor  (contexto de fill) */
+static uint32_t fs_rx_phase = 0;            /* fase del detector (contexto RX) */
+static int64_t  fs_i[ADC_CHANNELS], fs_q[ADC_CHANNELS];
+static uint32_t fs_mag[FS_NUM_PTS][ADC_CHANNELS];
+
+/** @brief Incremento de fase Q16 sobre la tabla de 48 entradas, para fs_freqs[i].
+ *  Idéntico al de Tone_NextSample: a 1 kHz da exactamente una entrada por
+ *  muestra (48 muestras por ciclo a 48 kHz). Lo usan el emisor y el detector,
+ *  así que las dos frecuencias son la misma por construcción y la magnitud no
+ *  deriva por más larga que sea la ventana. */
+static inline uint32_t FS_Inc(uint8_t i) {
+  /* El clamp no es paranoia: lo leen el emisor y el detector desde
+   * Service_Fills, que corre ANIDADO dentro de UART_Print mientras el informe
+   * se imprime. Ahí fs_idx vale FS_NUM_PTS por un rato y sin este clamp se
+   * indexa fs_freqs[] fuera de rango — HardFault con BFAR justo pasado el
+   * final del DTCM, que es exactamente como se descubrió. */
+  if (i >= FS_NUM_PTS) i = 0;
+  return ((uint32_t)fs_freqs[i] << 16) / 1000u;
+}
+/** @brief Un punto de la tabla de seno, interpolado, con la fase en Q16. */
+static inline int32_t FS_Sine(uint32_t ph) {
+  uint32_t idx = ph >> 16;
+  int32_t  fr  = (int32_t)(ph & 0xFFFF);
+  int32_t  s0  = sine_table_1khz[idx];
+  int32_t  s1  = sine_table_1khz[(idx + 1u) % 48u];
+  return s0 + (int32_t)(((int64_t)(s1 - s0) * fr) >> 16);
+}
+#define FS_PHASE_MAX  (48u << 16)
+_Static_assert(FS_SETTLE % AUDIO_BUFFER_SAMPLES == 0
+               && FS_WINDOW % AUDIO_BUFFER_SAMPLES == 0,
+               "los puntos tienen que cerrar en un borde de mitad");
+_Static_assert(FS_REF_IDX < FS_NUM_PTS, "la referencia esta fuera de la tabla");
+
 /* Extra right-shift applied to the -6dBFS sine table.
  * Now 0: the PAM8302A clipping headroom is handled by the PCM1690's own
  * -24dB digital attenuation (registers 72-79, PCM1690_ATTEN_DEFAULT). The
@@ -1017,6 +1103,7 @@ static void Cal_Init(void);
 static void Cal_StartScan(void);
 static void Cal_Process(void);
 static void LB_Process(void);
+static void FS_Process(void);
 static void OTA_ServiceRequests(void);
 static void Health_Run(ds_health_t *h);
 /* USER CODE END PFP */
@@ -1881,6 +1968,7 @@ int main(void)
 
     // ===== LOOPBACK driver — misma disciplina: correlación en trozos =====
     if (lb_enabled) LB_Process();
+    if (fs_enabled) FS_Process();
 
     /* ===== BARRIDO: mover el foco, 20 veces por segundo =====
      * Triángulo entre −amp y +amp sobre el eje elegido. Va acá y no en el fill
@@ -3997,6 +4085,108 @@ static void LB_Process(void) {
   lb_state = LB_WAIT;
 }
 
+/* Pausa entre barridos: durante ella el emisor calla y el detector no acumula,
+ * así el log queda legible y se ve si la curva repite. */
+static volatile uint8_t fs_paused = 0;
+
+/** @brief Arranca un punto del barrido: acumuladores en cero y fase al origen.
+ *  La fase del detector se reinicia por prolijidad, no por necesidad: la
+ *  magnitud sqrt(I²+Q²) no depende de dónde arranque. */
+static void FS_StartPoint(void) {
+  for (uint32_t c = 0; c < ADC_CHANNELS; c++) { fs_i[c] = 0; fs_q[c] = 0; }
+  fs_rx_phase = 0;
+  fs_n = 0;
+  fs_point_ready = 0;
+}
+
+/** @brief Entrar al modo: barrido desde el primer punto. */
+static void FS_Start(void) {
+  memset(fs_mag, 0, sizeof(fs_mag));
+  fs_idx = 0;
+  fs_tx_phase = 0;
+  fs_paused = 0;
+  FS_StartPoint();
+}
+
+/** @brief Imprime la tabla, una por entrada que haya visto señal.
+ *
+ * Igual que el LOOPBACK, el firmware DESCUBRE por dónde entró en vez de exigir
+ * que se lo declaren: se conecta el cable donde sea y el informe dice qué
+ * entrada lo vio. "Viva" se decide con el nivel en 1 kHz, no en el extremo del
+ * barrido, porque ahí abajo la respuesta puede haber caído legítimamente. */
+static void FS_Report(void) {
+  UART_Print("\r\nBARRIDO DE FRECUENCIA (ch0/8/16/24, tono -6 dBFS) ---------\r\n");
+  uint8_t n_ok = 0;
+  for (uint8_t c = 0; c < ADC_CHANNELS; c++) {
+    uint32_t ref = fs_mag[FS_REF_IDX][c];
+    if (ref < FS_LIVE_MIN) continue;
+    n_ok++;
+    sprintf(uart_buf, "  entrada%u (c%u): 0 dB = %lu cuentas @ %u Hz\r\n",
+            (unsigned)(c + 1), (unsigned)c, (unsigned long)ref,
+            (unsigned)fs_freqs[FS_REF_IDX]);
+    UART_Print(uart_buf);
+    for (uint8_t k = 0; k < FS_NUM_PTS; k++) {
+      float r = (float)fs_mag[k][c] / (float)ref;
+      if (r < 1e-6f) r = 1e-6f;                  /* piso de -120 dB, no -inf */
+      float db = 20.0f * log10f(r);
+      int32_t d10 = (int32_t)(db * 10.0f + (db >= 0.0f ? 0.5f : -0.5f));
+      char sg = (d10 < 0) ? '-' : '+';
+      int32_t ad = (d10 < 0) ? -d10 : d10;
+      sprintf(uart_buf, "  %7lu Hz  %8lu  %c%ld.%01ld dB\r\n",
+              (unsigned long)fs_freqs[k], (unsigned long)fs_mag[k][c],
+              sg, (long)(ad / 10), (long)(ad % 10));
+      UART_Print(uart_buf);
+    }
+  }
+  if (!n_ok) {
+    UART_Print("  ninguna entrada vio el tono. Revisa el cable de J13 (pin 1 =\r\n"
+               "  senal, masa aparte); si medis por parlante hacen falta 24 V.\r\n"
+               "  Nivel en la referencia por entrada: ");
+    for (uint8_t c = 0; c < ADC_CHANNELS; c++) {
+      sprintf(uart_buf, "c%u=%lu ", (unsigned)c, (unsigned long)fs_mag[FS_REF_IDX][c]);
+      UART_Print(uart_buf);
+    }
+    UART_Print("\r\n");
+  }
+}
+
+/** @brief Máquina del barrido, en el main loop: cierra puntos y avanza.
+ *
+ * El cierre se hace acá y no en Process_ADC_Half a propósito: la raíz cuadrada
+ * y el logaritmo son de coma flotante y no tienen por qué correr adentro del
+ * presupuesto del fill. El detector sólo levanta una bandera.
+ */
+static void FS_Process(void) {
+  if (fs_paused) {
+    if ((int32_t)(HAL_GetTick() - fs_next_ms) < 0) return;
+    fs_paused = 0;
+    FS_Start();
+    return;
+  }
+  if (!fs_point_ready) return;
+
+  /* Magnitud del punto: A = 2·sqrt(I²+Q²)/(N·Apico). Se normaliza ANTES de
+   * elevar al cuadrado — I y Q llegan a ~2^58 y al cuadrado se saldrían de
+   * rango en float. Queda en cuentas de 24 bits, la misma escala que ADCpk. */
+  const float den = (float)FS_WINDOW * 4194304.0f;
+  for (uint8_t c = 0; c < ADC_CHANNELS; c++) {
+    float fi = (float)fs_i[c] / den;
+    float fq = (float)fs_q[c] / den;
+    float a  = 2.0f * sqrtf(fi * fi + fq * fq);
+    fs_mag[fs_idx][c] = (uint32_t)(a + 0.5f);
+  }
+  fs_idx++;
+  if (fs_idx < FS_NUM_PTS) { FS_StartPoint(); return; }
+
+  /* Pausar ANTES de informar, no después. UART_Print bloquea milisegundos y
+   * cede a Service_Fills en el medio, así que durante el informe el emisor y el
+   * detector siguen corriendo: hay que dejarlos en un estado válido primero. */
+  fs_paused = 1;
+  fs_idx = 0;
+  fs_next_ms = HAL_GetTick() + FS_PAUSE_MS;
+  FS_Report();
+}
+
 /** @brief Deja beam_config en valores de fábrica (sin tocar la EEPROM).
  *
  * Una sola definición de "default", usada tanto en el boot como en el reset de
@@ -4126,6 +4316,8 @@ static void UI_ApplyState(uint8_t idx) {
   mfocus_in_enabled = st->mfin;
   if (st->mfin) MFocusIn_ApplyDefaults();
   sweep_axis = st->sweep;
+  fs_enabled = st->fsweep;
+  if (st->fsweep) FS_Start();        // entrar al modo arranca el barrido de cero
   lb_enabled = st->loopb;
   if (st->loopb) {                   // entrar al modo arranca una medición ya
     lb_chirp_pos = 0;
@@ -4267,6 +4459,40 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
     if (n >= LB_CAPTURE_LEN) lb_capturing = 0;
   }
 
+  /* BARRIDO DE FRECUENCIA: detección coherente en las OCHO entradas a la vez.
+   * Multiplicar por seno y coseno de la misma frecuencia y acumular es todo el
+   * detector; el ruido no correlacionado se promedia a cero y quedan ~40 dB de
+   * ganancia de proceso sobre la ventana de 9600 muestras. Cuesta 8×2 MAC por
+   * muestra —despreciable frente al fill— y en este modo el beamforming no
+   * corre, así que hay presupuesto de sobra. */
+  if (fs_enabled && !fs_paused && !fs_point_ready) {
+    uint32_t inc = FS_Inc(fs_idx);
+    uint32_t ph  = fs_rx_phase;
+    uint32_t n   = fs_n;
+    for (uint32_t i = 0; i < samples; i++) {
+      if (n >= FS_SETTLE) {                    /* los primeros 100 ms se tiran */
+        uint32_t pc = ph + (12u << 16);        /* +90°: 12 de 48 entradas */
+        if (pc >= FS_PHASE_MAX) pc -= FS_PHASE_MAX;
+        int32_t sq = FS_Sine(ph);
+        int32_t cq = FS_Sine(pc);
+        for (uint32_t c = 0; c < ADC_CHANNELS; c++) {
+          int32_t x = rx_buf[i * ADC_CHANNELS + c] >> 8;   /* escala 24 bits */
+          fs_i[c] += (int64_t)x * cq;
+          fs_q[c] += (int64_t)x * sq;
+        }
+      }
+      ph += inc;
+      if (ph >= FS_PHASE_MAX) ph -= FS_PHASE_MAX;
+      n++;
+    }
+    fs_rx_phase = ph;
+    fs_n = n;
+    /* FS_SETTLE y FS_WINDOW son múltiplos de AUDIO_BUFFER_SAMPLES (assert
+     * abajo), así que el punto cierra SIEMPRE en un borde de mitad: no queda
+     * resto que se arrastre al punto siguiente y corrompa su ventana. */
+    if (n >= FS_SETTLE + FS_WINDOW) fs_point_ready = 1;
+  }
+
   /* AUTOFOCUS capture: append the measurement mic (24-bit) until the window
    * is full. Started in the same loop pass as the chirp emission, so the
    * emission→capture offset is constant for every speaker and cancels in
@@ -4361,6 +4587,37 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
         UART_Print(uart_buf);
       }
     }
+    return;
+  }
+
+  /* BARRIDO DE FRECUENCIA: el mismo tono por un canal de cada banco, en fase.
+   * Los canales de emisión son los del LOOPBACK a propósito — así el día que
+   * estén los adaptadores de §4.2, la misma corrida da la respuesta de los
+   * cuatro bancos sin tocar nada. */
+  if (fs_enabled) {
+    uint8_t local = 0xFF;
+    for (uint8_t p = 0; p < LB_NUM_EMIT; p++) {
+      if ((lb_emit_ch[p] & ~7u) == ch_offset) local = lb_emit_ch[p] & 7u;
+    }
+    if (fs_paused) {
+      for (uint32_t i = 0; i < samples * AUDIO_CHANNELS; i++) buffer[i] = 0;
+      return;
+    }
+    uint32_t inc = FS_Inc(fs_idx);
+    uint32_t ph  = fs_tx_phase;
+    for (uint32_t i = 0; i < samples; i++) {
+      int32_t sv = FS_Sine(ph);
+      ph += inc;
+      if (ph >= FS_PHASE_MAX) ph -= FS_PHASE_MAX;
+      for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+        buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? sv : 0;
+      }
+    }
+    /* ⚠️ La fase avanza en el ÚLTIMO banco (24), nunca en el primero — misma
+     * regla y mismo motivo que lb_chirp_pos: Service_Fills corre los cuatro en
+     * orden 0→8→16→24 dentro de la misma pasada, y si avanzara en el 0 los
+     * otros tres emitirían el trozo siguiente y quedarían desfasados entre sí. */
+    if (ch_offset == 24) fs_tx_phase = ph;
     return;
   }
 

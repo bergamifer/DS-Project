@@ -1,6 +1,6 @@
 # Manual de modos de operación — DS11 (firmware STM32)
 
-> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (**20 modos, índices 0–19**).
+> Fuente: `firmware/Core/Src/main.c`, tabla `ui_states[]` (**21 modos, índices 0–20**).
 > Última actualización: 2026-08-21.
 >
 > **¿Primera vez con el equipo?** Empezá por [guia_operacion.md](guia_operacion.md),
@@ -34,7 +34,7 @@ todo el pipeline —SAI, DMA, beamforming, los 4 bancos— en silencio absoluto.
 
 | Vía | Mecanismo |
 |-----|-----------|
-| **Botón K2** (PA4, presionar = LOW) | **Corto** (al soltar): avanza un modo, con wrap 19→0. **Largo** (≥1 s, actúa sin soltar): toggle de los amps. Debounce de 30 ms. |
+| **Botón K2** (PA4, presionar = LOW) | **Corto** (al soltar): avanza un modo, con wrap 20→0. **Largo** (≥1 s, actúa sin soltar): toggle de los amps. Debounce de 30 ms. |
 
 > El K2 largo es lo que hace al instrumento **operable sin red**: los amps arrancan
 > apagados y hasta ahora solo se encendían por HTTP, así que sin WiFi la placa
@@ -82,6 +82,7 @@ modo beam desde otro que no lo era, `beam_line` se limpia a cero.
 | 17 | `BARRIDO VERTICAL 800Hz arriba<->abajo @1m` | Tono interno **800 Hz** | Foco barriendo ±600 mm en Y, ciclo de 5 s | **Es un experimento**, no una demo — decide un gasto de hardware en DS12 |
 | 18 | `TX foco CALIBRADO (AUTOFOCUS guardado)` | Tono interno 2 kHz | Retardos **medidos** recuperados de la EEPROM | Recupera el foco del punto donde estaba el micrófono; sin calibración cae al foco geométrico de 1 m |
 | 19 | `LOOPBACK electrico` | Chirp interno | Un canal de **cada banco** (0/8/16/24) a la vez | **Modo de banco**: mide el camino de salida por cable, no por la sala. Requiere adaptadores pasivos |
+| 20 | `BARRIDO DE FRECUENCIA por el lazo` | Tono interno, 22 puntos de 20 Hz a 20 kHz | Un canal de **cada banco** (0/8/16/24), en fase | **Modo de banco**: amplitud contra frecuencia por detección coherente en las 8 entradas. Con el cable de J13 mide DAC→ADC **sin 24 V ni amplificadores**; ver `loopback_debug.md` §14 |
 
 **IMPORTANTE (append-only)**: los índices están espejados en el ESP32, la web y
 la app iOS. Modos nuevos se AGREGAN al final; nunca reordenar.

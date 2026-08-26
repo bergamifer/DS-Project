@@ -727,3 +727,120 @@ procesar las mitades del RX (arriba de `Service_Fills`, no en el fill del banco
 24) — pero eso mueve el origen de la ventana otra vez y obliga a rehacer las
 comparaciones de §8 y §11. No vale la pena por un modo de banco que ya sabe
 decir en qué estado midió.
+
+---
+
+## 14. RESULTADOS 2026-08-25 — respuesta en frecuencia por el lazo digital (Test D)
+
+§5.5 pedía la respuesta en frecuencia de la cadena de salida. Acá está la parte
+que se puede medir **sin 24 V y sin amplificadores**, que es lo que hoy está
+disponible: J13 pincha la salida del DAC del canal 24, así que barriendo tonos
+por el lazo digital sale amplitud contra frecuencia de la cadena **DAC → ADC**.
+
+### El instrumento: modo 20, detección coherente
+
+Modo de banco nuevo, `BARRIDO DE FRECUENCIA por el lazo`, emitiendo por los
+**mismos** canales que el LOOPBACK (0/8/16/24, en fase) para que el día que
+estén los adaptadores de §4.2 la misma corrida dé los cuatro bancos.
+
+22 puntos log-espaciados de 20 Hz a 20 kHz, 100 ms de asentamiento y 200 ms de
+medición cada uno: **~7 s por barrido**, y se repite.
+
+**Detección coherente, no pico.** El pico mide señal más ruido, y en los
+extremos —donde la respuesta cae— eso es un piso que miente: la curva se aplana
+en el ruido en vez de seguir bajando. Multiplicando por seno y coseno de la
+misma frecuencia y acumulando, el ruido se promedia a cero. Acá no es un lujo:
+el tono llega a **~2600 cuentas** contra un piso de ruido de **~437**, o sea
+15 dB — y aun así el barrido resuelve **0,03 dB**. Sin la ganancia de proceso de
+las 9600 muestras, esta medición no existía.
+
+La referencia sale de `sine_table_1khz`, la misma tabla e interpolación de los
+modos de tono. Igual que con los retardos Q8 en §11: si se reimplementara, el
+barrido mediría su propia copia.
+
+### El resultado — 6 barridos, sin alimentación de 24 V
+
+| f | medido | 1 polo | resid |
+|---|---|---|---|
+| 20 Hz | −2,18 dB | −2,16 | −0,02 |
+| 30 Hz | −1,09 | −1,09 | 0,00 |
+| 45 Hz | −0,51 | −0,52 | +0,01 |
+| 63 Hz | −0,21 | −0,27 | +0,06 |
+| 125 Hz | −0,04 | −0,07 | +0,03 |
+| **723 Hz** | **+0,01** | −0,00 | +0,01 |
+| **800 Hz** | **+0,01** | −0,00 | +0,01 |
+| 1 kHz | 0,00 | −0,01 | +0,01 |
+| 2,8 kHz | −0,03 | −0,04 | +0,01 |
+| 8 kHz | −0,39 | −0,31 | −0,08 |
+| 16 kHz | −1,13 | −1,12 | −0,01 |
+| 20 kHz | −1,58 | −1,65 | +0,07 |
+
+**Plana dentro de ±0,04 dB entre 125 Hz y 2,8 kHz.** Los dos extremos son un
+solo polo cada uno, y ajustan muy bien:
+
+| | frecuencia de corte | residual rms |
+|---|---|---|
+| pasaalto | **16,0 Hz** | 0,03 dB |
+| pasabajo | **29,4 kHz** | 0,06 dB |
+
+Repetibilidad entre barridos: **≤0,1 dB por encima de 45 Hz**, 0,2 dB en el
+punto de 20 Hz. (El primer barrido después de un reset da ~0,2 dB de más en el
+extremo grave: todavía se está asentando. Se descarta.)
+
+### Lo que esto confirma, y no es la curva
+
+§1 dedujo **de un archivo de PCB** que J13 pincha en R82 — o sea *después* de la
+resistencia serie de 1 kΩ y *antes* del capacitor de acople de 220 nF — y se
+advirtió expresamente: *"acá se está leyendo un archivo de diseño, no la placa
+que tenés en la mano"*. **La respuesta en frecuencia lo verifica eléctricamente,
+por las dos puntas:**
+
+1. **Se ve el polo de 1 kΩ + 4,7 nF.** El pasabajos de 33,9 kHz que §2 derivó del
+   esquemático aparece medido en 29,4 kHz. Si J13 pinchara directo en VOUT, antes
+   de la resistencia, este polo no estaría.
+2. **NO se ve el pasaalto de 723 Hz.** A 723 y a 800 Hz la respuesta es
+   **+0,01 dB**. Si J13 pinchara después del acople de 220 nF, §2.1 predice
+   −2,6 dB a 800 Hz. No hay nada.
+
+Las dos cosas juntas ubican la toma exactamente donde §1 dijo, con la placa
+enchufada en vez de con un archivo abierto.
+
+### Dos resistencias que salen de la medición
+
+Los polos, leídos al revés, dan valores que no estaban en ningún lado:
+
+| polo | implica | contra el nominal |
+|---|---|---|
+| 29,4 kHz con 4,7 nF | **1151 Ω** en serie | 1 kΩ nominal → ~150 Ω de más |
+| 16,0 Hz con 1,1 µF (los dos acoples de 2,2 µF en serie) | **9019 Ω** de lazo | menos 1 kΩ del DAC y 2×470 Ω → **~7,1 kΩ** de entrada del AK5538 |
+
+Los ~150 Ω extra entran cómodos en la tolerancia del capacitor (±10 % solo ya
+lleva el polo a 30,8 kHz) más la impedancia de salida del propio PCM1690, que no
+figura en el datasheet que tenemos. No se elige entre las dos: es lo que hay.
+
+### ⚠️ Lo que este barrido NO mide
+
+**No contesta §5.5 del todo.** Lo que se midió es DAC → cable → ADC. Fuera del
+alcance quedan, y siguen necesitando los adaptadores de §4.2 **y** alimentación:
+
+- el pasaalto de **723 Hz** del amplificador, que es el número de §2.1 que más
+  importa porque el **modo 17 trabaja a 800 Hz**, media octava adentro del borde;
+- todo el PAM8302A: sus +49 dB, su recorte y su portadora de clase D;
+- el filtro de ferrite de salida.
+
+Que la cadena de conversión sea plana a 800 Hz igual sirve, y no es poco: **si
+alguna vez se mide un desnivel a 800 Hz, no es del DAC ni del ADC.** Queda un
+solo sospechoso.
+
+### Un detalle de implementación que casi cuesta caro
+
+La primera versión hizo HardFault a mitad del informe, con `BFAR` apuntando
+0x40 bytes después del final del DTCM. La causa: **`UART_Print` cede a
+`Service_Fills`**, así que mientras se imprime la tabla el emisor sigue
+corriendo — y en ese momento el índice del barrido ya vale `FS_NUM_PTS`, o sea
+una posición fuera de `fs_freqs[]`. Se arregló pausando **antes** de informar, no
+después, más un clamp en el índice.
+
+> Vale como regla general de esta base: **cualquier cosa que imprima por UART
+> está cediendo el control al pipeline de audio en el medio.** El estado tiene
+> que ser válido *antes* de la primera línea, no después de la última.

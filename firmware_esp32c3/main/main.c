@@ -242,6 +242,7 @@ static const char *MODE_NAMES[] = {
     "BARRIDO VERTICAL 800Hz arriba<->abajo @1m",
     "TX foco CALIBRADO (AUTOFOCUS guardado)",
     "LOOPBACK electrico (bancos 0/8/16/24 -> ADC 0-3)",
+    "BARRIDO DE FRECUENCIA por el lazo (20 Hz - 20 kHz)",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 
