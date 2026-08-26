@@ -204,6 +204,50 @@ Por cada canal a medir, entre un par de salida de parlante y un par de entrada:
 ⚠️ **Empezar siempre con el volumen abajo** y subir mirando `adc_pk` en
 `/status`. El divisor protege del nivel nominal, no de un error de conexionado.
 
+### 4.3 Dónde se enchufa cada punta (trazado del netlist, 2026-08-26)
+
+La §4.2 dice qué construir; faltaba **a qué conector va**. Sale de recorrer
+`DS.txt` de JSPK → FB → PAM8302 → VOUT del PCM1690, y de J9 → AK5538.
+
+**Salida — qué banco es cada JSPK.** Cada conector lleva dos canales
+consecutivos: pines **1/2 = el par** y **4/3 = el impar**.
+
+| banco | DAC | canales | conectores | canal más bajo del banco |
+|---|---|---|---|---|
+| 0 | U2 (0x98) | 0-7 | JSPK01-04 | **ch0 → JSPK01 pines 1/2** |
+| 8 | U3 (0x9C) | 8-15 | JSPK05-08 | **ch8 → JSPK05 pines 1/2** |
+| 16 | U1 (0x9A) | 16-23 | JSPK09-12 ⚠️ | **ch16 → JSPK10 pines 1/2** |
+| 24 | U4 (0x9E) | 24-31 | JSPK13-16 | **ch24 → JSPK13 pines 1/2** |
+
+⚠️ El banco 16 es el del cruce: `VOUT1/VOUT2` (ch16-17) salen por **JSPK10** y
+`VOUT3/VOUT4` (ch18-19) por **JSPK09** — el swap de `ds11_upgrades.md`, acá
+confirmado desde el cobre. Los otros tres bancos van en orden.
+
+> **Cae parado con J13**: J13 toma `U4 VOUT1` por R82, o sea **ch24**, que es
+> exactamente el canal de JSPK13 pines 1/2. Un adaptador ahí y J13 puesto miden
+> **el mismo canal antes y después del amplificador, en la misma captura** — que
+> era lo que la §4 pedía para separar qué aporta cada etapa.
+
+**Entrada — qué pin del RJ45 es qué canal del ADC.** Los cuatro jacks son un
+solo cuerpo (J9); **1 y 2 están en paralelo**, y **3 y 4** también:
+
+| jack | pines 1/2 | 3/4 | 5/6 | 7/8 |
+|---|---|---|---|---|
+| **1 y 2** | AIN1 = **c0** | AIN2 = **c1** | AIN3 = **c2** | AIN4 = **c3** |
+| **3 y 4** | AIN5 = **c4** | AIN6 = **c5** | AIN7 = **c6** | AIN8 = **c7** |
+
+En cada par el **pin impar es P (+)** y el **par es N (−)**.
+
+Los cuatro adaptadores entran por el **jack 1** (c0-c3) y dejan libre el jack 3,
+que es donde hoy vive J13 (c4). O sea: **una sola captura ve los cuatro bancos
+amplificados más la toma limpia del ch24.** El firmware ya captura los 8
+canales (`ADC_CHANNELS 8`), así que no hay que tocar nada para leerlos.
+
+⚠️ El cable de entrada tiene que ser **a medida** (pines 4 y 6 intercambiados
+respecto de T568B — ver `guia_operacion.md` §5): con un cable de red común, c1 y
+c2 viajan por pares partidos. Para cuatro canales que se van a comparar en fase,
+eso es justamente el ruido que no conviene meter.
+
 ---
 
 ## 5. Qué habilita esto — en orden de valor
