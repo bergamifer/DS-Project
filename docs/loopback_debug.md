@@ -184,22 +184,35 @@ con una fuente flotante — bloquea el modo común y sólo pasa la diferencia.
 Por cada canal a medir, entre un par de salida de parlante y un par de entrada:
 
 ```
-   SPK+ ──[ 10k ]──┬──────────────── RJ45 pin (+)
-                   │
-                  [1k]     [10n]      ← en paralelo entre sí
-                   │         │
-   SPK− ──[ 10k ]──┴─────────┴─────── RJ45 pin (−)
+   SPK+ ──[ 4,7k ]──┬──────────────── RJ45 pin (+)
+                    │
+                   [1k]     [10n]      ← en paralelo entre sí
+                    │         │
+   SPK− ──[ 4,7k ]──┴─────────┴─────── RJ45 pin (−)
 ```
 
-- **División**: 1k / (10k + 1k + 10k) = **1/21 = −26 dB**. Con el amplificador
-  a fondo (3,2 V) entrega 150 mV al ADC: bien arriba del piso de ruido (437
-  cuentas) y lejos de saturarlo.
-- **Pasabajos**: R equivalente = 1k ∥ 20k = 952 Ω; con 10 nF da **fc ≈ 16,7 kHz**.
-  Atenúa la portadora de 250 kHz ~24 dB adicionales. A 2 kHz el corrimiento de
-  fase es de 6,8°, **igual para todos los canales que se midan con el mismo
-  adaptador**, así que se cancela en cualquier medición relativa.
+> Construido con **4,7k** en vez de los 10k del cálculo original (2026-08-26,
+> decisión del usuario por lo que había a mano). Revisado: el pasabajos no se
+> mueve —lo domina el 1k, no el brazo de 10k/4,7k— y el nivel que llega al ADC
+> sólo sube, lo que da más margen contra el piso de ruido a costa de un poco
+> menos de margen contra saturación, que sigue siendo amplio. Ver comparación
+> abajo.
+
+- **División**: 1k / (4,7k + 1k + 4,7k) = **1/10,4 = −20,3 dB**. Con el
+  amplificador a fondo (3,2 V) entrega **307 mV** al ADC: bien arriba del piso
+  de ruido (437 cuentas) y lejos de saturarlo. (Con 10k daba 150 mV a −26 dB;
+  la versión con 4,7k llega con ~6 dB más de señal, que es margen extra para
+  cuando haga falta bajar el volumen de trabajo.)
+- **Pasabajos**: R equivalente = 1k ∥ 9,4k = 904 Ω; con 10 nF da **fc ≈ 16,6 kHz**
+  — prácticamente igual que con 10k (952 Ω → 16,7 kHz), porque el 1k domina el
+  paralelo en los dos casos. Atenúa la portadora de 250 kHz ~24 dB adicionales.
+  A 2 kHz el corrimiento de fase es de ~6,8°, **igual para todos los canales que
+  se midan con el mismo adaptador**, así que se cancela en cualquier medición
+  relativa.
 - Resistencias al 1 % y capacitores NP0/C0G si se busca precisión de nivel; para
   fase y retardo la tolerancia no importa mientras los adaptadores sean iguales.
+- ⚠️ **Usar el mismo valor en los cuatro adaptadores** (no mezclar 10k y 4,7k
+  entre ellos) — es lo único que rompería la comparación relativa entre bancos.
 
 ⚠️ **Empezar siempre con el volumen abajo** y subir mirando `adc_pk` en
 `/status`. El divisor protege del nivel nominal, no de un error de conexionado.
