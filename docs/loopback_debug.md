@@ -186,33 +186,52 @@ Por cada canal a medir, entre un par de salida de parlante y un par de entrada:
 ```
    SPK+ ──[ 4,7k ]──┬──────────────── RJ45 pin (+)
                     │
-                   [1k]     [10n]      ← en paralelo entre sí
+                   [1k]     [2,2n]     ← en paralelo entre sí
                     │         │
    SPK− ──[ 4,7k ]──┴─────────┴─────── RJ45 pin (−)
 ```
 
-> Construido con **4,7k** en vez de los 10k del cálculo original (2026-08-26,
-> decisión del usuario por lo que había a mano). Revisado: el pasabajos no se
-> mueve —lo domina el 1k, no el brazo de 10k/4,7k— y el nivel que llega al ADC
-> sólo sube, lo que da más margen contra el piso de ruido a costa de un poco
-> menos de margen contra saturación, que sigue siendo amplio. Ver comparación
-> abajo.
+> Construido con **4,7k / 2,2 nF** en vez de 10k / 10 nF (2026-08-26, decisión
+> del usuario por lo que había en stock). Las dos desviaciones apuntan en
+> sentidos opuestos y hay que leerlas juntas — ver el pasabajos abajo.
+>
+> ⚠️ Si en el futuro aparecen capacitores de 10 nF, **repetir la prueba** con
+> ellos: la diferencia de fc no es cosmética (ver tabla), y sólo entonces el
+> filtro queda tan lejos de la banda de prueba como se había calculado.
 
 - **División**: 1k / (4,7k + 1k + 4,7k) = **1/10,4 = −20,3 dB**. Con el
   amplificador a fondo (3,2 V) entrega **307 mV** al ADC: bien arriba del piso
   de ruido (437 cuentas) y lejos de saturarlo. (Con 10k daba 150 mV a −26 dB;
-  la versión con 4,7k llega con ~6 dB más de señal, que es margen extra para
-  cuando haga falta bajar el volumen de trabajo.)
-- **Pasabajos**: R equivalente = 1k ∥ 9,4k = 904 Ω; con 10 nF da **fc ≈ 16,6 kHz**
-  — prácticamente igual que con 10k (952 Ω → 16,7 kHz), porque el 1k domina el
-  paralelo en los dos casos. Atenúa la portadora de 250 kHz ~24 dB adicionales.
-  A 2 kHz el corrimiento de fase es de ~6,8°, **igual para todos los canales que
-  se midan con el mismo adaptador**, así que se cancela en cualquier medición
-  relativa.
+  la versión con 4,7k llega con ~6 dB más de señal, margen extra para cuando
+  haga falta bajar el volumen de trabajo.)
+- **Pasabajos**: R equivalente = 1k ∥ 9,4k = 904 Ω. El capacitor si decide todo:
+
+  | capacitor | fc | a 20 kHz (borde de la prueba) | a 250 kHz (portadora del amp) |
+  |---|---|---|---|
+  | 10 nF (cálculo original) | 17,6 kHz | −3,6 dB, corregible | ~−23 dB de rechazo |
+  | **2,2 nF (lo que se usó)** | **~80 kHz** | **−0,26 dB, ~14° — casi nada** | **~−10 dB de rechazo** |
+  | 100 nF (descartado) | 1,76 kHz | corta la banda de audio | sobra, pero inútil: mata lo que se quiere medir |
+
+  Con 2,2 nF el filtro **casi no toca** la banda 20 Hz-20 kHz que es lo que se
+  quiere medir sin corregir nada — pero deja **~13 dB menos** de rechazo a la
+  portadora de 250 kHz que el diseño original. No es necesariamente un
+  problema: el ferrite de salida del amplificador filtra antes de esto, y el
+  filtro es **idéntico en los cuatro adaptadores**, así que si algo de
+  portadora se cuela aparece igual en los cuatro y no contamina las
+  mediciones *relativas* entre bancos (§5.1, §5.3). Sí podría subir el piso de
+  ruido en una medición *absoluta*, algo a revisar si aparece.
+- A 2 kHz el corrimiento de fase con 2,2 nF es despreciable (<2°), y de todos
+  modos sería igual para todos los canales que se midan con el mismo
+  adaptador, así que se cancela en cualquier medición relativa.
 - Resistencias al 1 % y capacitores NP0/C0G si se busca precisión de nivel; para
   fase y retardo la tolerancia no importa mientras los adaptadores sean iguales.
-- ⚠️ **Usar el mismo valor en los cuatro adaptadores** (no mezclar 10k y 4,7k
-  entre ellos) — es lo único que rompería la comparación relativa entre bancos.
+- ⚠️ **Usar el mismo valor en los cuatro adaptadores** (no mezclar componentes
+  distintos entre ellos) — es lo único que rompería la comparación relativa
+  entre bancos.
+- **Si se consiguen capacitores de 10 nF más adelante**: repetir §5.1/§5.5 con
+  ellos. Con 2,2 nF el rechazo de portadora es menor; si algún resultado sale
+  raro (piso de ruido más alto de lo esperado, algo con pinta de aliasing),
+  éste es el primer sospechoso a descartar volviendo al valor de diseño.
 
 ⚠️ **Empezar siempre con el volumen abajo** y subir mirando `adc_pk` en
 `/status`. El divisor protege del nivel nominal, no de un error de conexionado.
