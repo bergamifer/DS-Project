@@ -732,6 +732,12 @@ decir en qué estado midió.
 
 ## 14. RESULTADOS 2026-08-25 — respuesta en frecuencia por el lazo digital (Test D)
 
+> ⚠️ **CORREGIDO EN §16.** Todo lo de abajo se midió con la placa **sin los
+> 19-20 V**, y en ese estado la etapa analógica de salida del PCM1690 está
+> hambreada. Dos conclusiones de esta sección **no sobreviven** a repetir la
+> medición alimentada: el "pasabajo de 29,4 kHz" y los "1151 Ω en serie".
+> **Leer §16 antes de usar cualquier número de acá.**
+
 §5.5 pedía la respuesta en frecuencia de la cadena de salida. Acá está la parte
 que se puede medir **sin 24 V y sin amplificadores**, que es lo que hoy está
 disponible: J13 pincha la salida del DAC del canal 24, así que barriendo tonos
@@ -954,6 +960,9 @@ medido**.
 
 ### 15.3 Diafonía entre entradas del ADC
 
+> ⚠️ **SUPERADO POR §16.3.** Medido sin alimentar, con 65 veces menos excitación:
+> lo de abajo es el piso de ruido, no diafonía. Los números reales están en §16.3.
+
 Con el tono entrando sólo por entrada5, las otras siete:
 
 | entrada | peor caso | a qué frecuencia | cuentas |
@@ -1026,3 +1035,109 @@ dos cosas en el mismo barrido, que es lo que está commiteado.
 > queda escrito con los datos del A/B en vez de enterrado. Si alguna vez se toca
 > el generador de tonos, esto es un aviso: **el modo 20 puede medir una amplitud
 > equivocada sin ninguna bandera de error.**
+
+---
+
+## 16. RESULTADOS 2026-08-26 — lo mismo, pero con la placa alimentada
+
+Al conectar los 19-20 V y repetir el modo 20 **sin tocar nada más**, la medición
+cambió tanto que obligó a revisar §14. Base: **145 barridos completos**, volumen
+−40 dB verificado en el registro de los cuatro DAC, amplificadores deshabilitados.
+
+### 16.0 Por qué cambió: el PCM1690 estaba corriendo con la salida hambreada
+
+| | sin 19-20 V (§14) | con 19-20 V |
+|---|---|---|
+| nivel en 1 kHz | 2.600 cuentas @ **0 dB** | 168.792 @ **−40 dB** |
+| normalizado a igual volumen | — | **+76 dB** |
+| polo agudo | −1,7 dB @ 20 kHz | **−0,17 dB @ 20 kHz** |
+| pasaalto | 16,0 Hz | 17,8 Hz |
+| retardo de grupo en 1 kHz | 513,76 smp | **513,70 smp** |
+
+`presupuesto_potencia.md` §1: *"el único consumidor [de la tensión de entrada] es
+el buck (de ahí salen +5VA para los amps, y por FB2+D9 el +5V que alimenta los
+reguladores de 3,3 V)"*. Sin los 19-20 V la placa se alimentaba por USB a través
+de D9: **lo digital funcionaba y la etapa analógica de salida no tenía su riel.**
+
+Las tres firmas encajan y no dejan otra lectura razonable:
+
+- **El pipeline digital es idéntico** — el retardo de grupo no se movió ni una
+  décima de muestra (513,70 vs 513,76). Nada cambió en el camino de datos.
+- **El lado del ADC es idéntico** — el pasaalto sigue donde estaba.
+- **Sólo cambió la salida del DAC** — 76 dB más de nivel y el polo agudo se fue
+  de la banda, que es exactamente lo que hace una etapa de salida que pasa de
+  estar starved (poco swing, impedancia alta) a tener su riel.
+
+> **Lección que vale más que el número:** durante todo el 2026-08-25 el
+> instrumento dio resultados **repetibles a 0,03 dB, coherentes entre sí, y con
+> un modelo de dos polos que ajustaba a 0,06 dB de residuo**. Nada gritaba
+> "error". Y sin embargo describía un circuito que no era el que está en la
+> placa. **La repetibilidad no es exactitud**, y un ajuste bueno sobre datos
+> tomados en un estado equivocado da confianza falsa, no verdad.
+
+### 16.1 Lo que hay que corregir de §14
+
+| afirmación de §14 | estado |
+|---|---|
+| "pasabajo de 29,4 kHz — se ve el polo de 1 kΩ + 4,7 nF" | ❌ **Falso.** Artefacto del riel hambreado. Alimentada no hay ningún polo en banda |
+| "1151 Ω en serie, ~150 Ω más que el nominal" | ❌ **Sin sentido.** Derivado del polo anterior |
+| "J13 pincha después de R82" (mitad basada en el polo agudo) | ⚠️ **Ese argumento se cae** |
+| "J13 pincha después de R82" (mitad basada en la ausencia del pasaalto de 723 Hz) | ✅ **En pie, y ahora vale más**: hoy el riel del amplificador SÍ está presente y 723/800 Hz siguen leyendo +0,01 dB |
+| "pasaalto de 16,0 Hz" | ✅ Confirmado, ahora en **17,8 Hz** con residuo 0,020 dB |
+| "~7,1 kΩ de entrada del AK5538" | ✅ En pie (sale del pasaalto, que no cambió) |
+| "plano ±0,04 dB de 125 Hz a 2,8 kHz" | ✅ Superado: **±0,05 dB de 250 Hz a 8 kHz** |
+
+### 16.2 La respuesta real DAC→ADC
+
+| | |
+|---|---|
+| pasaalto | **17,8 Hz**, residuo RMS **0,020 dB** |
+| plano de 250 Hz a 8 kHz | **±0,05 dB** |
+| en 20 kHz | **−0,17 dB** |
+| repetibilidad entre 145 barridos | **0,005 a 0,023 dB** |
+
+**No hay polo agudo dentro de la banda de audio.** El pasabajos de 33,9 kHz que
+§2 derivó del esquemático queda demasiado arriba para verse acá — o sea que §2
+sigue siendo correcto, pero **§14 lo "confirmó" por casualidad, midiendo otra
+cosa**.
+
+El retardo de grupo se repite clavado (§15.2 vale entero): 513,70 muestras en
+1 kHz, +2,48 en 20 kHz. **Que no se moviera con un cambio de 76 dB en el nivel es
+la mejor prueba de que mide el pipeline y no el analógico.**
+
+> ⚠️ El `tau` de 20 Hz es basura (dispersión de 1080 muestras entre barridos):
+> a esa frecuencia el par de 40 Hz da una diferencia de fase que envuelve. **De
+> 30 Hz para arriba es sólido.** Anotado como límite del método, no como falla.
+
+### 16.3 Diafonía de verdad — reemplaza §15.3
+
+Con 65 veces más excitación, esto ya no es piso de ruido. Peor caso de 145
+barridos, con el tono en entrada5 (c4):
+
+| entrada | peor caso | dónde | cuentas | en 1 kHz |
+|---|---|---|---|---|
+| c0 | −90,0 dB | 20 Hz | 4 | −113,9 dB |
+| c1 | −90,4 dB | 20 Hz | 4 | −115,1 dB |
+| c2 | −92,0 dB | 20 Hz | 3 | −114,9 dB |
+| c3 | −90,7 dB | 20 Hz | 4 | −113,2 dB |
+| **c5** | **−73,5 dB** | **20 kHz** | 35 | −99,4 dB |
+| **c6** | **−82,9 dB** | **20 kHz** | 12 | −107,9 dB |
+| c7 | −90,2 dB | 20 Hz | 4 | −114,9 dB |
+
+**Dos resultados distintos en la misma tabla:**
+
+- **c0-c3 y c7 están en el piso** (3-4 cuentas, peor caso en 20 Hz, o sea 1/f).
+  Su diafonía es **<−90 dB**: no medible, y no hace falta.
+- **c5 y c6 son acoplamiento real.** Crecen con la frecuencia —firma capacitiva—
+  y son **justo los dos vecinos del canal excitado**. −73,5 dB y −82,9 dB en
+  20 kHz, contra −99,4 y −107,9 en 1 kHz.
+
+En la banda de trabajo del equipo la diafonía es **mejor que −99 dB en todos los
+canales**, o sea irrelevante para el beamforming. El acoplamiento entre vecinos
+existe pero vive arriba de 10 kHz.
+
+⚠️ Sigue **sin reproducir ni refutar los −38 dB del 2026-08-18**: aquello era la
+Mac excitando c6/c7 por el par partido de J9. Lo que §16.3 agrega es que **el
+conversor y el ruteo interno están 35 dB mejor que eso**, así que el sospechoso
+queda firmemente del lado del cable y el conector.
+
