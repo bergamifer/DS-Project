@@ -766,6 +766,29 @@ static int8_t   lb_best_sign = 1;
 #define LB_DMA_WORDS    (AUDIO_BUFFER_SIZE * 2)
 static volatile uint32_t lb_ndtr_rx = 0, lb_ndtr_tx = 0;
 
+/* Instrumentación del ARMADO de la captura — la carrera que §10 dejó anotada.
+ *
+ * El síntoma: 1 de cada 25 arranques informaba exactamente 240,00 muestras menos
+ * —medio buffer justo— con la MISMA fase de DMA. §9 estableció que la fase
+ * determina la latencia uno a uno, así que si la fase no cambió, lo que cambió
+ * no es el pipeline: es dónde EMPIEZA la ventana capturada.
+ *
+ * Por qué puede correrse medio buffer: `lb_capturing = 1` se pone en el fill del
+ * banco 24, y Service_Fills procesa las mitades del RX ANTES de los cuatro
+ * fills. Al armar, la mitad que el RX acaba de terminar puede estar ya consumida
+ * —y entonces la captura abre con la mitad que el DMA está escribiendo ahora— o
+ * seguir pendiente porque el borde cayó después del chequeo de arriba —y
+ * entonces abre con la anterior, 240 muestras más atrás—. Las dos alternativas
+ * están separadas por exactamente medio buffer, que es el tamaño del artefacto.
+ *
+ * Estos tres registros convierten esa conjetura en dato: qué había pendiente al
+ * armar, con qué mitad abrió la captura de verdad, y cuántos bordes de RX
+ * pasaron en el medio. */
+static volatile uint8_t  lb_arm_pend = 0;   /* mitades de RX pendientes al armar */
+static volatile uint8_t  lb_cap_half = 0xFF;/* mitad del RX que ABRIÓ la captura */
+static volatile uint32_t lb_arm_rxcb = 0;   /* cb_rx3b_count al armar */
+static volatile uint32_t lb_cap_rxcb = 0;   /* cb_rx3b_count al primer copiado */
+
 /** @brief Convierte dos lecturas de NDTR en la fase RX-TX, en muestras.
  *
  * NDTR cuenta hacia ABAJO desde la cuenta programada, así que la posición del
@@ -3869,6 +3892,46 @@ static void LB_Process(void) {
             (long)DMA_PhaseFrom(lb_ndtr_rx, lb_ndtr_tx));
     UART_Print(uart_buf);
   }
+  /* Dónde cayó el ARMADO dentro del buffer del RX, y con qué mitad abrió la
+   * captura. Sirve para decidir la carrera anotada en §10 (ver el comentario
+   * largo en la declaración de lb_arm_pend).
+   *
+   * `back` es la distancia MEDIDA entre el instante de armar y el primer sample
+   * capturado: desde la posición del DMA al armar hasta el principio de la mitad
+   * que abrió, envuelta en el buffer circular. Vale q si la captura abrió con la
+   * mitad que el DMA estaba escribiendo, y q+240 si abrió con la anterior.
+   *
+   * De ahí sale la prueba. Lo que hay que descontar de `t` NO es `back` entero
+   * sino su parte de MITADES —`k`, 0 o 1—: el chirp sale y la ventana abre en
+   * bordes de mitad, los dos, así que `t` está cuantizado en pasos de 240 y `q`
+   * (dónde cayó el armado DENTRO de la mitad) no entra. Medido: `t` no sigue a
+   * `q` en absoluto (0,26 muestras de dispersión sobre 366 informes contra 0..26
+   * de `q`), y descontar `q` sólo le agrega ruido.
+   *
+   * Con eso, `t − 240k` es la latencia real del lazo y NO debería moverse aunque
+   * la ventana se corra media vuelta. Si en el caso raro `t` baja 240 y `t−240k`
+   * se queda quieto, la carrera está confirmada y el pipeline queda exonerado.
+   * Si `t−240k` también salta, la explicación de §10 es falsa. */
+  int32_t arm_back = 0, arm_k = 0;
+  {
+    int32_t nsamp = (int32_t)(LB_DMA_WORDS / AUDIO_CHANNELS);   /* 480 */
+    int32_t half  = nsamp / 2;                                  /* 240 */
+    int32_t pos   = (int32_t)((LB_DMA_WORDS - lb_ndtr_rx) / ADC_CHANNELS);
+    int32_t w     = pos / half;                 /* mitad que el DMA ESCRIBÍA */
+    int32_t q     = pos - w * half;             /* muestras desde el borde */
+    if (lb_cap_half <= 1) {
+      arm_back = pos - half * (int32_t)lb_cap_half;
+      while (arm_back < 0) arm_back += nsamp;
+      while (arm_back >= nsamp) arm_back -= nsamp;
+    }
+    arm_k = arm_back / half;                /* mitades de atraso: 0 o 1 */
+    sprintf(uart_buf,
+            "  armado: pos=%ld mitad=%ld q=%ld pend=%u cap=%u dRX=%ld back=%ld k=%ld\r\n",
+            (long)pos, (long)w, (long)q, (unsigned)lb_arm_pend,
+            (unsigned)lb_cap_half, (long)(lb_cap_rxcb - lb_arm_rxcb),
+            (long)arm_back, (long)arm_k);
+    UART_Print(uart_buf);
+  }
   /* El retardo Q8 comandado, para poder cruzarlo con el medido sin suponer cuál
    * estaba puesto. Sólo se imprime si hay alguno: con 0 el modo es el de siempre
    * y la línea sería ruido visual. */
@@ -3909,6 +3972,13 @@ static void LB_Process(void) {
     sprintf(uart_buf, "  %u/%u entradas con senal; skew relativo a la entrada%u "
             "(+ = llega DESPUES)\r\n",
             (unsigned)n_ok, (unsigned)LB_NUM_IN, (unsigned)(ref_i + 1));
+    UART_Print(uart_buf);
+    /* La latencia descontando el origen de la ventana: es la que NO debería
+     * moverse ni cuando el artefacto de §10 aparece. */
+    int32_t norm_q8 = ref_q8 - (arm_k * 240 << 8);
+    sprintf(uart_buf, "  t-240k = %ld.%02ld smp (latencia real, entrada%u)\r\n",
+            (long)(norm_q8 >> 8), (long)((norm_q8 & 0xFF) * 100 / 256),
+            (unsigned)(ref_i + 1));
     UART_Print(uart_buf);
   } else {
     /* Partido en dos: el mensaje entero no entra en uart_buf y el compilador
@@ -4181,6 +4251,13 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
    * comparación de retardos: el lado del ADC no aporta skew. */
   if (lb_capturing) {
     uint32_t n = lb_cap_count;
+    /* Primer trozo: anotar CON QUÉ MITAD abrió la captura. Es el dato que le
+     * falta a §10 — junto con la posición del DMA al armar da la distancia real
+     * entre el armado y el primer sample capturado, sin suponer nada. */
+    if (n == 0) {
+      lb_cap_half = (rx_buf == &audio_buffer_3b_rx[0]) ? 0u : 1u;
+      lb_cap_rxcb = cb_rx3b_count;
+    }
     for (uint32_t i = 0; i < samples && n < LB_CAPTURE_LEN; i++, n++) {
       for (uint32_t p = 0; p < LB_NUM_IN; p++) {
         lb_capture[p][n] = (int16_t)(rx_buf[i * ADC_CHANNELS + p] >> 16);
@@ -4370,8 +4447,15 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
             __disable_irq();
             lb_ndtr_rx = __HAL_DMA_GET_COUNTER(&hdma_sai3_b);
             lb_ndtr_tx = __HAL_DMA_GET_COUNTER(&hdma_sai2_b);
+            /* Dentro del MISMO bloqueo que los NDTR: si se leyeran afuera, un
+             * borde de RX podría caer en el medio y la foto mezclaría dos
+             * instantes — que es justamente el error que se está buscando. */
+            lb_arm_pend = (uint8_t)(rx_3b_first_half_ready
+                                    | (rx_3b_second_half_ready << 1));
+            lb_arm_rxcb = cb_rx3b_count;
             __set_PRIMASK(pm);
           }
+          lb_cap_half = 0xFF;              /* lo llena el primer copiado */
           lb_capturing = 1;
         }
         lb_chirp_pos += samples;

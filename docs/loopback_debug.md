@@ -510,7 +510,7 @@ arranca el RX igual (peor fase, pero equipo vivo) y **se reporta en el log** —
 > el instante en que arranca el RX, así que el lazo mide otra cosa. Lo que
 > importa es que ahora **es la misma en todos los arranques**.
 
-### Un artefacto del modo 19, que NO se arregló
+### Un artefacto del modo 19, que NO se arregló — **explicado en §13**
 
 En 1 de 25 arranques el loopback informó `t=273,67` en vez de `513,67`:
 **exactamente 240,00 muestras menos, o sea medio buffer justo.**
@@ -524,6 +524,10 @@ pone desde el fill (contexto de main loop) y el callback del RX empieza a copiar
 en la mitad siguiente. Si el armado cae muy cerca del borde de una mitad, la
 captura arranca una mitad después → 240 muestras. **Queda anotado, sin arreglar**:
 es un artefacto de un modo de banco, no afecta al equipo, y aparece 1 de cada 25.
+
+> **La conjetura era correcta y quedó probada — §13.** El mecanismo es el que se
+> sospechaba, con un matiz: no depende de caer "cerca del borde" sino de si la
+> mitad del RX que acaba de terminar ya fue consumida cuando corre el fill.
 
 ---
 
@@ -603,3 +607,123 @@ rato".** Lo resolvió el registro continuo del soak, que muestrea cada 30 s:
 ```
 
 Para detectar reinicios hay que **vigilar**, no consultar.
+
+---
+
+## 13. RESUELTO 2026-08-25 — el artefacto de 1 en 25 es la ventana, no el pipeline
+
+§10 dejó una carrera anotada sin arreglar y sin probar. Acá está el instrumento,
+la confirmación por observación, y la confirmación por causa.
+
+### El instrumento
+
+Tres registros nuevos, todos en el camino del modo 19, ninguno en el de audio:
+
+| dónde | qué |
+|---|---|
+| al armar, **dentro** del mismo `__disable_irq()` que los NDTR | `lb_arm_pend` — qué mitades del RX estaban pendientes de procesar |
+| al armar | `lb_arm_rxcb` — el contador de callbacks del RX |
+| en el **primer** copiado de `Process_ADC_Half` | `lb_cap_half` — con qué mitad abrió la captura (sale del puntero), y el contador otra vez |
+
+Las banderas se leen dentro del mismo bloqueo que los NDTR a propósito: si se
+leyeran afuera, un borde de RX podría caer en el medio y la foto mezclaría dos
+instantes — que es exactamente el error que se está buscando.
+
+De ahí sale la línea nueva del informe:
+
+```
+  armado: pos=243 mitad=1 q=3 pend=1 cap=0 dRX=0 back=243 k=1
+```
+
+`back` es la distancia **medida** entre el armado y el primer sample capturado, y
+`k` su parte en mitades: 0 si la captura abrió con la mitad que el DMA estaba
+escribiendo, 1 si abrió con la anterior.
+
+### Un normalizador que estaba mal, y cómo lo delató el propio dato
+
+La primera versión imprimía `t − back`, suponiendo que había que descontar la
+distancia entera. **Está mal**, y el dato lo dijo enseguida: `t − back` tenía
+**3,13** muestras de dispersión contra **0,26** de `t` pelado. Restar `back`
+agregaba ruido en vez de sacarlo.
+
+La razón: el chirp sale en un borde de mitad y la ventana abre en un borde de
+mitad, así que `t` está **cuantizado en pasos de 240** y `q` —dónde cayó el
+armado *dentro* de la mitad— no entra. La prueba directa está en la tabla: sobre
+382 informes `q` recorrió 0..26 y `t` no lo siguió en absoluto. Lo que hay que
+descontar es `240k`, nada más.
+
+> Vale anotarlo como método: **el normalizador equivocado se delata solo, porque
+> empeora la dispersión.** Si hubiera pasado desapercibido, la conclusión habría
+> sido "ni `t` ni `t − back` son estables" y la carrera habría quedado sin
+> explicar por segunda vez.
+
+### Confirmación 1 — por observación: 382 informes, 61 arranques
+
+| | dispersión de `t` | dispersión de `t − 240k` |
+|---|---|---|
+| 382 informes | **240,19 muestras** (dos estados) | **0,26 muestras** (uno solo) |
+
+Y el discriminador acierta **382 de 382**, sin una excepción:
+
+| `pend` | `cap` | `dRX` | `k` | n | `t` |
+|---|---|---|---|---|---|
+| 0 | la que escribe | 1 | 0 | **1** | **273,72** |
+| ≠0 | la anterior | 0 | 1 | 381 | 513,65 – 513,91 |
+
+El caso raro apareció **1 vez en 382 informes**, del mismo orden que el 1 de 25
+de §10, y midió **273,72** contra los 273,67 que §10 había anotado.
+
+### Y el arranque raro dice *por qué*, en el log
+
+El informe anómalo cayó pegado a la reimpresión del banner del modo:
+
+```
+MODE [20/20]: LOOPBACK electrico (bancos 0/8/16/24 -> ADC 0-3)
+  armado: pos=26 mitad=0 q=26 pend=0 cap=0 dRX=1 back=26
+  entrada5 (c4)  t=273.72 smp (5702 us)
+```
+
+`q=26` en vez de los 3 de siempre: el `UART_Print` del banner **atrasó el fill
+del banco 24 unos 542 µs**, y para cuando corrió, la mitad del RX ya había sido
+consumida por un `Service_Fills` intermedio. Sin nada pendiente, la captura abrió
+con la mitad que el DMA estaba escribiendo → 240 muestras menos.
+
+Eso corrige el matiz de §10: **no es "caer muy cerca del borde"**. El armado cae
+*siempre* a 0-3 muestras del borde — es donde lo dejó el arreglo de §10. Lo que
+decide es si algo se metió en el medio y le dio tiempo a la mitad pendiente a ser
+consumida antes del fill.
+
+### Confirmación 2 — por causa: el otro lado, a pedido
+
+Esperar 1 de cada 382 no es una prueba, es una anécdota con suerte. Un build de
+laboratorio —que **no se commiteó**— saltea la primera mitad a propósito y fuerza
+el caso raro:
+
+| build | n | `k` | `t` | `t − 240k` |
+|---|---|---|---|---|
+| normal | 382 | 1 (×381) | 513,65 – 513,91 | 273,65 – 273,91 |
+| **caso A forzado** | **70** | **0 (×70)** | **273,66 – 273,71** | 273,66 – 273,71 |
+
+**Los dos estados difieren en 240,00 exactas, y la latencia real es la misma en
+los 452 informes de los dos firmwares: `t − 240k` = 273,7 ± 0,13.**
+
+### El veredicto
+
+**La carrera de §10 queda confirmada, y el pipeline exonerado.** Los 240 son el
+origen de la ventana de captura, no tiempo de vuelo: se mueven medio buffer sin
+que el audio se mueva un sample.
+
+Con eso hay que releer un número de §10. Los **513,67** que ahí figuran como
+"latencia absoluta del lazo" llevan **240 muestras de puro corrimiento de
+ventana**. El número comparable entre corridas —y el que hay que citar— es
+**`t − 240k` = 273,7 muestras = 5,70 ms**.
+
+### Lo que NO se hizo, a propósito
+
+**No se arregló.** Ahora que el informe imprime `k`, el artefacto se
+autoidentifica y `t − 240k` sale bien en los dos estados: la medición ya no lo
+necesita. El arreglo, si alguna vez se quiere, es armar la captura **antes** de
+procesar las mitades del RX (arriba de `Service_Fills`, no en el fill del banco
+24) — pero eso mueve el origen de la ventana otra vez y obliga a rehacer las
+comparaciones de §8 y §11. No vale la pena por un modo de banco que ya sabe
+decir en qué estado midió.
