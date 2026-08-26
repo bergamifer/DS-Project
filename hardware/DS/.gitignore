@@ -62,3 +62,8 @@ gerber/
 Versiones/
 # Archivos de recuperación de crash de KiCad
 *.recovered.*.kicad_sch
+
+# Excepcion: los archivos de produccion que se le mandaron a JLCPCB SI van al repo.
+# Son lo unico que permite re-pedir una version ya fabricada sin reabrir KiCad.
+!jlcpcb/production_files/BOM-DS.csv
+!jlcpcb/production_files/CPL-DS.csv
