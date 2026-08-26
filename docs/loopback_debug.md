@@ -1355,6 +1355,78 @@ porque el primero parte el problema al medio:
 > hay que mirar el adaptador (2) o la placa (3). Hacer las tres a ciegas es
 > trabajo de más.
 
+#### Segunda vuelta, con los datos del usuario (misma tarde)
+
+Fernando aclaró: está en **JSPK01/05/09/13**, el RJ45 en los pines J9_1-J9_8
+(o sea c0-c3), J13 sigue puesto, y **los parlantes NO están conectados** — así
+que la prueba de escuchar no se podía hacer. Preguntó, con razón, si los
+amplificadores estaban encendidos durante las mediciones.
+
+**Sí lo estaban, y no es una suposición.** `amps:true` en `/status` sale de
+`state_flags` bit 0, que es `amps_enabled`, y esa variable se escribe **sólo**
+dentro de `Set_Amps()` — en la línea siguiente a la que pone PD3 en alto. Si
+`/status` dice true, PD3 se manejó.
+
+> **Por qué parecía que no**: el `AMPS:` del serie nunca aparecía en el log. La
+> causa no era el firmware sino **dos lectores peleándose el puerto**: había una
+> sesión de `screen` del usuario tomando `/dev/cu.usbmodem21102` al mismo tiempo
+> que el logger, y cada uno se robaba bytes del otro. Se ve en el log en líneas
+> partidas como `Half: 100/, Err: 0, RX 47213 byte`. **Lección: con el serie
+> compartido, la ausencia de una línea no prueba nada; `/status` sí.**
+
+Dos correcciones y una prueba que cierra el tema:
+
+1. **JSPK09 no es el banco 16 — es JSPK10.** Es el cruce de §4.3: `VOUT1/VOUT2`
+   (ch16-17) salen por **JSPK10** y `VOUT3/VOUT4` (ch18-19) por JSPK09. Con el
+   adaptador en JSPK09 ese canal escucha **ch18**, y el chirp del modo 19 sale
+   por ch16. Explica **una** de las cuatro entradas mudas, no las cuatro.
+2. **Se repitió todo con el modo 12** (`TX 2k ondulante centro @1m`), que emite
+   un tono de 2 kHz **por los 32 canales a la vez**. Eso borra por completo la
+   variable de "en qué JSPK está cada adaptador": emitan lo que emitan, todos
+   los conectores tienen señal.
+
+**Resultado: las OCHO entradas del ADC siguen en el piso de ruido**, con los
+amps encendidos y barriendo el volumen de −55 a −30 dB:
+
+| | c0 | c1 | c2 | c3 | c4 (J13) | c5 | c6 | c7 |
+|---|---|---|---|---|---|---|---|---|
+| cuentas | 346 | 435 | 108 | 224 | **620.959** | 98 | 98 | 92 |
+
+Se revisaron también c5-c7 —no sólo c0-c3— para descartar que el RJ45 estuviera
+en el jack 3 o 4 en vez del 1. No lo está: **no llega señal de parlante a
+ninguna entrada del ADC.**
+
+#### Qué queda, y cómo se decide con un téster
+
+Descartados con evidencia: el DAC, las ocho entradas del ADC, el emisor, PD3, y
+el mapeo de conectores. Quedan dos, y **no se distinguen por red**:
+
+- **Los amplificadores no están sacando señal** — y el sospechoso con historia es
+  el riel **+5VA**: `ds11_errata.md` falla #2 documenta un corto de +5VA a GND
+  reparado **con bisturí** tras remover C290. Si esa reparación abrió la pista, o
+  se abrió después, el síntoma es exactamente éste.
+- **El adaptador o el cable.**
+
+> ⚠️ **La placa no puede avisar de esto sola.** +5VA no tiene test point ni
+> telemetría: nada en el sistema lo sensa. El firmware informa `amps:true` con
+> toda honestidad —PD3 está alto— aunque el riel esté muerto. **Candidato fuerte
+> para la DS12: un divisor de +5VA a un ADC del STM32.** Convierte media tarde de
+> diagnóstico en un campo de `/status`.
+
+**Prueba A — la raíz, con cualquier téster (30 s).** DC en el pad **+ de C290**
+(está removido, el pad queda accesible): tiene que haber **~5 V**. Si da 0, ahí
+terminó el diagnóstico.
+
+**Prueba B — el límite entre placa y adaptador.** Con el modo 12 corriendo y los
+amps encendidos, **AC volts directo en JSPK01, pines 1 y 2** (sin el adaptador
+en el medio): tiene que haber **volts, no milivolts** — a −40 dB el amplificador
+está recortando contra su riel de 5 V, así que son unos 3 V<sub>rms</sub>. Un
+téster barato pierde precisión en 2 kHz pero para "hay o no hay" alcanza.
+
+- Hay volts en JSPK01 y nada en el ADC → **es el adaptador o el cable** (seguir
+  con los tres números de la tabla de arriba).
+- No hay volts en JSPK01 → **es la placa**, y la prueba A dice si es +5VA.
+
 ⚠️ **Cuando el adaptador funcione, ojo con el nivel.** Con +49 dB de ganancia
 del PAM8302A (§2.1) y el divisor de −20,3 dB, a −40 dB de volumen la entrada
 queda **cerca de saturar**, no cómoda. Subir desde MÁS abajo —−50, −55— mirando
