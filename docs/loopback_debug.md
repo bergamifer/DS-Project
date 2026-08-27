@@ -1642,9 +1642,13 @@ mediciones que no comparten nada: una es amplitud contra frecuencia, la otra es
 tiempo por correlación cruzada. **El "skew" del banco 8 es su propio filtro.**
 
 **Qué revisar**: el más probable es la **resistencia de shunt de 1 kΩ** de ese
-adaptador — si quedó de 4,7 kΩ, sube el nivel y baja el corte, que es
-exactamente el par de síntomas. Con el téster, entre los dos pines del RJ45 de
-ese adaptador tiene que dar **1 kΩ**, no 4,7 kΩ.
+adaptador — si quedó más grande, sube el nivel y baja el corte, que es
+exactamente el par de síntomas.
+
+> ⚠️ **Corregido en §21 (2026-08-27).** Acá dije "si quedó de 4,7 kΩ". **No es
+> 4,7 kΩ**: ese valor daría +9,7 dB y lo medido son +12,77 dB. Dos vías
+> independientes apuntan a **10 kΩ** — ver §21.2 para el número y §21.3 para
+> cómo confirmarlo con el téster.
 
 > Esto es §4.2 cobrándose lo que avisaba: *"la tolerancia no importa mientras
 > los adaptadores sean iguales"*. No lo son, y el error entró justo en la
