@@ -121,6 +121,12 @@ La causa es geométrica y **no se arregla por firmware**:
 | horizontal (8 columnas) | 600 mm | 80 mm | 0,47 λ ✅ | **2144 Hz** |
 | vertical (4 filas) | 480 mm | **160 mm** | **0,93 λ** ❌ | **1072 Hz** |
 
+> **Dirección futura (2026-08-27)**: la propuesta en evaluación es abandonar la grilla
+> 8×4 y pasar a una **tira lineal de 32 parlantes a ~60 mm**, resignando el eje vertical
+> para triplicar la apertura horizontal. Ver `instalacion_15_nodos.md` §10 y §11 — el
+> resultado de este modo sigue siendo el que decide, pero la salida ya no es sólo
+> "achicar el paso de filas".
+
 A 2 kHz el array vertical está **aliaseado**: en vez de un foco produce lóbulos
 de rejilla. A 800 Hz (con el dither de ±5 %, 840 Hz máximo) el paso vertical es
 0,37 λ — **dentro del límite en todo el rango de steering**.

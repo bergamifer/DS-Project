@@ -54,15 +54,25 @@ entera, en el mejor caso.
 
 Con 15 muros repartidos, la apertura sintética es la que manda. Foco a 5 m:
 
-| f | L = 4 m | L = 7 m | L = 10 m |
-|---|---|---|---|
-| 800 Hz | ±268 mm | ±153 mm | ±107 mm |
-| 1 kHz | ±214 mm | ±123 mm | **±86 mm** |
-| 2 kHz | ±107 mm | ±61 mm | **±43 mm** |
+| f | L = 4 m | L = 7 m | L = 10 m | **límite físico** |
+|---|---|---|---|---|
+| 800 Hz | ±268 mm | ±214 mm | ±214 mm | **±214 mm** |
+| 1 kHz | ±214 mm | ±172 mm | ±172 mm | **±172 mm** |
+| 2 kHz | ±107 mm | ±86 mm | ±86 mm | **±86 mm** |
 
-**Ahí sí hay foco**: del tamaño de una cabeza a 1 kHz, de un puño a 2 kHz. La apertura
-sintética es el único parámetro que importa para el *tamaño* — y sale gratis, sólo hay
-que separar los muros.
+> ⚠️ **Corrección del 2026-08-27.** La primera versión de esta tabla decía ±86 mm a
+> 1 kHz con 10 m de apertura. **Está mal**: la fórmula `λz/2L` no tiene piso, pero la
+> física sí. **Un foco acústico no puede ser más chico que media longitud de onda**,
+> pase lo que pase con la apertura. A 1 kHz eso son 172 mm. Con apertura grande el
+> limitante deja de ser la apertura y pasa a ser la difracción. Los valores de arriba ya
+> están acotados por ese piso.
+
+**Ahí sí hay foco**: del tamaño de una cabeza a 1 kHz, de un puño a 2 kHz.
+
+Y la corrección tiene una consecuencia que conviene decir de una vez: **el tamaño del
+foco nunca fue el problema.** Ocho focos separados más de un metro en una sala de 10 × 10
+se resuelven de sobra en toda la banda. Lo que decide si la obra funciona está en la
+sección que sigue.
 
 ---
 
@@ -424,12 +434,10 @@ La tira la abre. Nivel de partida: **una cama difusa unos 8 dB por debajo del fo
    parado y sentado. **No es una pérdida real para esta obra.**
 2. **Más energía al piso y al techo** → más reverberación, que es el enemigo declarado de
    la §4. **Sube la prioridad del tratamiento del techo.**
-3. **⚠️ Los 15 módulos NO pueden ser todos horizontales y paralelos.** Una tira enfoca
-   sólo en el plano que la contiene. Si las quince son horizontales, el conjunto tampoco
-   tiene resolución vertical. **Variar las orientaciones** —algunas horizontales, algunas
-   inclinadas, algunas verticales— hace que la **apertura del conjunto** cubra las dos
-   dimensiones aunque cada tira cubra una sola. Es la recomendación más importante que
-   sale de este cambio.
+3. **Sobre las orientaciones — versión corregida y explicada.** En la primera versión
+   escribí *"las 15 tiras no pueden ser todas horizontales y paralelas"*. **Estaba mal
+   planteado**; la versión correcta está en la §11, y resulta que para esta obra el punto
+   casi no cuesta nada.
 4. **⚠️ El parlante tiene que entrar en 60 mm.** Eso es un driver de ≤55 mm (2"), que cae
    rápido debajo de 200-300 Hz. Para "reconocer un instrumento" eso cuesta cuerpo. Hay que
    verificar contra los parlantes reciclados antes de comprometerse — **puede ser el
@@ -465,3 +473,88 @@ Orden sugerido de decisión:
    mismo piso.
 4. **Variar las orientaciones** entre módulos.
 5. La prueba D de la §6 sigue siendo la que decide la compra, ahora con tiras.
+
+---
+
+## 11. Orientación de las tiras: qué quise decir, y qué es realmente cierto
+
+> Fernando: *"aclarame mejor lo de que las 15 tiras no pueden ser todas horizontales y
+> paralelas, porque no lo entendí del todo."*
+>
+> Con razón: **estaba mal planteado.** Al escribirlo bien apareció que el problema real
+> es otro, y que para esta obra casi no cuesta nada.
+
+### 11.1 La regla, en una frase
+
+> **Sólo se puede enfocar en las direcciones en las que los parlantes están separados
+> entre sí.**
+
+El enfoque funciona comparando **tiempos de llegada** entre parlantes. Si dos parlantes
+están separados horizontalmente, la diferencia entre sus tiempos de llegada dice algo
+sobre la posición horizontal del oyente, y el sistema puede usarla. **Si todos los
+parlantes están a la misma altura, ningún par de parlantes contiene información sobre
+altura, y no hay nada que procesar.** No es una limitación del software: esa información
+no existe en la señal.
+
+Una tira horizontal, sola, tiene todos sus parlantes a la misma altura. Por eso **su
+"foco" no es un punto sino una línea vertical**: enfoca a 3 metros y 2 metros a la
+izquierda, pero no distingue si tu oreja está a 1,60 m o a 1,90 m — a todas las alturas
+les llega lo mismo.
+
+### 11.2 Por qué eso casi no importa acá
+
+**Los ocho focos de esta obra están todos a altura de oreja.** Nadie escucha desde el
+techo. La única coordenada que hay que resolver de verdad es **dónde está cada foco en
+la planta** — y en la planta las quince tiras sí están muy separadas entre sí. **La
+resolución vertical, para esta obra, es casi irrelevante.**
+
+Y tiene un lado bueno: un foco que es una línea vertical **funciona parado y sentado**,
+y no se pierde si alguien es más alto.
+
+### 11.3 Lo que sí cuesta, y es otra cosa
+
+Que el foco no cierre en vertical significa que **la energía que no se concentra se va al
+piso y al techo**. Eso alimenta la reverberación, que es el factor menos controlado de
+toda la instalación (§4).
+
+> **Consecuencia práctica: con tiras horizontales, absorber el techo sube de
+> "recomendable" a "parte del diseño".** Es el mismo consejo de la §4, pero ahora con
+> más peso.
+
+Mitigaciones, de menor a mayor esfuerzo:
+
+- **Cabecear las tiras hacia abajo** (20-35°, como ya estaba previsto): apunta el lóbulo
+  vertical —ancho, pero apuntable— hacia el público y no hacia el techo.
+- **Absorción en el techo**, sobre todo en la franja entre las tiras y el centro.
+- **Alternar algunas tiras a 45°.** Una tira inclinada tiene extensión horizontal *y*
+  vertical, así que le da al conjunto algo de separación vertical. No hace falta que sean
+  muchas: **tres o cuatro inclinadas entre quince alcanzan** para que el conjunto deje de
+  ser plano.
+
+### 11.4 Lo que sí hay que evitar de verdad
+
+El error que importa **no es que las tiras sean paralelas: es que estén todas juntas.**
+
+Desde un punto focal, lo que determina la nitidez es **sobre qué abanico de direcciones
+se ven parlantes**. Si las quince tiras están sobre una sola pared, desde el foco se las
+ve todas en un arco angosto: buena resolución a lo largo de esa pared, mala en
+profundidad — el foco se estira en una elipse larga hacia la pared.
+
+**Repartirlas por el perímetro resuelve esto solo**, y sin pensarlo: las tiras de la
+pared norte y las de la pared este llegan al foco desde direcciones perpendiculares. El
+plano de la §4 ya lo hace bien.
+
+| disposición | resolución en planta | veredicto |
+|---|---|---|
+| 15 tiras sobre una pared | buena en un eje, mala en profundidad | ❌ evitar |
+| 15 tiras en el perímetro, cualquier orientación | buena en los dos ejes | ✅ |
+| perímetro + 3-4 inclinadas | ídem, y algo de vertical | ✅ ideal |
+
+### 11.5 Resumen del punto
+
+| lo que dije | lo correcto |
+|---|---|
+| "No pueden ser todas horizontales y paralelas" | **Sí pueden.** Que sean paralelas no es el problema |
+| "El conjunto se queda sin resolución vertical" | Cierto — **y para esta obra no importa**, porque los focos están todos a altura de oreja |
+| — | Lo que sí importa: **no ponerlas todas sobre una pared**. Repartirlas por el perímetro |
+| — | El costo real de lo horizontal es **energía al techo → reverberación**. Cabecear y absorber |
