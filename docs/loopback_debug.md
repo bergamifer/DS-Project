@@ -1831,3 +1831,106 @@ otra cosa. **Una coincidencia entre dos vías sólo vale si las vías son
 realmente independientes**; si una se derivó de la otra, la coincidencia no
 prueba nada, y en este caso yo había escrito la fórmula de la vía B para que
 diera lo mismo que la A.
+
+---
+
+## 21. El adaptador del banco 8 sigue igual — y ahora sabemos qué valor buscar (2026-08-27)
+
+Se repitió la medición de §19.2 para ver si el arreglo del adaptador había
+surtido efecto. **No cambió nada.** Y de paso salieron dos cosas que valen más
+que el "no": una cota de repetibilidad del instrumento, y **la corrección de mi
+propia hipótesis** sobre qué componente está mal.
+
+### 21.1 El resultado: idéntico, hasta el segundo decimal
+
+Mismo punto de trabajo que §19 (modo 19, −35 dB, amplificadores encendidos),
+**76 informes**:
+
+| entrada | t medio (smp) — 2026-08-26 | t medio (smp) — **hoy** | sigma hoy |
+|---|---|---|---|
+| c0 · banco 0 | 513,888 | **513,891** | 0,032 |
+| c1 · banco 8 | 514,179 | **514,181** | 0,029 |
+| c2 · banco 16 | 513,961 | **513,963** | 0,026 |
+| c3 · banco 24 | 513,967 | **513,968** | 0,008 |
+| c4 · J13 | 513,580 | **513,580** | 0,000 |
+
+Y el barrido del modo 20, 13 barridos completos:
+
+| | 2026-08-26 | **hoy** |
+|---|---|---|
+| nivel de c1 sobre c0 | +12,7 dB | **+12,77 dB** |
+| c1 en 20 kHz | −4,90 dB | **−4,90 dB** |
+| c2 / c3 en 20 kHz | −1,90 / −2,00 dB | **−1,92 / −1,90 dB** |
+| skew de c1 contra c0 | +6,05 µs | **+6,04 µs** |
+
+Los otros tres bancos coinciden entre sí en nivel dentro de **0,04 dB**
+(c2 = +0,02, c3 = −0,02 contra c0). El adaptador del banco 8 está **exactamente
+como estaba**.
+
+> **Dato lateral que sí es un resultado:** el equipo llevaba **22,5 horas
+> encendido sin reiniciarse** y las cinco entradas repiten a **0,003 muestras**
+> = **60 ns**. Eso no es una medición del adaptador, es una medición del
+> *instrumento*, y dice que cualquier diferencia por encima de ~0,1 µs que
+> aparezca en el futuro es real. J13 sigue con **sigma = 0,000**.
+
+### 21.2 🔴 Corrección: no es una resistencia de 4,7 kΩ, es uno de 10 kΩ
+
+§19.2 decía *"el más probable es que la resistencia de shunt de 1 kΩ haya
+quedado de 4,7 kΩ"*. **Con el número de nivel en la mano, 4,7 kΩ queda
+descartada**: daría +9,7 dB y lo medido es +12,77 dB.
+
+Qué daría cada valor de la serie E24 en ese lugar:
+
+| R shunt | nivel sobre los otros | qué mediría el téster entre los pines del RJ45 |
+|---|---|---|
+| **1 kΩ (correcto)** | **0 dB** | **~900 Ω** |
+| 4,7 kΩ | +9,7 dB | ~3,1 kΩ |
+| 6,8 kΩ | +11,3 dB | ~3,9 kΩ |
+| 8,2 kΩ | +12,0 dB | ~4,4 kΩ |
+| **10 kΩ** | **+12,7 dB** ← medido | **~4,8 kΩ** |
+| 15 kΩ | +13,8 dB | ~5,8 kΩ |
+
+**Y hay una segunda vía que no comparte nada con la primera.** El polo que
+agrega el adaptador malo, ajustado sobre `c1 − c0` (o sea la diferencia de
+respuesta, que cancela todo lo que las dos cadenas tienen en común):
+
+```
+polo de c1 − c0 = 20,4 kHz  (ajuste de 1 polo, 0,04 dB rms sobre 8 puntos)
+→ R de Thévenin del adaptador malo = 4.444 Ω   (el bueno: 904 Ω)
+→ R shunt implícita = 8,4 kΩ
+```
+
+**Por nivel: 6,8-10,4 kΩ. Por respuesta en frecuencia: 8,4 kΩ.** Son dos
+mediciones sin nada en común —una es amplitud a 1 kHz, la otra es la forma de
+la curva arriba de 2 kHz— y las dos caen sobre el mismo valor comercial:
+
+> **Casi con seguridad entró una resistencia de 10 kΩ donde va la de 1 kΩ.**
+> Que es, justamente, **el valor del diseño original de §4.2** (10k/10n) — o
+> sea, un valor que está en la misma bolsa de repuestos. Es el error más fácil
+> de cometer y el más fácil de no ver.
+
+### 21.3 Cómo confirmarlo con el téster, sin ambigüedad
+
+El canal es el del **JSPK05** (banco 8 = `c1` = **entrada2** en los informes;
+mapeo medido, §19.0). En el RJ45 son los **pines 3/4 del jack 1** (§4.3).
+
+**Con el adaptador desconectado de los dos extremos**, medir resistencia entre
+esos dos pines. Se lee la shunt en paralelo con las dos series (4,7k + 4,7k):
+
+- **adaptador sano → ~900 Ω**
+- **adaptador malo → ~4,8 kΩ** (si es la de 10 kΩ)
+
+Conviene medir **los cuatro** y compararlos entre sí: el que se sale es el que
+hay que desarmar. Medirlo enchufado no sirve —la entrada del ADC y la salida
+del amplificador quedan en paralelo y ensucian la lectura.
+
+### 21.4 Qué NO hay que hacer con esto
+
+**No corregirlo por software.** Es tentador —está medido con precisión de
+0,04 dB— pero el adaptador es el *instrumento*, y un instrumento que se corrige
+en el post-proceso deja de servir para descubrir cosas: la próxima anomalía real
+del banco 8 quedaría absorbida por la corrección. Se arregla el fierro.
+
+Mientras tanto, **el banco 8 no invalida nada de lo medido**: §19.1 ya se hizo
+con los tres bancos sanos y el skew entre bloques SAI (1,5 µs) no lo necesita.
+
