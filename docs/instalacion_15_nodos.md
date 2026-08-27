@@ -331,3 +331,137 @@ tarde.
 Y hay una pregunta previa a todo: **¿los ocho focos tienen que sonar simultáneos, o
 pueden alternarse?** Si pueden alternarse, la limitación central de este informe
 desaparece y 15 nodos alcanzan con holgura.
+
+---
+
+## 10. La tira lineal — reconsideración a pedido de Fernando (2026-08-27)
+
+> *"¿Y si el instrumento fuera una tira de 32 parlantes lo más cerca posible, 6 cm? Perder
+> la poca focalidad que había en el eje vertical pero mejorar el plano horizontal. Es una
+> instalación artística: si en la transición de foco a foco se escucha algo más difuso
+> —incluso podríamos introducir ruido para competir con el campo difuso— no es grave."*
+
+**La propuesta es mejor de lo que parece, y por una razón que no es obvia.**
+
+### 10.1 El salto no es el paso de 80 a 60 mm — es dejar de repartir en dos ejes
+
+| | apertura | techo de aliasing |
+|---|---|---|
+| grilla 8×4, paso 80 mm | 0,600 m | 2144 Hz |
+| **tira 32 × 60 mm** | **1,860 m** | **2858 Hz** |
+
+La grilla gasta 32 parlantes en dos ejes; la tira los pone todos en uno. **Son 3,1× de
+apertura y 1,33× de techo, a la vez.** El foco se achica 3,1× a *todas* las frecuencias:
+
+| f | grilla @3 m | tira @3 m |
+|---|---|---|
+| 500 Hz | ±1715 mm | **±553 mm** |
+| 1 kHz | ±858 mm | **±277 mm** |
+| 2 kHz | ±429 mm | **±138 mm** |
+
+### 10.2 Y arregla el problema de la §3
+
+La supresión propia de un módulo va como `10·log10(2L/λ)`. Al triplicar L, la tira suprime
+~5 dB más que la grilla en toda la banda. Con 15 módulos y **8 focos simultáneos**:
+
+| f | grilla | **tira** | |
+|---|---|---|---|
+| 500 Hz | +5,7 dB | **+10,7 dB** | usable |
+| 1 kHz | +8,7 dB | **+13,7 dB** | usable |
+| 2 kHz | +11,8 dB | **+16,7 dB** | usable |
+| 2,8 kHz | aliaseado | **+18,1 dB** | usable |
+
+> **La banda usable para 8 focos pasa de media octava (1,5-2,1 kHz) a dos octavas y media
+> (500 Hz - 2,9 kHz).** Es exactamente el rango donde viven una voz y un instrumento. La
+> §3 decía que 8 focos simultáneos eran marginales; **con la tira dejan de serlo.**
+
+### 10.3 🔴 Y ya que lo difuso no molesta: espaciado APERIÓDICO
+
+Ésta es la que más rinde dada la prioridad artística declarada. Simulado sobre el patrón
+real de 32 elementos apuntando 30° fuera de eje:
+
+| f | uniforme 60 mm | aperiódico, mismo largo | aperiódico sobre 3 m |
+|---|---|---|---|
+| 1 kHz | −13,2 dB · 5,4° | −13,0 dB · 5,4° | −8,7 dB · **3,9°** |
+| 2,8 kHz | −13,2 dB · 1,9° | −11,8 dB · 1,9° | −8,0 dB · **1,4°** |
+| 4 kHz | **0,0 dB** ⚠️ · 1,3° | **−6,4 dB** · 1,3° | −8,0 dB · **1,0°** |
+| 6 kHz | **0,0 dB** ⚠️ · 0,9° | **−6,4 dB** · 0,9° | −7,9 dB · **0,7°** |
+
+Con paso uniforme, arriba de 2858 Hz el lóbulo lateral **salta a 0 dB**: una copia del
+foco, a nivel completo, en otro punto de la sala. Ése es el techo duro.
+
+Con **espaciado aperiódico la copia no existe**: se disuelve en un piso parejo de −6 a
+−8 dB. **El techo de aliasing desaparece.** El precio es exactamente lo que Fernando dijo
+que no le molesta: un fondo difuso un poco más alto y sin estructura.
+
+Y la tercera columna abre algo más: **el espaciado aperiódico desacopla "qué tan cerrado"
+(la apertura) de "qué tan limpio" (la cantidad de elementos).** Con 32 elementos repartidos
+irregularmente sobre 3 m el foco es más angosto a todas las frecuencias, sin ninguna copia
+y con el piso plano. **La longitud de la tira pasa a ser una decisión de escenografía, no
+de acústica.**
+
+### 10.4 La cama de ruido: funciona, y sólo con la tira
+
+La propuesta de meter ruido para competir con el campo difuso es una técnica de
+enmascaramiento legítima. La condición es que el ruido tape la fuga sin tapar el foco:
+
+    fuga + 3 dB  <  ruido  <  foco − 6 dB
+
+| configuración | contraste | ventana de ruido | |
+|---|---|---|---|
+| grilla 8×4 @1 kHz | +8,7 dB | **cerrada** | el ruido que tapa la fuga tapa el foco |
+| tira @500 Hz | +10,7 dB | −7,7 … −6,0 dB | funciona, 1,7 dB de margen |
+| **tira @1 kHz** | +13,7 dB | **−10,7 … −6,0 dB** | funciona, 4,7 dB |
+| **tira @2 kHz** | +16,7 dB | **−13,7 … −6,0 dB** | funciona, 7,7 dB |
+
+**Las dos intuiciones se necesitan mutuamente**: con la grilla la ventana está cerrada.
+La tira la abre. Nivel de partida: **una cama difusa unos 8 dB por debajo del foco.**
+
+### 10.5 Lo que se pierde, y lo que hay que hacer al respecto
+
+1. **Todo el enfoque vertical.** El foco deja de ser un punto y pasa a ser una **línea
+   vertical**. Para oyentes a altura de oreja da igual — y hasta ayuda, porque funciona
+   parado y sentado. **No es una pérdida real para esta obra.**
+2. **Más energía al piso y al techo** → más reverberación, que es el enemigo declarado de
+   la §4. **Sube la prioridad del tratamiento del techo.**
+3. **⚠️ Los 15 módulos NO pueden ser todos horizontales y paralelos.** Una tira enfoca
+   sólo en el plano que la contiene. Si las quince son horizontales, el conjunto tampoco
+   tiene resolución vertical. **Variar las orientaciones** —algunas horizontales, algunas
+   inclinadas, algunas verticales— hace que la **apertura del conjunto** cubra las dos
+   dimensiones aunque cada tira cubra una sola. Es la recomendación más importante que
+   sale de este cambio.
+4. **⚠️ El parlante tiene que entrar en 60 mm.** Eso es un driver de ≤55 mm (2"), que cae
+   rápido debajo de 200-300 Hz. Para "reconocer un instrumento" eso cuesta cuerpo. Hay que
+   verificar contra los parlantes reciclados antes de comprometerse — **puede ser el
+   limitante real de toda la propuesta**, y es lo primero que hay que medir.
+
+### 10.6 Lo que la psicoacústica regala, y que ninguna de estas cuentas incluye
+
+Las tablas de arriba son físicas. La percepción es más generosa, justo en el caso más
+difícil:
+
+- **Liberación espacial del enmascaramiento.** Con voces que compiten —tu caso de las
+  poesías simultáneas— la separación espacial da **6-12 dB de mejora efectiva** de
+  inteligibilidad. Un contraste físico de +13 dB se comporta perceptualmente como +20.
+  **El caso de uso más exigente es el que más ayuda recibe.**
+- **Precedencia.** Si el sonido enfocado llega primero y el difuso después, el oyente
+  localiza en el foco aunque las energías sean parecidas.
+- **El material define qué tan localizado se lee.** Lo tonal (instrumentos) enfoca
+  nítido; la voz, intermedio; el ruido enfoca mal y se vuelve ambiente. **Eso no es una
+  limitación: es una paleta.** Lo tonal se percibe puntual, lo ruidoso envolvente — y
+  "sonidos experimentales que incomoden" probablemente quieran ser envolventes.
+
+### 10.7 Veredicto
+
+**La tira es mejor que la grilla para esta obra, en todos los ejes que importan.** Y
+combinada con espaciado aperiódico, elimina el único techo duro que tenía el sistema.
+
+Orden sugerido de decisión:
+1. **Verificar que un driver entre en 60 mm de paso** con suficiente respuesta en medios.
+   Es la única condición que puede voltear todo lo demás.
+2. **Aperiódico desde el principio.** No cuesta nada en fabricación —es otro archivo de
+   CNC— y compra una octava de banda.
+3. **Decidir el largo por escenografía**, no por acústica. Más largo = foco más cerrado,
+   mismo piso.
+4. **Variar las orientaciones** entre módulos.
+5. La prueba D de la §6 sigue siendo la que decide la compra, ahora con tiras.
