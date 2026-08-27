@@ -1580,6 +1580,9 @@ del arnés. **Para conectarse hay que usar la posición, no la etiqueta.**
 
 ### 19.1 🔴 EL SKEW ENTRE BANCOS — la medición de §5.1
 
+> **Superada por §22.1** (2026-08-27): con el banco 8 reparado se midieron los
+> **cuatro** bancos. Lo de acá vale, pero la tabla completa está allá.
+
 Retardo absoluto del lazo, por banco, en el **terminal de parlante** (o sea
 incluyendo amplificador y adaptador), 84 informes:
 
@@ -1879,6 +1882,10 @@ como estaba**.
 
 ### 21.2 🔴 Corrección: no es una resistencia de 4,7 kΩ, es uno de 10 kΩ
 
+> ⚠️ **También esto estaba mal — ver §22.** No era un valor equivocado: la
+> resistencia tenía **una pata desconectada**. El razonamiento de abajo se deja
+> entero a propósito, porque el análisis de por qué convencía está en §22.6.
+
 §19.2 decía *"el más probable es que la resistencia de shunt de 1 kΩ haya
 quedado de 4,7 kΩ"*. **Con el número de nivel en la mano, 4,7 kΩ queda
 descartada**: daría +9,7 dB y lo medido es +12,77 dB.
@@ -1937,4 +1944,182 @@ del banco 8 quedaría absorbida por la corrección. Se arregla el fierro.
 
 Mientras tanto, **el banco 8 no invalida nada de lo medido**: §19.1 ya se hizo
 con los tres bancos sanos y el skew entre bloques SAI (1,5 µs) no lo necesita.
+
+
+---
+
+## 22. ARREGLADO 2026-08-27 — los cuatro bancos, medidos por fin
+
+**La resistencia de 1 kΩ del banco 8 tenía una pata desconectada.** No era un
+valor equivocado: era un circuito abierto. Reconectada, el adaptador quedó
+equivalente a los otros tres, y **por primera vez se pueden medir los cuatro
+bancos en la misma captura**.
+
+Base: **79 informes** del modo 19 y **12 barridos** completos del modo 20,
+−35 dB, amplificadores encendidos, sin reinicios dentro de la ventana.
+
+### 22.1 🔴 La matriz de skew completa — reemplaza §19.1
+
+§19.1 tuvo que dejar el banco 8 afuera y midió tres. Acá están los cuatro:
+
+| | t medio (smp) | sigma | polaridad |
+|---|---|---|---|
+| banco 0 · SAI1_A **master** | 513,854 | 0,039 | + (79/79) |
+| banco 8 · SAI1_B *esclavo* | 513,832 | 0,064 | **− (79/79)** ⚠️ §22.3 |
+| banco 16 · SAI2_A **master** | 513,937 | 0,019 | + (79/79) |
+| banco 24 · SAI2_B *esclavo* | 513,940 | **0,000** | + (79/79) |
+| J13 (ch24 antes del amp) | 513,580 | **0,000** | − (79/79) |
+
+**Skew, en microsegundos:**
+
+| par | skew | qué es |
+|---|---|---|
+| banco 8 − banco 0 | **−0,45 µs** | master ↔ esclavo **dentro de SAI1** ← nuevo |
+| banco 24 − banco 16 | **+0,06 µs** | master ↔ esclavo **dentro de SAI2** |
+| SAI2 − SAI1 (medias) | **+1,99 µs** | entre los dos bloques |
+| **el peor par de los 32 canales** | **2,25 µs** | banco 24 contra banco 8 |
+
+**El número que importa es el último: 2,25 µs entre los dos bancos más
+separados, o sea 0,77 mm de camino acústico** — contra los 80 mm de paso de la
+grilla, o los 60 mm de la tira propuesta en `instalacion_15_nodos.md`. Es
+**tres órdenes de magnitud** más chico que la geometría que se quiere resolver.
+El sincronismo de los 32 canales está cerrado como problema.
+
+Los dos resultados de §19.1 se sostienen y se completan:
+
+1. **El sincronismo master↔esclavo dentro de un SAI es de décimas de µs** —
+   ahora verificado en **los dos** bloques, no en uno (+0,06 µs en SAI2,
+   −0,45 µs en SAI1). Arrancar el esclavo antes que el master (descubrimiento 5
+   de la memoria) queda confirmado eléctricamente por partida doble.
+2. **Entre bloques SAI hay ~2 µs**, del mismo orden que el `SYNC bancos` que
+   informa el heartbeat (1-2 µs). §19.1 había medido 1,5 µs con el banco 8
+   afuera; incluirlo corre la media de SAI1 hacia adelante y da 1,99 µs. **Las
+   dos mediciones son compatibles** dentro de la dispersión.
+
+Y el amplificador aislado (§19.6), rehecho: **JSPK13 − J13 = +7,50 µs** (§19.6
+había dado +8,06 µs sobre 84 informes; la diferencia es del orden de la
+dispersión de c3 antes del arreglo).
+
+### 22.2 El adaptador, antes y después
+
+| | con la pata suelta (§21) | **reconectada** |
+|---|---|---|
+| nivel de c1 sobre c0 | **+12,77 dB** | **−0,80 dB** |
+| c1 en 20 kHz | −4,90 dB | **−1,50 dB** (los otros: −1,60) |
+| `c1 − c0` de 125 Hz a 8 kHz | hasta −0,70 dB | **0,00 dB** en todos los puntos |
+| skew de c1 contra c0 | +6,04 µs | **−0,45 µs** |
+
+**El polo desapareció.** Los 6 µs de "skew" del banco 8 eran, como decía §19.2,
+su propio filtro — y el filtro era el que arma la impedancia de entrada del ADC
+cuando no hay shunt que la domine.
+
+### 22.3 ⚠️ Quedó invertida la polaridad de ese canal
+
+**79 de 79 informes dan `pol=−` en c1.** Antes del arreglo eran **81 de 81
+`pol=+`**. Un divisor resistivo no puede invertir nada: **al resoldar se
+cambiaron de lugar los dos cables de ese canal.**
+
+No invalida nada de lo medido acá —la correlación es indiferente al signo y lo
+informa aparte, que es justamente por qué se ve— pero **conviene darlos vuelta**:
+
+- El usuario había pedido explícitamente que los cuatro adaptadores
+  respetaran la misma polaridad entre sí. Hoy tres van para un lado y uno para
+  el otro.
+- Y hay una medición que **sólo se puede hacer con los cuatro adaptadores
+  coherentes**: `ds11-netlist-hallazgos.md` dice que los PAM8302A tienen
+  **polaridad alternada**. Con el lazo cerrado en los cuatro bancos eso ya es
+  comprobable — pero un adaptador invertido produciría exactamente el mismo
+  síntoma que la alternancia que se quiere verificar. **Un instrumento con un
+  canal dado vuelta no puede medir polaridad.**
+
+### 22.4 El residuo de −0,80 dB
+
+c1 quedó **0,80 dB por debajo** de los otros tres (que coinciden entre sí en
+0,03 dB, con sigma de 145 cuentas sobre 12 barridos: es real, no ruido).
+
+Implica una shunt efectiva de **~910 Ω** en vez de 1000 — que es un valor E24, y
+también lo que daría un 1 kΩ al 10 % por abajo. El polo apoya esa lectura antes
+que la de una soldadura resistiva en serie: c1 cae **0,10 dB menos** que c0 en
+20 kHz, o sea su polo está un poco más **arriba**, que es lo que hace una shunt
+más chica.
+
+**No afecta nada de lo que el adaptador existe para medir**: el retardo y la
+fase son indiferentes a 0,8 dB de nivel. Se anota y se sigue.
+
+### 22.5 🔴 Se reinició la placa con los amplificadores encendidos
+
+A los **68 segundos** del barrido, con `−35 dB` y amps on, el STM32 **se
+reinició**: el uptime del heartbeat saltó de `[86447s]` a `[3s]` y el enlace con
+el ESP32 se cayó (`RX: 0 bytes | ESP: --`). **Nunca se imprimió `AMPS: OFF`** —
+lo que confirma que no fue un comando: `amps_enabled` arranca en 0 en cada boot.
+
+Esto **no es nuevo**: es la falla #2 de `docs/ds11_errata.md`. Al reparar la
+pista de +5VA se removió **C290**, y el bulk del riel que alimenta los 32
+PAM8302A quedó en **660 µF** en vez de 880. El "reinicio al primer tono" del
+2026-08-04 está anotado ahí mismo, con el diagnóstico de brown-out.
+
+Lo que agrega esta sesión es **cuán intermitente es**:
+
+| corrida | condiciones | reinicios |
+|---|---|---|
+| §21 (mañana) | −35 dB, amps on, ~260 s | **0** |
+| primera de hoy | −35 dB, amps on, ~72 s | **1** |
+| segunda de hoy | −35 dB, amps on, ~370 s | **0** |
+
+**Un evento en ~700 segundos de amplificadores encendidos, al mismo volumen.**
+Es lo bastante raro como para no haber aparecido en las sesiones de medición
+anteriores, y lo bastante frecuente como para arruinar una instalación que tiene
+que andar horas. **Repoblar C290** (220 µF / 16 V, LCSC C25503905) es la acción
+pendiente, y ahora hay una forma barata de verificar si alcanzó: dejar el modo
+20 corriendo con amps on y contar reinicios por hora.
+
+> Ojo con el efecto sobre las mediciones: un reinicio en el medio de un barrido
+> deja informes con la referencia en el piso de ruido, y un normalizador que
+> divide por eso escupe cosas como **+73,1 dB a 20 Hz**. En esta sesión
+> contaminó la fila de c4 hasta que se filtró por nivel de referencia. **Todo
+> parseo de estos logs tiene que descartar los barridos cuya referencia no
+> llegue al nivel esperado** — el firmware informa igual, con o sin señal.
+
+### 22.6 Método: dije dos valores de resistencia y los dos estaban mal
+
+§19.2 dijo "probablemente 4,7 kΩ". §21.2 lo corrigió a "casi con seguridad
+10 kΩ", con dos vías independientes que coincidían. **Era un circuito abierto.**
+
+La hipótesis "está desconectada" la tuve y **la descarté con una cuenta**:
+suponiendo una impedancia de entrada del ADC de 10-15 kΩ, una shunt abierta
+predecía **+15,3 a +16,6 dB**, y lo medido eran +12,77. Parecía descartada.
+
+**Esa impedancia nunca la medí — la supuse.** Resolviendo al revés, con la
+shunt abierta:
+
+```
+Z de entrada del ADC = 5.205 Ω  (la que explica exactamente +12,77 dB)
+→ predice el polo del adaptador abierto en 21,6 kHz
+→ medido (ajuste sobre c1 − c0, §21.2):  20,4 kHz     ✅ coinciden al 6 %
+```
+
+O sea que **el dato que descartaba la hipótesis correcta era mío, no de la
+placa**. Y las "dos vías independientes" de §21.2 no lo eran tanto: las dos
+entraban por el mismo modelo del divisor con el mismo Z supuesto. Es la misma
+trampa que §20.4, un día después: *una coincidencia entre dos vías sólo vale si
+las vías son realmente independientes.*
+
+**Lo que hubiera evitado los dos errores es el téster**, que era justamente lo
+que §21.3 pedía hacer — y que efectivamente lo encontró. La lección no es
+"medir más", es **no dejar que un ajuste numérico de 0,04 dB de residuo dé la
+sensación de haber identificado un componente.** El residuo chico era real; lo
+que estaba mal era el modelo entero.
+
+**Se lleva puesta una incógnita de §20, de yapa.** §20 dejaba abierto si el
+adaptador atenuaba más que el 1/10,4 de diseño, por la carga de la entrada del
+ADC. Con Z = 5,2 kΩ:
+
+```
+atenuación real del adaptador sano = 1/12,2  (−21,7 dB), no 1/10,4 (−20,3 dB)
+```
+
+**1,4 dB más de atenuación** de la que supone §4.2. No cierra sola la
+discrepancia de +17 vs +29 dB —falta bastante más que 1,4 dB— pero **saca una
+de las incógnitas del tablero** y hay que aplicarla a cualquier cuenta de nivel
+absoluto que pase por el adaptador.
 
