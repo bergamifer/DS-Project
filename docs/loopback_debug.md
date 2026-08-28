@@ -2231,8 +2231,12 @@ walker, con un parlante y el oído, cuando el arnés esté armado.
 
 ## 24. EL TECHO DEL AMPLIFICADOR, medido (2026-08-28)
 
-> ✅ **RESUELTO en §26**: la compresión de esta sección **es del amplificador**,
-> confirmado con carga. Y el techo ya está en volts. Leer §26.
+> 🔴🔴 **ESTA SECCIÓN ESTÁ MAL — leer §27.** La compresión que mide **no es del
+> amplificador: es de mi propia cadena de medición.** Con un téster y carga, el
+> amplificador entrega **3,63 V rms** donde esta tabla decía 1,85, y llega al
+> 102 % de la excursión que permite su riel. La rodilla real está en −15,4 dB de
+> volumen, no en −22. Lo único que sigue en pie de §24 es §24.1 (el modo de tono
+> fijo) y §24.3 en su forma débil: el camino digital y el DAC están limpios.
 >
 > 🔴 **CORREGIDO EL MISMO DÍA — leer §25 antes que esta sección.** Lo que se
 > mide en volumen (lineal hasta −24 dB, rodilla en −22, máximo de trabajo −26)
@@ -2448,7 +2452,15 @@ contradecirse — §20.4, §22.6 y ésta.
 
 ---
 
-## 26. CERRADO — es el amplificador, y el techo son 1,85 V (2026-08-28)
+## 26. ~~CERRADO — es el amplificador~~ 🔴 CONCLUSIÓN EQUIVOCADA — ver §27
+
+> 🔴 **Esta sección concluye lo contrario de lo que es cierto.** El experimento
+> con carga descartó a la **portadora**, y de ahí salté a "entonces es el
+> amplificador" — pero el **adaptador estaba puesto en las dos ramas**, así que
+> nunca estuvo bajo control. Era el adaptador. Ver §27.
+>
+> **Lo que SÍ se sostiene de acá: §26.2, la ganancia de +17 dB**, que se apoya
+> en lecturas de téster y no en la cadena del ADC.
 
 §25 dejó dos hipótesis abiertas: **(A)** recorta el amplificador, o **(B)**
 recorta mi entrada por el total audio + portadora. El experimento las separó.
@@ -2539,4 +2551,107 @@ La escalera completa **con un parlante a fondo** dio **cero reinicios, cero
 underruns y `adc_ovf = 0`**. Con un solo canal cargado el buck ni se entera. No
 dice nada sobre los 32 juntos, pero sí que el banco de pruebas no se cae solo, y
 eso vuelve practicable dejar corriendo la vigilancia del `rst:`.
+
+
+
+---
+
+## 27. 🔴🔴 EL AMPLIFICADOR ESTÁ SANO — se comprimía mi instrumento (2026-08-28)
+
+**Lo destrabó una observación del usuario**, no una medición mía:
+
+> *"lo que puede estar pasando es que los conectores miniplug conectan a masa a
+> los cables de color del cable RJ45, y todo eso sigue conectado a este adaptador
+> al otro lado de las resistencias y capacitores… quizás es una variable que no
+> estabas contemplando."*
+
+Tenía razón, y de dos maneras.
+
+### 27.1 La medición que lo cierra
+
+Con **parlante conectado** —o sea con el téster midiendo audio y no portadora—:
+
+| volumen | téster en JSPK01 | lo que decía mi ADC |
+|---|---|---|
+| −24 dB | 1,32 V | −0,00 dB (fiel) |
+| **−14 dB** | **3,63 V** | **−7,09 dB** ❌ |
+
+**El amplificador sube +8,79 dB cuando se le piden +10.** O sea **1,2 dB** de
+compresión, no los 7,1 que informaba mi cadena.
+
+| | |
+|---|---|
+| máximo teórico del puente sobre 5,037 V | 3,56 V rms |
+| **medido** | **3,63 V rms** |
+| | **el 102 % — no le falta nada** |
+
+En potencia, **3,3 W en 4 Ω**, por encima de los 2,5 W de hoja de datos. **El
+déficit de 5,7 dB de §26.3 no existe.** El amplificador recorta **al riel**,
+como corresponde.
+
+### 27.2 Dónde recorta de verdad, y el margen que se recupera
+
+| | §24 decía | **real** |
+|---|---|---|
+| rodilla | −22 dB | **−15,4 dB** |
+| máximo de trabajo | −26 dB | **−18 dB** (2,5 dB de margen) |
+
+**Son ~7 dB más de margen** del que la documentación venía suponiendo, y el
+equipo opera a −40 dB: le sobran **22 dB**.
+
+> ⚠️ Con **un** canal cargado. Los 32 juntos son otra demanda sobre el buck; ese
+> techo hay que medirlo aparte y es la falla #2.
+
+### 27.3 Dónde se satura mi instrumento
+
+El adaptador + ADC es **fiel hasta ~1,3 V rms en el borne del parlante**
+(= −24 dB de volumen). Arriba de eso comprime, y mucho: a −14 dB informa
++2,95 dB cuando la realidad son +8,79.
+
+**Y por qué**: el adaptador de §4.2 se diseñó como un divisor **flotante y
+diferencial**. No lo es. El miniplug **ata el lado "−" a masa**, así que el ADC
+ve una sola pata contra masa. Esa topología no es la que modelé — y de paso
+**explica la contradicción que había quedado sin resolver en §25.3**, donde mi
+modelo daba 1/12,2 y la medición implicaba 1/4,11. No era el valor: era el
+circuito.
+
+> **Lo que NO queda afectado, y es casi todo.** El skew de §5.1/§19.1/§22.1, la
+> polaridad de §23, la respuesta en frecuencia de §22.2 y la diafonía se
+> midieron a **−35 y −40 dB**, o sea **0,37 V y 0,21 V** en el borne: un factor
+> 4 a 6 por debajo de donde el instrumento empieza a mentir. **Todos esos
+> resultados están adentro del rango fiel y se sostienen.**
+>
+> El instrumento no está roto: está **fuera de rango** cuando se lo usa para
+> buscar el techo. Para eso el aparato correcto es el téster con carga.
+
+### 27.4 Método: dos "pruebas" que no probaban lo que yo decía
+
+Esto es lo importante, porque los dos errores tienen la misma forma.
+
+**§24.3** afirmó *"es el amplificador, probado en la misma captura"* porque J13
+seguía lineal 12 dB más arriba. **J13 no comparte el camino de c0**: es otro
+canal, otro conector y —ahora se ve— otra topología de tierra. Descartaba el
+pipeline digital y el DAC, que es real y sigue valiendo, pero **no podía decir
+nada sobre el adaptador**. Yo lo anoté al pasar («conviene decirlo bien») y
+seguí igual usándolo como prueba.
+
+**§26.1** afirmó *"es el amplificador"* porque poner carga no movía la rodilla.
+Eso descarta a la **portadora** —el único sospechoso que yo tenía en la cabeza—
+pero **el adaptador estaba puesto e idéntico en las dos ramas**. Un control que
+deja al sospechoso dentro de los dos grupos no controla nada.
+
+En los dos casos el error no fue el dato sino **el salto**: de "descarté a X" a
+"entonces es Y", sin verificar que X e Y agotaran las posibilidades. Y las dos
+veces la lista de sospechosos la había escrito yo.
+
+**Lo que lo rompió fue que el usuario aportara un sospechoso que yo no tenía en
+la lista.** No un número: una parte del circuito que yo no sabía que estaba ahí.
+Contra ese tipo de error no protege medir más — protege que alguien que conoce
+el fierro mire el modelo.
+
+> Y hubo una señal que estuvo dos horas a la vista y que ignoré: a −14 dB **sin
+> carga** el téster leyó **4,35 V**, y la predicción de "el amplificador está
+> sano" era 4,17. La descarté por superar el máximo teórico, sin notar que la
+> hipótesis alternativa la explicaba casi exacta. **Un dato que no encaja con la
+> hipótesis en curso merece una segunda hipótesis, no una explicación.**
 
