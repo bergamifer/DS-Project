@@ -2231,6 +2231,12 @@ walker, con un parlante y el oído, cuando el arnés esté armado.
 
 ## 24. EL TECHO DEL AMPLIFICADOR, medido (2026-08-28)
 
+> 🔴 **CORREGIDO EL MISMO DÍA — leer §25 antes que esta sección.** Lo que se
+> mide en volumen (lineal hasta −24 dB, rodilla en −22, máximo de trabajo −26)
+> **se sostiene**. Lo que NO se sostiene es la conversión a **volts** y la
+> conclusión de que "al amplificador le faltan 8,4 dB": esa cuenta se ancló en
+> una lectura de téster que resultó estar contaminada. Ver §25.
+
 La última parte de §5.4 que faltaba, pendiente desde §19.5 —donde no se pudo
 hacer porque había un parlante conectado y llevarlo al techo eran ~4 W sobre un
 driver chico—. **Sin parlantes**, con el modo de tono fijo de §24.1.
@@ -2317,4 +2323,121 @@ derivándolo de una ganancia que estaba entre +17 y +29 dB. Ya no hace falta:
 > se hunde el buck**, o sea la falla #2 de `ds11_errata.md` cuantificada. Repetir
 > esta misma escalera con parlantes conectados da ese número, y es la prueba que
 > decide si C290 hace falta. **Hasta entonces, −26 dB es el máximo defendible.**
+
+
+
+---
+
+## 25. 🔴 CORRECCIÓN de §24, y la ganancia cerrada por fin (2026-08-28)
+
+Con el téster en la mano aparecieron **tres números** y una corrección grande.
+
+### 25.1 Lo que se midió con punta
+
+| dónde | volumen | lectura |
+|---|---|---|
+| **+5VA** (DC) | — | **5,037 V** |
+| JSPK01 pines 1/2 (AC) | −28 dB | 0,63 V |
+| JSPK01 pines 1/2 (AC) | −14 dB | **4,35 V** |
+| J13 (AC) | −24 dB | 0,1694 V |
+| J13 (AC) | −14 dB | 0,62 V |
+
+**El riel está sano.** Eso mata de entrada la hipótesis del buck hundido.
+
+### 25.2 🔴 LA GANANCIA, cerrada — §20 deja de estar abierta
+
+§20 llevaba dos días sin resolver si el amplificador daba +17 o +29 dB. Dos
+lecturas del **mismo instante**, sin ningún modelo en el medio:
+
+| fuente | ganancia |
+|---|---|
+| §2.1, derivada del esquemático (`2·142k/R_I`) | +49,1 dB |
+| §19.3 primera versión (con el signo cambiado) | +29 dB |
+| §19.3 corregida | +17 dB |
+| **medida con téster** | **+14 a +17 dB** |
+
+El rango sobra porque el téster tiene error en rango bajo (se ve solo: de −24 a
+−14 dB las **cuentas** de J13 dan +10,07 dB —perfecto— y el **téster** da
++11,27). Pero la conclusión no depende del rango: **la fórmula de §2.1 se
+equivoca por más de 30 dB**, y **+29 dB era mío y estaba mal**. §19.3 corregida
+tenía razón.
+
+### 25.3 🔴 Por qué §24 no se puede convertir a volts
+
+**A −14 dB el téster lee 4,35 V. Eso es imposible.** Un puente sobre 5,037 V no
+puede pasar de `5,037/√2 = 3,56 V rms`: la lectura está **1,7 dB por encima del
+máximo teórico**.
+
+La explicación es el tipo de amplificador: el PAM8302A es **clase D sin filtro
+de salida**, y **no hay parlante conectado**. Sin carga inductiva que la filtre,
+la portadora de 250 kHz llega entera al borne — y el téster la suma. La lectura
+de 0,63 V que ancló toda la tabla de volts de §24 tiene el mismo problema, en
+menor medida.
+
+**Lo que queda en pie de §24 y lo que no:**
+
+| | |
+|---|---|
+| lineal hasta −24 dB, rodilla en −22 dB | ✅ **se sostiene** — está en dB de volumen, no depende de ningún anclaje |
+| máximo de trabajo recomendado −26 dB | ✅ **se sostiene** |
+| "el techo son 1,39 V rms" | ❌ **retirado** |
+| "al amplificador le faltan 8,4 dB" | ❌ **retirado** |
+
+### 25.4 Y la compresión es real, aunque no sepamos de qué
+
+Se verificó que **no** es un artefacto del detector de pico. El **detector
+coherente** del modo 20 —que mide sólo los 500 Hz y rechaza lo de afuera con
+~40 dB de ganancia de proceso— da lo mismo:
+
+| volumen | coherente c0 | dB | esperado | desvío |
+|---|---|---|---|---|
+| −34 | 427.369 | 0,00 | 0 | +0,00 |
+| −26 | 1.058.140 | 7,87 | 8 | −0,13 |
+| **−24** | 1.325.595 | 9,83 | 10 | **−0,17** |
+| −22 | 1.672.232 | 11,85 | 12 | −0,15 |
+| −20 | 2.027.464 | 13,52 | 14 | **−0,48** |
+| −18 | 2.195.556 | 14,21 | 16 | **−1,79** |
+| −14 | 2.338.374 | 14,76 | 20 | **−5,24** |
+
+**Hay compresión de verdad, en banda, arriba de −22 dB.** Y J13 —el mismo ADC,
+por otro camino— sigue lineal. Quedan **dos** hipótesis, y no las puedo separar
+desde adentro:
+
+- **(A) recorta el amplificador.**
+- **(B) recorta la entrada del ADC**, no por el audio sino por el **total
+  audio + portadora**: si la suma satura, la componente de audio se comprime con
+  ella. Es coherente con que el pin OVF del AK5538 no dispare (`adc_ovf = 0`) si
+  la saturación ocurre antes, en el propio adaptador o en la red de entrada.
+
+### 25.5 El experimento que las separa — y §4.2 lo había anunciado
+
+**Conectar un parlante (o cualquier resistencia) en JSPK01 y repetir la
+escalera.** La inductancia de la bobina filtra la portadora antes de que llegue
+al adaptador. Si la compresión **se corre hacia arriba**, era (B). Si **queda
+donde está**, era (A) y el amplificador recorta ahí de verdad.
+
+> Esto es §4.2 cobrándose otra vez lo que avisaba. Al usar **2,2 nF en vez de
+> 10 nF** quedaron *"~13 dB menos de rechazo a la portadora de 250 kHz"*, y la
+> nota decía: *"podría subir el piso de ruido en una medición absoluta, algo a
+> revisar si aparece"* y *"si algún resultado sale raro, éste es el primer
+> sospechoso a descartar volviendo al valor de diseño"*. **Salió raro.** No como
+> piso de ruido sino como compresión a nivel alto, que es peor porque imita
+> exactamente al recorte del amplificador.
+
+**Con carga, además, el téster vuelve a servir**: la bobina filtra la portadora
+y la lectura pasa a ser audio. Las dos preguntas —el techo en volts y el
+mecanismo— se contestan con el mismo experimento.
+
+### 25.6 Método: por qué me equivoqué en §24
+
+§24 afirmaba un techo en volts a partir de **una sola lectura de téster**,
+tomada en un punto de operación, y la propagó a toda la tabla multiplicando por
+razones de cuentas. La razón de cuentas era buena; **el anclaje no**, y no había
+forma de saberlo desde ese único punto.
+
+Lo que lo delató fue pedir una **segunda** lectura a nivel alto y comparar el
+resultado contra un límite físico —el riel—. Ahí saltó: 4,35 V sobre un riel de
+5,037 no existe. **Un anclaje solo no se puede auditar; dos sí.** Es la tercera
+vez en dos días que el error entra por confiar en un número que no tenía cómo
+contradecirse — §20.4, §22.6 y ésta.
 
