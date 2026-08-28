@@ -2231,6 +2231,9 @@ walker, con un parlante y el oído, cuando el arnés esté armado.
 
 ## 24. EL TECHO DEL AMPLIFICADOR, medido (2026-08-28)
 
+> ✅ **RESUELTO en §26**: la compresión de esta sección **es del amplificador**,
+> confirmado con carga. Y el techo ya está en volts. Leer §26.
+>
 > 🔴 **CORREGIDO EL MISMO DÍA — leer §25 antes que esta sección.** Lo que se
 > mide en volumen (lineal hasta −24 dB, rodilla en −22, máximo de trabajo −26)
 > **se sostiene**. Lo que NO se sostiene es la conversión a **volts** y la
@@ -2440,4 +2443,100 @@ resultado contra un límite físico —el riel—. Ahí saltó: 4,35 V sobre un 
 5,037 no existe. **Un anclaje solo no se puede auditar; dos sí.** Es la tercera
 vez en dos días que el error entra por confiar en un número que no tenía cómo
 contradecirse — §20.4, §22.6 y ésta.
+
+
+
+---
+
+## 26. CERRADO — es el amplificador, y el techo son 1,85 V (2026-08-28)
+
+§25 dejó dos hipótesis abiertas: **(A)** recorta el amplificador, o **(B)**
+recorta mi entrada por el total audio + portadora. El experimento las separó.
+
+### 26.1 El experimento: la misma entrada, con y sin parlante
+
+Un parlante en JSPK01 **en paralelo con el adaptador**, o sea la misma salida
+(ch0), el mismo adaptador y la misma entrada del ADC (`c0`) que toda la escalera
+de §24. Lo único que cambia es la carga:
+
+| volumen | **con carga** | **sin carga** |
+|---|---|---|
+| −24 | −0,00 dB | −0,16 dB |
+| −22 | −0,22 | −0,43 |
+| −20 | **−1,53** | **−1,81** |
+| −18 | −3,22 | −3,44 |
+| −16 | −5,13 | −5,31 |
+| −14 | −7,09 | −7,24 |
+
+**La carga no mueve el punto de compresión.** Es más: con carga comprime
+**0,2 dB menos** en todos los puntos, no más. Si la culpable hubiera sido la
+portadora saturando la entrada del ADC, esto tenía que haberse corrido varios dB
+hacia arriba.
+
+**Es (A): recorta el amplificador.** El núcleo de §24 era correcto y mi
+retractación de §25 fue más amplia de lo que hacía falta — lo único que sigue
+caído de §24 es la conversión a volts, que estaba anclada mal.
+
+### 26.2 La ganancia, con control cruzado
+
+| par de lecturas | ganancia |
+|---|---|
+| −24 dB **con** carga: JSPK 1,32 V / J13 0,1946 V | **+16,6 dB** |
+| −14 dB **sin** carga: JSPK 4,35 V / J13 0,62 V | **+16,9 dB** |
+
+Dos pares independientes, dos condiciones de carga distintas, **0,3 dB de
+diferencia**. **§19.3 corregida (+17 dB) tenía razón exacta.** §20 queda cerrada:
+
+- §2.1 derivó **+49,1 dB** de `2·(142k/R_I)` → **equivocado por 32 dB**. La
+  fórmula no describe este circuito.
+- La primera versión de §19.3 dijo **+29 dB** → era mío y estaba mal.
+
+### 26.3 🔴 El techo — y le faltan 5,7 dB
+
+Anclado con el téster **con carga**, que es cuando la lectura es audio de verdad:
+
+| | |
+|---|---|
+| máximo lineal (−24 dB) | **1,32 V rms** |
+| saturación | **1,85 V rms** |
+| máximo teórico del puente sobre 5,037 V | 3,56 V rms |
+| **déficit** | **5,7 dB — el 52 % de la excursión posible** |
+
+Por canal, en potencia:
+
+| carga | en saturación | al máximo de trabajo (−26 dB) |
+|---|---|---|
+| 4 Ω | 852 mW | 275 mW |
+| 8 Ω | 426 mW | 137 mW |
+
+El PAM8302A promete **2500 mW en 4 Ω**: estamos al **34 %**.
+
+**Para la instalación no es un bloqueante** —275 mW por driver × 480 drivers
+alcanza de sobra para una sala de 10×10— pero es la mitad de la excursión que la
+placa debería dar, y conviene entenderlo antes de DS12.
+
+### 26.4 Lo que YA está descartado como causa
+
+- **No es el riel.** Se midió **+5,037 V** en +5VA. Y sobre todo: **sin carga la
+  corriente de salida son microamperes** (sólo el adaptador de 10,4 kΩ) y
+  comprime en el mismo punto. Un riel que se hunde necesita corriente.
+- **No es el camino digital ni el DAC.** `out_clip = 0` siempre, y J13 sigue
+  lineal 12 dB más arriba (§24.3).
+- **No es el ADC.** `adc_ovf = 0`, y J13 llegó a 6,26 M cuentas por el mismo ADC
+  mientras esto satura en 2,79 M.
+- **No es la portadora de 250 kHz.** §26.1.
+
+**Queda como pregunta abierta** por qué un puente sobre 5 V se queda en el 52 %
+de su excursión. La sospecha más económica es un **punto de polarización
+descentrado en la entrada del PAM**: si la continua que le entrega el PCM1690 no
+lo deja centrado, recorta antes y de un solo lado. Se comprueba midiendo la
+continua de cada pin de salida contra masa **sin señal**: un puente en reposo
+tiene los dos pines en VCC/2 ≈ 2,52 V. Si difieren, ahí está.
+
+### 26.5 De yapa, un dato para la falla #2
+
+La escalera completa **con un parlante a fondo** dio **cero reinicios, cero
+underruns y `adc_ovf = 0`**. Con un solo canal cargado el buck ni se entera. No
+dice nada sobre los 32 juntos, pero sí que el banco de pruebas no se cae solo, y
+eso vuelve practicable dejar corriendo la vigilancia del `rst:`.
 
