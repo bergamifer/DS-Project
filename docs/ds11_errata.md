@@ -131,6 +131,53 @@ de forma limpia dos hipótesis que de otro modo se confunden:
 Y evita el peor escenario de diagnóstico: una placa en loop de reinicio que no
 se deja interrogar.
 
+### Instrumentación: la placa ahora dice POR QUÉ se reinició (2026-08-28)
+
+La mitigación de arriba separa "es alimentación" de "no es alimentación", pero
+no distingue **qué tipo** de problema de alimentación. El 2026-08-27 la placa se
+reinició sola con los amps encendidos y hubo que discutir si fue un corte de luz
+o el hundimiento del riel — sin poder resolverlo, porque el log no lo decía.
+
+El firmware ahora latchea `RCC->RSR` en `main()` **antes de `HAL_Init()`**, lo
+decodifica y lo informa:
+
+```
+RESET: SFT (RSR=0x01460000)                      ← en el banner de arranque
+[19s] Half: 100/s, ... | ESP: 192.168.100.70 | rst:SFT   ← y en CADA heartbeat
+```
+
+| tag | qué pasó |
+|---|---|
+| **POR** | la alimentación llegó a **cero** — corte de luz, o se desenchufó |
+| **BOR** (sin POR) | el riel se hundió bajo el umbral **sin** llegar a cero — **la firma de esta falla #2** |
+| **PIN** | NRST: el ST-Link o el pulsador |
+| **IWDG / WWDG** | el firmware se colgó |
+| **SFT** | reinicio por software (el nuestro, tras un OTA) |
+
+Tres detalles que hacen que esto funcione, y que costaron encontrarlos:
+
+1. **Va en el heartbeat, no sólo en el banner.** En el reinicio del 2026-08-27
+   el banner **se perdió**: el log salta de `[86447s]` a `[3s]` sin banner,
+   porque el VCP del ST-Link tarda en volver tras el reset. La telemetría
+   periódica no se pierde.
+2. **Los flags son ACUMULATIVOS.** `RCC->RSR` no se borra solo: conserva todo
+   desde el último encendido real hasta que se escribe `RMVF`. Por eso el
+   firmware los limpia en cada arranque — pero **la primera lectura después de
+   instalar esto trae la historia entera y hay que descartarla** (acá informó
+   `POR`, que era el encendido original de la placa).
+3. **El orden del decodificador importa.** Un POR deja además `PIN` y `BOR` en
+   alto, y los watchdogs dejan `PIN`. Se pregunta de lo más específico a lo más
+   genérico; `PIN` queda último.
+
+**Validado** el 2026-08-28: un reinicio por OTA informa `SFT` con
+`RSR=0x01460000` (bit 24 alto, bit 23 `PORRSTF` **bajo**), o sea que el borrado
+funciona y el decodificador discrimina.
+
+> **Qué hacer con esto ahora**: dejar la placa con los amps encendidos y el modo
+> 20 corriendo, y mirar el `rst:` del heartbeat. Si aparece **BOR**, es esta
+> falla y hay que repoblar C290. Si aparece **POR**, es la red eléctrica y C290
+> no lo va a arreglar. Hasta hoy eso era una discusión; ahora es una lectura.
+
 ---
 
 ## Estado

@@ -998,6 +998,22 @@ static const uint8_t dac_addrs[4] = {
  * estable. Asi un problema de alimentacion no deja la placa en loop de
  * reinicio imposible de diagnosticar. */
 static volatile uint8_t amps_enabled = 0;
+
+/* Causa del último reset, latcheada en main() antes de que nada la pise.
+ *
+ * Existe por una pregunta concreta que apareció el 2026-08-27 y que no se pudo
+ * contestar con el log: la placa se reinició con los amplificadores encendidos
+ * y no había forma de saber si fue un corte de luz o el hundimiento del riel
+ * de la falla #2 (C290 removido, 660 uF de bulk sobre los 32 PAM8302A). El
+ * ESP32 no se había reiniciado, lo que apuntaba al riel — pero era inferencia,
+ * no medición. Esto lo mide.
+ *
+ * Va en el heartbeat y no sólo en el banner de arranque a propósito: en aquel
+ * reinicio el banner SE PERDIO (el log salta de [86447s] a [3s] sin banner,
+ * porque el VCP del ST-Link tarda en volver). La telemetría periódica no se
+ * pierde. */
+static uint32_t reset_rsr = 0;
+static const char *reset_tag = "?";
 /* 1 = un POST /beam pisó los flags de modo: ui_state_idx ya no describe lo que
  * suena. Se publica en el status (STATE_F_CUSTOM) para que la UI no mienta. */
 static volatile uint8_t custom_beam_active = 0;
@@ -1544,6 +1560,31 @@ int main(void)
    * mantenimiento de caché en cada callback, y el intento anterior
    * (SCB_CleanDCache_by_Addr sin D-cache habilitado) terminó en HardFault. */
   SCB_EnableICache();
+
+  /* Causa del reset, ANTES de HAL_Init(). RCC->RSR conserva los flags hasta que
+   * se escribe RMVF; se leen acá y se limpian, así el próximo arranque informa
+   * su propia causa y no la heredada.
+   *
+   * Qué separa cada hipótesis:
+   *   POR       la alimentación llegó a CERO — corte de luz, o se desenchufó.
+   *   BOR sin POR  el riel se hundió bajo el umbral pero no llegó a cero:
+   *             es la firma de la falla #2 de ds11_errata.md.
+   *   PIN       NRST — el ST-Link o el pulsador.
+   *   IWDG/WWDG el firmware se colgó.
+   *   SFT       reinicio por software (el nuestro, tras un OTA).
+   *
+   * El orden del decodificador NO es arbitrario: un POR deja además PIN y BOR
+   * en alto, y los watchdogs dejan PIN. Se pregunta de la causa más específica
+   * a la más genérica, y por eso PIN queda al final. */
+  reset_rsr = RCC->RSR;
+  RCC->RSR |= RCC_RSR_RMVF;
+  if      (reset_rsr & RCC_RSR_PORRSTF)   reset_tag = "POR";
+  else if (reset_rsr & RCC_RSR_BORRSTF)   reset_tag = "BOR";
+  else if (reset_rsr & RCC_RSR_IWDG1RSTF) reset_tag = "IWDG";
+  else if (reset_rsr & RCC_RSR_WWDG1RSTF) reset_tag = "WWDG";
+  else if (reset_rsr & RCC_RSR_LPWRRSTF)  reset_tag = "LPWR";
+  else if (reset_rsr & RCC_RSR_SFTRSTF)   reset_tag = "SFT";
+  else if (reset_rsr & RCC_RSR_PINRSTF)   reset_tag = "PIN";
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -1579,6 +1620,12 @@ int main(void)
 
   // Startup message
   UART_Print("\r\n=== DS11 Beamforming Audio (32ch) ===\r\n");
+  /* Por qué arrancamos. Ver el bloque de reset_rsr arriba. */
+  snprintf(uart_buf, sizeof(uart_buf), "RESET: %s (RSR=0x%08lX)%s\r\n",
+           reset_tag, (unsigned long)reset_rsr,
+           (reset_rsr & RCC_RSR_PORRSTF) ? "  <- la alimentacion llego a cero" :
+           (reset_rsr & RCC_RSR_BORRSTF) ? "  <- hundimiento del riel, NO corte de alimentacion" : "");
+  UART_Print(uart_buf);
   /* Qué binario es y desde dónde corre. Con actualización por WiFi las dos
    * cosas dejaron de ser obvias: la imagen pudo haberla subido otro. */
   snprintf(uart_buf, sizeof(uart_buf), "firmware %08lX  build %lu  @ 0x%08lX\r\n",
@@ -2384,10 +2431,10 @@ int main(void)
       char esp_ip[ESP_IP_MAXLEN + 1];
       UART_Protocol_CopyEspIp(esp_ip, sizeof(esp_ip));
       snprintf(uart_buf, sizeof(uart_buf),
-              "[%lus] Half: %lu/s, Full: %lu/s, Err: %lu, Undr: %lu, RX: %lu bytes | ESP: %s\r\n",
+              "[%lus] Half: %lu/s, Full: %lu/s, Err: %lu, Undr: %lu, RX: %lu bytes | ESP: %s | rst:%s\r\n",
               HAL_GetTick() / 1000, half_per_sec, full_per_sec,
               error_count, underrun_count, UART_Protocol_GetRxByteCount(),
-              esp_ip[0] ? esp_ip : "--");
+              esp_ip[0] ? esp_ip : "--", reset_tag);
       UART_Print(uart_buf);
 
 

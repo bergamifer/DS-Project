@@ -2066,6 +2066,15 @@ Lo que agrega esta sesión es **cuán intermitente es**:
 | primera de hoy | −35 dB, amps on, ~72 s | **1** |
 | segunda de hoy | −35 dB, amps on, ~370 s | **0** |
 
+> ⚠️ **El usuario propuso otra causa: un corte de luz momentáneo.** Es
+> plausible y no se puede descartar con este log. Lo que sí dice el dato es que
+> **el ESP32 no se reinició** —llevaba 59,9 h corridas y las siguió— y un corte
+> de alimentación se los habría llevado a los dos. Eso apunta al riel del STM32,
+> pero es inferencia, no medición. **Por eso se instrumentó**: desde el
+> 2026-08-28 el firmware informa la causa del reset en cada heartbeat
+> (`rst:POR` / `rst:BOR` / `rst:IWDG`…). Ver `ds11_errata.md`, falla #2. La
+> próxima vez que pase, la placa lo dice sola.
+
 **Un evento en ~700 segundos de amplificadores encendidos, al mismo volumen.**
 Es lo bastante raro como para no haber aparecido en las sesiones de medición
 anteriores, y lo bastante frecuente como para arruinar una instalación que tiene
