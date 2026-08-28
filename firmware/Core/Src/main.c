@@ -367,6 +367,7 @@ typedef struct {
   uint8_t calfoc;                 // 1 = usa el foco MEDIDO por AUTOFOCUS, no el geométrico
   uint8_t loopb;                  // 1 = LOOPBACK: medición eléctrica del camino de salida
   uint8_t fsweep;                 // 1 = BARRIDO DE FRECUENCIA por el lazo (Test D)
+  uint8_t fhold;                  // 1 = el barrido NO avanza: tono fijo (medición con téster)
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor",                  .monitor = 1 },
@@ -485,6 +486,25 @@ static const ui_state_t ui_states[] = {
   // amplificadores ni 24 V; ver el comentario largo en FS_SETTLE para qué NO
   // alcanza a ver. Informa la tabla completa cada ~7 s.
   { .name = "BARRIDO DE FRECUENCIA por el lazo (20 Hz - 20 kHz)", .fsweep = 1 },
+  // TONO FIJO — el mismo emisor del barrido, congelado en un punto.
+  //
+  // Existe para medir con INSTRUMENTOS DE AFUERA. Todo lo demás que emite un
+  // tono no sirve para eso: el barrido cambia de frecuencia cada medio segundo
+  // y los modos "ondulante" llevan un LFO triangular de 3 Hz que modula la
+  // amplitud un 10% (ver TONE_DITHER_PERIOD) — un téster no puede leer ni uno
+  // ni otro.
+  //
+  // Acá el nivel es conocido y quieto, sale por los MISMOS canales del lazo
+  // (§23: ch0/1, 8/9, 16/17, 24/25) y el ADC lo mide al mismo tiempo por el
+  // adaptador. O sea que la lectura de afuera y la de adentro son del mismo
+  // tono en el mismo instante: eso es lo que permite cerrar la estructura de
+  // ganancia de §20 sin suponer ningún eslabón.
+  //
+  // 500 Hz por dos motivos: la respuesta ahí es plana (-0,02 dB medido, §22.2)
+  // y es la zona donde cualquier téster de mano mide bien en alterna. A 2 kHz
+  // muchos leen bajo, y arriba de 4 kHz directamente no especifican.
+  { .name = "TONO FIJO 500 Hz por el lazo (medicion con tester)",
+    .fsweep = 1, .fhold = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 static volatile uint8_t ui_state_idx = 0;
@@ -926,6 +946,11 @@ static const uint16_t fs_base[FS_NUM_BASE] = {
   16000,20000
 };
 static volatile uint8_t  fs_enabled = 0;
+/* Punto en el que se congela el barrido, o 0xFF para barrer normalmente.
+ * FS_HOLD_BASE es el índice en fs_base[]; 9 = 500 Hz. Los puntos van de a dos
+ * (la detección coherente usa base y base+FS_DF), de ahí el ×2. */
+#define FS_HOLD_BASE  9
+static volatile uint8_t  fs_hold_pt = 0xFF;
 static volatile uint8_t  fs_idx = 0;
 static volatile uint8_t  fs_point_ready = 0;
 static volatile uint32_t fs_n = 0;          /* muestras dentro del punto (contexto RX) */
@@ -4265,7 +4290,8 @@ static void FS_StartPoint(void) {
 static void FS_Start(void) {
   memset(fs_fi, 0, sizeof(fs_fi));
   memset(fs_fq, 0, sizeof(fs_fq));
-  fs_idx = 0;
+  /* Con tono fijo se arranca directamente en el punto congelado. */
+  fs_idx = (fs_hold_pt != 0xFF) ? fs_hold_pt : 0;
   fs_tx_phase = 0;
   fs_bank_ph[0] = fs_bank_ph[1] = fs_bank_ph[2] = fs_bank_ph[3] = 0;
   fs_paused = 0;
@@ -4440,6 +4466,11 @@ static void FS_Process(void) {
     fs_fq[fs_idx][c] = (float)fs_q[c] / den;
   }
   fs_idx++;
+  /* Tono fijo: se vuelve al mismo punto en vez de avanzar. Se reengancha por
+   * FS_StartPoint() —y no dejando el emisor corriendo sin más— para que la fase
+   * del detector se reinicie igual que en el barrido: así el nivel que informa
+   * `adc_pk` es el mismo que informaría la tabla. */
+  if (fs_hold_pt != 0xFF) { fs_idx = fs_hold_pt; FS_StartPoint(); return; }
   if (fs_idx < FS_NUM_PTS) { FS_StartPoint(); return; }
 
   /* Pausar ANTES de informar, no después. UART_Print bloquea milisegundos y
@@ -4581,6 +4612,7 @@ static void UI_ApplyState(uint8_t idx) {
   if (st->mfin) MFocusIn_ApplyDefaults();
   sweep_axis = st->sweep;
   fs_enabled = st->fsweep;
+  fs_hold_pt = st->fhold ? (uint8_t)(FS_HOLD_BASE * 2) : 0xFF;
   if (st->fsweep) FS_Start();        // entrar al modo arranca el barrido de cero
   lb_enabled = st->loopb;
   if (st->loopb) {                   // entrar al modo arranca una medición ya
