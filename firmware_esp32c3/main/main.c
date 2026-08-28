@@ -222,6 +222,16 @@ _Static_assert(sizeof(ds_status_t) == 85, "ds_status_t debe ser 85 bytes");
 
 // Espejo de ui_states[] del STM32 — actualizar junto con el firmware STM32.
 // El indice es lo que viaja en CMD_SET_MODE; el nombre es solo para la UI.
+/* ⚠️ ESTA LISTA ESPEJA ui_states[] DEL STM32 Y HAY QUE MANTENERLAS IGUALES.
+ *
+ * No es sólo cosmético: POST /mode valida el índice contra NUM_MODES de ACÁ
+ * (ver mode_handler), así que un modo que exista en el STM32 y falte acá
+ * queda inalcanzable por HTTP — y el síntoma es mudo, porque /status informa
+ * `num_modes` del STM32, o sea que la API dice tener más modos de los que
+ * acepta. Pasó el 2026-08-28 al agregar el modo de tono fijo: el STM32
+ * informaba 22 y el ESP32 rechazaba el 21 sin decir por qué.
+ *
+ * Al agregar un modo en `ui_states[]`, agregarlo también acá. */
 static const char *MODE_NAMES[] = {
     "ADC monitor",
     "Channel walker (1s/ch)",
@@ -244,6 +254,7 @@ static const char *MODE_NAMES[] = {
     "TX foco CALIBRADO (AUTOFOCUS guardado)",
     "LOOPBACK electrico (bancos 0/8/16/24 -> ADC 0-3)",
     "BARRIDO DE FRECUENCIA por el lazo (20 Hz - 20 kHz)",
+    "TONO FIJO 500 Hz por el lazo (medicion con tester)",
 };
 #define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
 

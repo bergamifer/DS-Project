@@ -2226,3 +2226,95 @@ diseño, que es igual en los 16 conectores. **Lo que no se probó, y no hace fal
 probar con este instrumento, es cada conector uno por uno**: para eso está el
 walker, con un parlante y el oído, cuando el arnés esté armado.
 
+
+---
+
+## 24. EL TECHO DEL AMPLIFICADOR, medido (2026-08-28)
+
+La última parte de §5.4 que faltaba, pendiente desde §19.5 —donde no se pudo
+hacer porque había un parlante conectado y llevarlo al techo eran ~4 W sobre un
+driver chico—. **Sin parlantes**, con el modo de tono fijo de §24.1.
+
+### 24.1 Hizo falta un modo nuevo: TONO FIJO
+
+Ningún modo existente servía para esto:
+
+- el **barrido** cambia de frecuencia cada medio segundo;
+- los modos **"ondulante"** llevan un LFO triangular de 3 Hz que modula la
+  amplitud un 10% (`TONE_DITHER_PERIOD`) — de ahí el nombre;
+- el **walker** cambia de canal cada segundo.
+
+Ninguno se puede leer con un téster, y ninguno da un nivel quieto para una
+escalera de volumen. El modo 21 congela el emisor del barrido en **500 Hz**
+—respuesta plana (−0,02 dB, §22.2) y la zona donde cualquier téster de mano mide
+bien en alterna— sobre los mismos canales del lazo, así que **el ADC lo mide al
+mismo tiempo por el adaptador**.
+
+> ⚠️ **Un bug de duplicación que apareció al agregarlo, y que vale anotar.** El
+> STM32 tiene la lista de modos en `ui_states[]` y el ESP32 tiene **su propia
+> copia** en `MODE_NAMES[]`. `POST /mode` valida el índice contra el
+> `NUM_MODES` **del ESP32** — pero `/status` informa el `num_modes` **del
+> STM32**. Con el modo nuevo sólo en el STM32, la API decía tener 22 modos y
+> rechazaba el 21 **sin ningún mensaje**: el modo simplemente no cambiaba.
+> Costó una escalera de volumen entera medida en el modo equivocado. Arreglado
+> agregando el nombre en el ESP32, con un aviso en las dos listas.
+
+### 24.2 La escalera
+
+Tono fijo 500 Hz, sin carga, pasos de 2 dB:
+
+| volumen | c0 (cuentas) | dB | esperado | desvío | %FS del ADC |
+|---|---|---|---|---|---|
+| −40 | 357.812 | 0,00 | 0 | +0,00 | 4,3 |
+| −34 | 717.160 | 6,04 | 6 | +0,04 | 8,5 |
+| −30 | 1.126.429 | 9,96 | 10 | −0,04 | 13,4 |
+| −26 | 1.767.260 | 13,87 | 14 | −0,13 | 21,1 |
+| **−24** | **2.216.447** | **15,84** | **16** | **−0,16** | 26,4 |
+| −22 | 2.703.928 | 17,57 | 18 | **−0,43** | 32,2 |
+| −20 | 2.905.408 | 18,19 | 20 | **−1,81** | 34,6 |
+| −18 | 3.031.748 | — | — | — | 36,1 |
+| −12 | 3.117.423 | — | — | — | 37,2 |
+
+**Lineal hasta −24 dB** (desvío ≤0,16 dB). **La rodilla está en −22 dB.** De −20
+en adelante satura: subir 2 dB de volumen devuelve 0,62 dB, y de −18 a −12 la
+salida ya no se mueve — asíntota en **~3,12 M cuentas**.
+
+### 24.3 🔴 Y es el amplificador, no otra cosa — probado en la misma captura
+
+J13 mide **el mismo canal ch24 antes del amplificador**. En la misma corrida:
+
+| volumen | c0 (post-amp) | J13 (pre-amp) | dB c0 | **dB J13** | esperado |
+|---|---|---|---|---|---|
+| −34 | 717.466 | 494.312 | 0,00 | 0,00 | 0 |
+| −24 | 2.216.224 | 1.561.098 | 9,80 | **9,99** | 10 |
+| −20 | 2.904.520 | 2.485.903 | 12,15 | **14,03** | 14 |
+| −16 | 3.078.815 | 3.949.192 | 12,65 | **18,05** | 18 |
+| −12 | 3.117.423 | 6.263.832 | 12,76 | **22,06** | 22 |
+
+**J13 sigue perfectamente lineal hasta −12 dB: 22,06 dB medidos contra 22
+esperados.** Y `out_clip = 0` en todos los puntos, `adc_ovf = 0`, con el ADC al
+37 % de su escala.
+
+Eso descarta, de una sola vez y sin suponer nada, **las otras cuatro
+explicaciones posibles**: no es recorte digital en el pipeline (`out_clip`), no
+es el DAC (J13 lo ve limpio), no es el ADC (37 % de escala, sin desbordes), y no
+es el instrumento (el mismo ADC mide las dos cosas). **Es el amplificador.**
+
+### 24.4 Qué volumen usar — reemplaza §20.3
+
+§20.3 tuvo que recomendar un volumen de trabajo **sin conocer el techo**,
+derivándolo de una ganancia que estaba entre +17 y +29 dB. Ya no hace falta:
+
+| | |
+|---|---|
+| **techo (rodilla)** | **−22 dB** |
+| **máximo de trabajo recomendado** | **−26 dB** (4 dB de margen, desvío 0,13 dB) |
+| volumen actual de operación | −40 dB → **14 dB sin usar** |
+
+> ⚠️ **Esto es SIN CARGA, y es un límite superior.** El recorte lo fija el riel
+> de 5 V, y con parlantes el riel se hunde bajo corriente: con carga el techo va
+> a estar **más abajo**. Cuánto más abajo **es exactamente la medida de cuánto
+> se hunde el buck**, o sea la falla #2 de `ds11_errata.md` cuantificada. Repetir
+> esta misma escalera con parlantes conectados da ese número, y es la prueba que
+> decide si C290 hace falta. **Hasta entonces, −26 dB es el máximo defendible.**
+
