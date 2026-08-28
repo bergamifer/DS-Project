@@ -2066,14 +2066,23 @@ Lo que agrega esta sesión es **cuán intermitente es**:
 | primera de hoy | −35 dB, amps on, ~72 s | **1** |
 | segunda de hoy | −35 dB, amps on, ~370 s | **0** |
 
-> ⚠️ **El usuario propuso otra causa: un corte de luz momentáneo.** Es
-> plausible y no se puede descartar con este log. Lo que sí dice el dato es que
-> **el ESP32 no se reinició** —llevaba 59,9 h corridas y las siguió— y un corte
-> de alimentación se los habría llevado a los dos. Eso apunta al riel del STM32,
-> pero es inferencia, no medición. **Por eso se instrumentó**: desde el
-> 2026-08-28 el firmware informa la causa del reset en cada heartbeat
-> (`rst:POR` / `rst:BOR` / `rst:IWDG`…). Ver `ds11_errata.md`, falla #2. La
-> próxima vez que pase, la placa lo dice sola.
+> ⚠️ **RESUELTO 2026-08-28: fue un corte de luz, y mi razonamiento estaba mal.**
+> Yo argumenté que **el ESP32 no se reinició** —llevaba 59,9 h corridas— y que
+> un corte se los habría llevado a los dos. El usuario aportó lo que faltaba:
+> **la placa siguió alimentada por la USB de la laptop**. O sea que el lado
+> digital sobrevivió al corte y el ESP32 con él.
+>
+> Lo irónico es que ese camino de realimentación está documentado **en la misma
+> errata que yo estaba citando** (la que manda cortar el conductor del pin 1 del
+> ST-Link). Lo tenía enfrente y no lo até. **El ESP32 vivo no probaba nada**: mi
+> discriminador era más débil de lo que afirmé.
+>
+> **Consecuencia para la tabla de abajo: NO cuenta como evidencia contra C290.**
+> El único evento observado tiene otra explicación suficiente. Sigue siendo
+> prudente repoblar C290 —la falla #2 es real y el buck está al límite— pero la
+> frecuencia de brown-out sigue **sin medir**. Desde el 2026-08-28 el firmware
+> informa la causa del reset en cada heartbeat (`rst:POR` / `rst:BOR` / …), así
+> que la próxima vez la placa lo dice sola. Ver `ds11_errata.md`, falla #2.
 
 **Un evento en ~700 segundos de amplificadores encendidos, al mismo volumen.**
 Es lo bastante raro como para no haber aparecido en las sesiones de medición
@@ -2131,4 +2140,89 @@ atenuación real del adaptador sano = 1/12,2  (−21,7 dB), no 1/10,4 (−20,3 d
 discrepancia de +17 vs +29 dB —falta bastante más que 1,4 dB— pero **saca una
 de las incógnitas del tablero** y hay que aplicarla a cualquier cuenta de nivel
 absoluto que pase por el adaptador.
+
+
+
+---
+
+## 23. La polaridad del arnés, medida (2026-08-28)
+
+`ds11-netlist-hallazgos.md` dejó anotada una condición previa al beamforming:
+
+> *"Si el arnés asume 1=+,2=−,3=+,4=− la mitad de los parlantes queda en
+> contrafase → verificar con test de polaridad antes de beamforming."*
+
+**Verificada.** Y era la primera vez que se podía: el lazo emitía sólo por
+canales **pares** (`lb_emit_ch = {0, 8, 16, 24}`), así que los canales impares
+—la mitad del equipo— nunca habían pasado por el instrumento.
+
+### 23.1 Por qué importa tanto
+
+Cada JSPK lleva **dos** canales y su pinout es **"+ − − +"**, por una doble
+inversión deliberada: el canal impar entra invertido al PAM (VOUT+→IN−) y
+compensa saliendo por OUT−→pin 1. Resultado: el "+" está en el **pin 1** del
+canal par y en el **pin 4** del impar.
+
+Si el arnés se arma con la suposición natural (1=+, 3=+), **la mitad de los
+parlantes queda en contrafase**. En un array eso no es un defecto estético: un
+signo alternado elemento a elemento es una **rampa de fase de π por elemento**,
+que corre el lóbulo principal y manda la energía a lóbulos de rejilla. **Destruye
+el foco.** Y son 15 nodos × 32 = **480 parlantes**: es el error más caro de
+descubrir tarde.
+
+### 23.2 El cambio de firmware
+
+`lb_emit_ch` pasó de `{0, 8, 16, 24}` a **`{0, 1, 8, 9, 16, 17, 24, 25}`** — el
+canal par **y** el impar de cada banco, emitiendo **a la vez**. Simultáneo a
+propósito: la polaridad relativa sólo significa algo dentro de una misma
+captura.
+
+Un detalle que había que arreglar para que funcionara: el emisor elegía el canal
+local con `local = lb_emit_ch[p] & 7u` dentro de un bucle, o sea que **se
+quedaba con el último** — con dos emisores por banco, el par no habría sonado.
+Ahora es una máscara de bits. **El skew de §22.1 sigue saliendo igual**, porque
+los cuatro pares siguen emitiendo juntos.
+
+### 23.3 El resultado
+
+Adaptadores en los pines **1/2** y **4/3** de dos conectores, con el "+" en el
+pin 1 del par y en el **pin 4** del impar. 46 informes, −35 dB:
+
+| entrada | conector | canal | | pico | t (smp) | polaridad |
+|---|---|---|---|---|---|---|
+| c0 | JSPK01 pines 1/2 | ch0 | par | 1536 | 513,865 | **+ (46/46)** |
+| c1 | JSPK01 pines 4/3 | ch1 | **impar** | 1576 | 513,865 | **+ (46/46)** |
+| c2 | JSPK05 pines 1/2 | ch8 | par | 1531 | 513,870 | **+ (46/46)** |
+| c3 | JSPK05 pines 4/3 | ch9 | **impar** | 1511 | 513,869 | **+ (46/46)** |
+| c4 | J13 (antes del amp) | ch24 | — | 1183 | 513,580 | − (46/46) |
+
+**Los cuatro en la misma polaridad, sin una sola excepción en 46 informes.**
+
+> ### La regla para armar el arnés
+>
+> **En cada JSPK: el "+" del parlante va al pin 1 en el canal par, y al pin 4 en
+> el impar.** Los "−" van a los pines 2 y 3 respectivamente. Armado así, los 32
+> parlantes de un nodo quedan **en fase**.
+>
+> Es la conclusión operativa, y es directa: es exactamente la disposición que se
+> midió. No depende de que el modelo de la doble inversión sea correcto.
+
+### 23.4 Dos cosas más que salieron gratis
+
+**El camino inversor no agrega retardo.** El par y el impar del mismo conector
+llegan **a la misma muestra**: 513,865 contra 513,865 en JSPK01, y 513,870
+contra 513,869 en JSPK05 — **0,02 µs**. La entrada inversora del PAM8302A no
+introduce retardo medible frente a la directa. No era obvio y hubiera sido un
+error sutil y permanente en el array.
+
+**Los niveles coinciden dentro de 0,36 dB** (1511 a 1576 cuentas sobre los
+cuatro). Las dos mitades del banco de amplificadores son intercambiables.
+
+### 23.5 Qué queda pendiente de esto
+
+Se midieron **dos** conectores (JSPK01 y JSPK05), o sea 4 de los 32 canales, y
+uno de cada banco par/impar de dos bancos distintos. La regla vale para el
+diseño, que es igual en los 16 conectores. **Lo que no se probó, y no hace falta
+probar con este instrumento, es cada conector uno por uno**: para eso está el
+walker, con un parlante y el oído, cuando el arnés esté armado.
 

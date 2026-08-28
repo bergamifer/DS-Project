@@ -724,7 +724,7 @@ static volatile uint8_t cal_ok_count = 0;   // de esos, con q ≥ CAL_Q_MIN
  *
  * La correlación es la del AUTOFOCUS. La diferencia es que acá no hay sala en
  * el medio: sin eco, el pico es limpio y el resultado es del equipo. */
-#define LB_NUM_EMIT     4      /* se emite por un canal de cada banco: 0, 8, 16, 24 */
+#define LB_NUM_EMIT     8      /* el canal PAR y el IMPAR de cada banco */
 /* Se miden las OCHO entradas, no cuatro.
  *
  * La primera versión capturaba las entradas 0-3 asumiendo que cada sonda iba a
@@ -740,11 +740,25 @@ static volatile uint8_t cal_ok_count = 0;   // de esos, con q ≥ CAL_Q_MIN
 #define LB_MAX_LAG      (LB_CAPTURE_LEN - CAL_CHIRP_LEN)
 #define LB_CORR_CHUNK   128    /* lags por pasada — mismo criterio que el scan */
 #define LB_PERIOD_MS    2000   /* repetir la medición cada 2 s */
-/* Canal de salida de cada sonda → se realimenta a la ENTRADA del mismo índice.
- * Uno por banco a propósito: es la configuración que mide el skew entre los
- * cuatro SAI. Con un solo adaptador, la sonda 0 mide y el resto informa
- * "sin señal" — el modo no exige tener los cuatro. */
-static const uint8_t lb_emit_ch[LB_NUM_EMIT] = { 0, 8, 16, 24 };
+/* Canales que emiten el chirp. Con un solo adaptador la sonda 0 mide y el resto
+ * informa "sin señal" — el modo nunca exigió tenerlos todos.
+ *
+ * DOS por banco desde el 2026-08-28: el par y el impar. Antes era uno por banco
+ * (0, 8, 16, 24), que es lo que mide el skew entre los cuatro SAI — y eso sigue
+ * saliendo, porque los cuatro pares siguen emitiendo a la vez.
+ *
+ * Lo que HABILITA el impar es la prueba de polaridad del arnés, que
+ * `ds11-netlist-hallazgos.md` dejó anotada como condición previa al
+ * beamforming. Cada JSPK lleva dos canales y su pinout es "+ − − +": en el
+ * canal PAR el "+" es el pin 1, en el IMPAR es el pin 4 — una doble inversión
+ * deliberada (el impar entra invertido al PAM y sale por OUT−). Si el arnés
+ * asume 1=+,2=−,3=+,4=− la mitad de los parlantes queda en contrafase, y en un
+ * array eso es una rampa de fase de π por elemento: destruye el foco.
+ *
+ * Con adaptadores en los pines 1/2 y 4/3 del mismo conector, ambos canales
+ * excitados a la vez y la polaridad informada por canal, el lazo contesta esa
+ * pregunta en una sola captura. Antes no podía: emitía sólo por canales pares. */
+static const uint8_t lb_emit_ch[LB_NUM_EMIT] = { 0, 1, 8, 9, 16, 17, 24, 25 };
 typedef enum { LB_IDLE = 0, LB_ARM, LB_CAPT, LB_CORR, LB_WAIT } lb_state_t;
 static volatile uint8_t   lb_enabled = 0;
 static volatile lb_state_t lb_state = LB_IDLE;
@@ -4165,10 +4179,12 @@ static void LB_Process(void) {
    * estaba puesto. Sólo se imprime si hay alguno: con 0 el modo es el de siempre
    * y la línea sería ruido visual. */
   {
-    uint16_t dq = beam_config.delays[lb_emit_ch[LB_NUM_EMIT - 1]];
+    /* El banco 24 (no "el último de la lista": desde que hay par+impar, el
+     * último índice es ch25). §11 se midió sobre ch24. */
+    uint16_t dq = beam_config.delays[24];
     if (dq) {
       sprintf(uart_buf, "  retardo Q8 comandado en ch%u: %u  (%u.%02u muestras)\r\n",
-              (unsigned)lb_emit_ch[LB_NUM_EMIT - 1], (unsigned)dq,
+              24u, (unsigned)dq,
               (unsigned)(dq >> 8), (unsigned)((dq & 0xFF) * 100 / 256));
       UART_Print(uart_buf);
     }
@@ -4844,9 +4860,12 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
    * estén los adaptadores de §4.2, la misma corrida da la respuesta de los
    * cuatro bancos sin tocar nada. */
   if (fs_enabled) {
-    uint8_t local = 0xFF;
+    /* Máscara y no índice: ahora hay DOS emisores por banco (par e impar) y un
+     * `local = ...` se quedaba con el último, o sea que el par no sonaba. */
+    uint8_t local_mask = 0;
     for (uint8_t p = 0; p < LB_NUM_EMIT; p++) {
-      if ((lb_emit_ch[p] & ~7u) == ch_offset) local = lb_emit_ch[p] & 7u;
+      if ((lb_emit_ch[p] & ~7u) == ch_offset)
+        local_mask |= (uint8_t)(1u << (lb_emit_ch[p] & 7u));
     }
     if (fs_paused) {
       for (uint32_t i = 0; i < samples * AUDIO_CHANNELS; i++) buffer[i] = 0;
@@ -4860,7 +4879,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
       ph += inc;
       if (ph >= FS_PHASE_MAX) ph -= FS_PHASE_MAX;
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
-        buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? sv : 0;
+        buffer[i * AUDIO_CHANNELS + ch] = ((local_mask >> ch) & 1u) ? sv : 0;
       }
     }
     /* Cada banco lleva su propia fase, así que el resultado no depende de cómo
@@ -4878,9 +4897,11 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
    * la diferencia entre ellas no significaría nada. */
   if (lb_enabled) {
     if (lb_state == LB_ARM) {
-      uint8_t local = 0xFF;                    /* canal local de este banco */
+      /* Máscara de canales locales de este banco — ver la nota de lb_emit_ch. */
+      uint8_t local_mask = 0;
       for (uint8_t p = 0; p < LB_NUM_EMIT; p++) {
-        if ((lb_emit_ch[p] & ~7u) == ch_offset) local = lb_emit_ch[p] & 7u;
+        if ((lb_emit_ch[p] & ~7u) == ch_offset)
+          local_mask |= (uint8_t)(1u << (lb_emit_ch[p] & 7u));
       }
       /* Retardo fraccional opcional sobre el chirp, para AUDITAR la
        * interpolación Q8 de punta a punta.
@@ -4908,8 +4929,11 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
        * ventana de CAL_CHIRP_LEN, así que un retardo mayor le corta la cola. Con
        * 2 de 480 muestras el corrimiento del pico es despreciable, y a cambio la
        * ventana no cambia y las medidas siguen siendo comparables con las de §8. */
-      int32_t dq8 = (local == 0xFF) ? 0
-                  : (int32_t)beam_config.delays[ch_offset + local];
+      /* El retardo Q8 se audita sobre el canal más bajo del banco (el par), que
+       * es el que antes era el único emisor: así §11 sigue comparable. */
+      int32_t dq8 = local_mask
+                  ? (int32_t)beam_config.delays[ch_offset + __builtin_ctz(local_mask)]
+                  : 0;
       for (uint32_t i = 0; i < samples; i++) {
         uint32_t k  = lb_bank_pos[ch_offset >> 3] + i;
         int32_t  sv = 0;
@@ -4922,7 +4946,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
           sv = s0 + (((s1 - s0) * fr) >> 8);
         }
         for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
-          buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? sv : 0;
+          buffer[i * AUDIO_CHANNELS + ch] = ((local_mask >> ch) & 1u) ? sv : 0;
         }
       }
       lb_bank_pos[ch_offset >> 3] += (uint16_t)samples;
