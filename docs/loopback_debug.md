@@ -2655,3 +2655,85 @@ el fierro mire el modelo.
 > hipótesis alternativa la explicaba casi exacta. **Un dato que no encaja con la
 > hipótesis en curso merece una segunda hipótesis, no una explicación.**
 
+
+---
+
+## 28. La respuesta CON parlante — y la que aparece no es la del amplificador (2026-08-28)
+
+§4.2 lo había dejado anotado desde el principio: *"para medir la respuesta en
+frecuencia del amplificador conviene dejar un parlante conectado en paralelo,
+para que el amplificador vea la carga real que va a tener en uso"*. **Todas las
+respuestas medidas hasta acá —§14, §16.2, §19.3, §22.2— se hicieron sin
+parlante.** Con uno puesto en JSPK01, en paralelo con el adaptador, se repitió.
+
+Base: **18 barridos** del modo 20 a −30 dB, bien adentro del rango fiel del
+adaptador (§27.3). Se compara `c0 − J13`, o sea el amplificador aislado, contra
+la misma resta de §22.2 sin carga.
+
+### 28.1 El resultado principal es un negativo, y vale
+
+| Hz | con carga | sin carga | diferencia |
+|---|---|---|---|
+| 20 | −11,01 | −11,01 | **+0,00** |
+| 30 | −7,90 | −7,98 | +0,08 |
+| 45 | −5,23 | −5,30 | +0,07 |
+| 63 | −3,52 | −3,37 | −0,15 |
+| 90 | −2,02 | −1,99 | −0,03 |
+| 1000 | +0,00 | +0,00 | +0,00 |
+
+**El pasaalto no se mueve.** El corte de 68 Hz de §19.3 es idéntico con y sin
+carga. Eso **valida retroactivamente** todas las respuestas medidas sin parlante,
+que era exactamente la duda que §4.2 había dejado abierta: no había forma de
+saber si la curva sin carga era la que se iba a escuchar. **Lo es.**
+
+### 28.2 🔴 Y lo que sí cambia no es el amplificador: es el parlante
+
+| Hz | diferencia | qué es |
+|---|---|---|
+| 20 – 90 | ~0 | por debajo de la resonancia |
+| **125 – 180** | **+0,30 / +0,40** | **el pico de resonancia del driver (Fs)** |
+| 250 – 1400 | ~0 | el mínimo, donde el parlante vale su nominal |
+| 2000 | +0,10 | |
+| 5600 | +0,30 | |
+| 11200 | +0,42 | |
+| **20000** | **+0,48** | **la cola inductiva de la bobina** |
+
+**Esa columna es la curva de impedancia de un parlante, de manual**: plana abajo,
+un pico en la resonancia, un mínimo en la zona media, y una subida monótona por
+la inductancia de la bobina. No hay ninguna otra cosa en el circuito que tenga
+esa forma.
+
+Se ve **porque el amplificador tiene impedancia de salida distinta de cero**:
+donde el parlante carga menos, el borne queda con un poco más de tensión.
+Estimando el pico de resonancia en el rango típico (3-4× el nominal):
+
+```
+Z de salida ≈ 0,2 a 0,5 Ω   →   factor de amortiguamiento ≈ 16 a 19
+```
+
+Es una estimación, no una medición: depende de cuánto suba realmente la
+impedancia del driver, que no se midió. Pero el orden de magnitud es sano para
+un clase D chico.
+
+### 28.3 Qué significa para la instalación
+
+**Cada parlante imprime su propia curva de impedancia sobre su propio canal**,
+con una amplitud de hasta **±0,5 dB**. Tres consecuencias, en orden de
+importancia:
+
+1. **Es chico.** Medio dB de desviación por la carga es despreciable frente a
+   todo lo demás que va a pasar en una sala.
+2. **Es común a todos los canales**, mientras los 480 drivers sean del mismo
+   modelo. El beamforming compara canales entre sí: un efecto que aparece igual
+   en todos se cancela.
+3. **Pero es la primera cosa medida que depende del driver**, y por lo tanto de
+   su dispersión de fabricación. Si algún día aparecen focos que se degradan sin
+   causa aparente, la dispersión de Fs entre drivers es un sospechoso legítimo —
+   y ahora hay una forma de medirla, canal por canal, con este mismo barrido.
+
+> **Una nota de método, en positivo esta vez.** Esta medición salió bien porque
+> se hizo **dentro del rango fiel del instrumento** (−30 dB, cuando el techo está
+> en −24) y **contra una referencia tomada en la misma configuración**. Es el
+> mismo instrumento que en §24 produjo una conclusión falsa: la diferencia no
+> fue el aparato sino saber dónde vale y contra qué comparar.
+
