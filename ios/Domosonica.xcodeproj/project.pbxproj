@@ -19,6 +19,8 @@
 		B1000000000000000000000A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* RootView.swift */; };
 		B1000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B /* Assets.xcassets */; };
 		B1000000000000000000000E /* NodesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000E /* NodesStore.swift */; };
+		B10000000000000000000012 /* FleetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* FleetView.swift */; };
+		B10000000000000000000011 /* Fleet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* Fleet.swift */; };
 		B1000000000000000000000F /* RIR.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000F /* RIR.swift */; };
 		B10000000000000000000010 /* RIRView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* RIRView.swift */; };
 /* End PBXBuildFile section */
@@ -37,6 +39,8 @@
 		A1000000000000000000000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1000000000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1000000000000000000000E /* NodesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodesStore.swift; sourceTree = "<group>"; };
+		A10000000000000000000012 /* FleetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FleetView.swift; sourceTree = "<group>"; };
+		A10000000000000000000011 /* Fleet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fleet.swift; sourceTree = "<group>"; };
 		A1000000000000000000000F /* RIR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RIR.swift; sourceTree = "<group>"; };
 		A10000000000000000000010 /* RIRView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RIRView.swift; sourceTree = "<group>"; };
 		A1000000000000000000000D /* Domosonica.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Domosonica.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -72,6 +76,8 @@
 				A10000000000000000000010 /* RIRView.swift */,
 				A1000000000000000000000F /* RIR.swift */,
 				A1000000000000000000000E /* NodesStore.swift */,
+				A10000000000000000000012 /* FleetView.swift */,
+				A10000000000000000000011 /* Fleet.swift */,
 				A10000000000000000000006 /* Components.swift */,
 				A10000000000000000000005 /* AppState.swift */,
 				A10000000000000000000004 /* ESP32Client.swift */,
@@ -169,6 +175,8 @@
 				B10000000000000000000010 /* RIRView.swift in Sources */,
 				B1000000000000000000000F /* RIR.swift in Sources */,
 				B1000000000000000000000E /* NodesStore.swift in Sources */,
+				B10000000000000000000012 /* FleetView.swift in Sources */,
+				B10000000000000000000011 /* Fleet.swift in Sources */,
 				B10000000000000000000006 /* Components.swift in Sources */,
 				B10000000000000000000005 /* AppState.swift in Sources */,
 				B10000000000000000000004 /* ESP32Client.swift in Sources */,

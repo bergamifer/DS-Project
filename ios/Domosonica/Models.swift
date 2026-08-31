@@ -29,6 +29,21 @@ struct DSStatus: Decodable, Equatable {
     let adcPk: [Int]?
     let uptimeMs: Int?
 
+    // Campos que la vista de flota necesita para detectar divergencias entre
+    // nodos. Todos opcionales: un ESP32 con firmware viejo no los manda, y un
+    // nodo que responde a medias sigue siendo mejor que un nodo invisible.
+    let volDb: Int?
+    let ingainDb: Int?
+    let amps: Bool?
+    let custom: Bool?
+    let fwId: String?
+    let fwBuild: Int?
+    let cpuFillsPct: Double?
+    let stm32UptimeMs: Int?
+    let calSaved: Bool?
+    let adcOvf: Int?
+    let outClip: Int?
+
     struct Focus: Decodable, Equatable {
         let fx: Int; let fy: Int; let fz: Int   // mm, marco del oyente
     }
@@ -51,27 +66,60 @@ struct DSMode: Identifiable {
     let detail: String   // subtítulo
     let kind: Kind
 
-    enum Kind { case monitor, walker, rx, tx, autofocus }
+    enum Kind { case monitor, walker, rx, tx, autofocus, diag }
 }
 
 enum DSModes {
+    /// Espejo de `ui_states[]` (firmware/Core/Src/main.c) y de `MODE_NAMES[]`
+    /// (firmware_esp32c3). Es la CUARTA copia de la misma lista, y la
+    /// duplicación ya causó un bug silencioso: el modo 21 se agregó al STM32,
+    /// el ESP32 lo rechazaba devolviendo `{"status":"ok"}`, y costó una
+    /// escalera de volumen medida en el modo equivocado.
+    ///
+    /// Por eso la grilla NO se dibuja desde esta lista sino desde el
+    /// `num_modes` que informa el nodo (ver `grid(for:)`): si el firmware
+    /// tiene más modos de los que la app conoce, aparecen igual con su índice
+    /// en vez de desaparecer sin aviso. La solución de fondo es que el
+    /// firmware publique la lista — issue #20.
     static let all: [DSMode] = [
-        DSMode(id: 0,  short: "Monitor",     detail: "ADC→DAC +30dB",      kind: .monitor),
-        DSMode(id: 1,  short: "Walker",      detail: "tono 1s por canal",  kind: .walker),
-        DSMode(id: 2,  short: "RX 0°",       detail: "escucha frontal",    kind: .rx),
-        DSMode(id: 3,  short: "RX +30°",     detail: "escucha derecha",    kind: .rx),
-        DSMode(id: 4,  short: "RX −30°",     detail: "escucha izquierda",  kind: .rx),
-        DSMode(id: 5,  short: "RX +60°",     detail: "lateral derecha",    kind: .rx),
-        DSMode(id: 6,  short: "RX −60°",     detail: "lateral izquierda",  kind: .rx),
-        DSMode(id: 7,  short: "Foco centro", detail: "TX @ 1 m",           kind: .tx),
-        DSMode(id: 8,  short: "Foco izq",    detail: "TX −0,5 m @ 1 m",    kind: .tx),
-        DSMode(id: 9,  short: "Foco der",    detail: "TX +0,5 m @ 1 m",    kind: .tx),
-        DSMode(id: 10, short: "Foco cerca",  detail: "TX centro @ 0,3 m",  kind: .tx),
-        DSMode(id: 11, short: "AUTOFOCUS",   detail: "scan con micrófono", kind: .autofocus),
-        DSMode(id: 12, short: "Tono 2k",     detail: "foco @ 1 m, ±14 cm", kind: .tx),
-        DSMode(id: 13, short: "Tono 1k",     detail: "foco @ 1 m, ±27 cm", kind: .tx),
+        DSMode(id: 0,  short: "Monitor",     detail: "ADC→DAC +30dB",        kind: .monitor),
+        DSMode(id: 1,  short: "Walker",      detail: "tono 1s por canal",    kind: .walker),
+        DSMode(id: 2,  short: "RX 0°",       detail: "escucha frontal",      kind: .rx),
+        DSMode(id: 3,  short: "RX +30°",     detail: "escucha derecha",      kind: .rx),
+        DSMode(id: 4,  short: "RX −30°",     detail: "escucha izquierda",    kind: .rx),
+        DSMode(id: 5,  short: "RX +60°",     detail: "lateral derecha",      kind: .rx),
+        DSMode(id: 6,  short: "RX −60°",     detail: "lateral izquierda",    kind: .rx),
+        DSMode(id: 7,  short: "Foco lejos",  detail: "TX 2k @ 2 m",          kind: .tx),
+        DSMode(id: 8,  short: "Foco izq",    detail: "TX 2k −0,5 m @ 1 m",   kind: .tx),
+        DSMode(id: 9,  short: "Foco der",    detail: "TX 2k +0,5 m @ 1 m",   kind: .tx),
+        DSMode(id: 10, short: "Foco cerca",  detail: "TX 2k centro @ 0,3 m", kind: .tx),
+        DSMode(id: 11, short: "AUTOFOCUS",   detail: "scan con micrófono",   kind: .autofocus),
+        DSMode(id: 12, short: "Tono 2k",     detail: "foco @ 1 m, ±14 cm",   kind: .tx),
+        DSMode(id: 13, short: "Tono 1k",     detail: "foco @ 1 m, ±27 cm",   kind: .tx),
+        DSMode(id: 14, short: "MULTIFOCUS",  detail: "4 tonos, 4 puntos",    kind: .tx),
+        DSMode(id: 15, short: "8 entradas",  detail: "cada entrada, su foco", kind: .tx),
+        DSMode(id: 16, short: "Barrido X",   detail: "el foco cruza la sala", kind: .tx),
+        DSMode(id: 17, short: "Barrido Y",   detail: "800 Hz — el test de aliasing vertical", kind: .tx),
+        DSMode(id: 18, short: "Foco medido", detail: "usa el AUTOFOCUS guardado", kind: .autofocus),
+        DSMode(id: 19, short: "LOOPBACK",    detail: "medición eléctrica del lazo", kind: .diag),
+        DSMode(id: 20, short: "Barrido f",   detail: "respuesta 20 Hz – 20 kHz", kind: .diag),
+        DSMode(id: 21, short: "Tono fijo",   detail: "500 Hz — medir con tester", kind: .diag),
     ]
     static let autofocusIndex = 11
+
+    /// La grilla que hay que dibujar para un nodo que informa `numModes`.
+    ///
+    /// Si el firmware tiene más modos de los que esta lista conoce, se
+    /// completan con su índice: un modo sin nombre bonito es infinitamente
+    /// mejor que un modo al que no se puede llegar.
+    static func grid(for numModes: Int?) -> [DSMode] {
+        let n = numModes ?? all.count
+        guard n > all.count else { return Array(all.prefix(max(n, 1))) }
+        return all + (all.count..<n).map {
+            DSMode(id: $0, short: "Modo \($0)",
+                   detail: "el firmware lo tiene, la app todavía no", kind: .diag)
+        }
+    }
 }
 
 // MARK: - estados de calibración AUTOFOCUS (cal_state_t del STM32)

@@ -54,6 +54,37 @@ struct ESP32Client {
                               "az": az, "fx": fx, "fy": fy, "fz": fz])
     }
 
+    /// POST /volume {"db": N} — atenuación maestra del PCM1690, 0..−63 dB.
+    func setVolume(db: Int) async throws -> AckResponse {
+        try await post(path: "volume", body: ["db": db])
+    }
+
+    /// POST /amps {"on": bool} — enable de los 32 PAM8302A.
+    ///
+    /// Es una acción FÍSICA: los amplificadores arrancan apagados a propósito y
+    /// encenderlos con el volumen alto y 15 nodos a la vez tiene consecuencias
+    /// audibles. Quien la llame debería confirmar antes.
+    func setAmps(on: Bool) async throws -> AckResponse {
+        try await post(path: "amps", body: ["on": on])
+    }
+
+    /// POST /ingain {"db": N} — ganancia de entrada del AK5538, 0..36 dB.
+    func setInGain(db: Int) async throws -> AckResponse {
+        try await post(path: "ingain", body: ["db": db])
+    }
+
+    /// GET /cal — resultado del último scan del AUTOFOCUS. NO dispara uno nuevo.
+    ///
+    /// `tofQ8` viene crudo, en muestras Q8 (1/256 de muestra = 81 ns = 28 µm de
+    /// camino). Separarlo del camino geométrico es un ajuste por mínimos
+    /// cuadrados que se hace afuera — ver tools/calfase.py e issue #21.
+    func cal() async throws -> CalResult {
+        var req = URLRequest(url: base.appendingPathComponent("cal"))
+        req.timeoutInterval = 8      // dos tramas por UART, con su espera
+        let (data, _) = try await session.data(for: req)
+        return try Self.decoder.decode(CalResult.self, from: data)
+    }
+
     private func post(path: String, body: [String: Any]) async throws -> AckResponse {
         var req = URLRequest(url: base.appendingPathComponent(path))
         req.httpMethod = "POST"
@@ -62,4 +93,23 @@ struct ESP32Client {
         let (data, _) = try await session.data(for: req)
         return try Self.decoder.decode(AckResponse.self, from: data)
     }
+}
+
+// MARK: - GET /cal
+
+struct CalResult: Decodable {
+    struct Channel: Decodable, Identifiable {
+        let ch: Int
+        let tofQ8: Int
+        let sign: Int
+        let quality: Int
+        var id: Int { ch }
+    }
+    let ok: Bool
+    let channels: [Channel]?
+    let nChannels: Int?
+    let state: String?
+    let progress: Int?
+    let okCount: Int?
+    let message: String?
 }

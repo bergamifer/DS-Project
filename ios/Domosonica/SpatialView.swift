@@ -328,8 +328,9 @@ final class SpatialModel: ObservableObject {
 
 struct SpatialView: View {
     @EnvironmentObject var app: AppState
+    /// Del entorno, no creado acá: la lista de nodos es de la app entera.
+    @EnvironmentObject var nodes: NodesStore
     @StateObject private var model: SpatialModel
-    @StateObject private var nodes: NodesStore
 
     @State private var dragBase: SIMD3<Float>?
     @State private var camBase: (az: Float, el: Float)?
@@ -341,9 +342,12 @@ struct SpatialView: View {
     enum DragMode: String, CaseIterable { case focus = "Foco", camera = "Cámara" }
 
     init() {
-        let ns = NodesStore(defaultHost: UserDefaults.standard.string(forKey: "esp32_host") ?? "192.168.0.50")
-        _nodes = StateObject(wrappedValue: ns)
-        _model = StateObject(wrappedValue: SpatialModel(nodesStore: ns))
+        // El modelo 3D necesita el store en su init, y un @EnvironmentObject no
+        // está disponible todavía acá. Se le pasa uno con la MISMA persistencia
+        // (mismo UserDefaults), así que ve la misma lista de nodos.
+        _model = StateObject(wrappedValue: SpatialModel(nodesStore:
+            NodesStore(defaultHost: UserDefaults.standard.string(forKey: "esp32_host")
+                       ?? "192.168.0.50")))
     }
 
     var body: some View {

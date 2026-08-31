@@ -71,6 +71,65 @@ protocolo UART binario directamente. Tres pantallas (tabs):
 
 ---
 
+## 1.6 — v1.6 (2026-08-31): la flota, no el nodo
+
+La app hablaba con **un** nodo (el `host` de Ajustes) y, sólo para mover el foco,
+con la lista de `NodesStore`. Eran **dos fuentes de verdad compitiendo**: el modo, el
+volumen y los amplificadores iban a un solo nodo, y la lista de nodos existía
+únicamente adentro de la pestaña Espacial.
+
+- **`NodesStore` se creó al nivel de la app** (`DomosonicaApp`), no adentro de
+  SpatialView. Todas las pantallas ven la misma lista.
+- **`FleetController`** (`Fleet.swift`): fan-out de **modo, volumen y amplificadores**
+  además del foco, con **resultado por nodo**. Cuando falta alguno se dice **cuál**:
+  `"modo 12: 13/15 — sin responder: Nodo 4, Nodo 9"`. Un "13/15" obliga a ir a buscar
+  quiénes son los dos, y en una muestra con público eso es tiempo que no hay.
+- **Pestaña Flota** (`FleetView.swift`): una fila por nodo con conexión, modo, volumen,
+  amps, underruns, errores SAI, CPU, uptime y firmware.
+  🔴 **Lo que esta pantalla existe para mostrar es la DIVERGENCIA**: que un nodo quede
+  en otro modo o con otro firmware no produce ningún síntoma salvo que la obra suene
+  mal, y a esa altura ya nadie sabe por qué. El nodo desviado se marca en madera con
+  el detalle de en qué difiere.
+- **Polling escalonado**: round-robin, un nodo por tick. Quince a 1 Hz serían quince
+  pedidos por segundo sobre el WiFi de la sala, compitiendo con los comandos que sí
+  importan.
+- **Descubrimiento por mDNS** (`NWBrowser` sobre `_domosonica._tcp`) — el tipo de
+  servicio propio que ahora anuncia el ESP32. Con `_http._tcp` a secas la red devuelve
+  también impresoras y routers.
+- **`ESP32Client`** ganó `/volume`, `/amps`, `/ingain` y `/cal`. Antes implementaba
+  cuatro endpoints de los quince que el ESP32 expone.
+- **Confirmación para encender los amplificadores**: son 32 por nodo y suenan de
+  inmediato, al volumen que haya quedado. Los botones de volumen llegan hasta
+  **−15 dB** y no hasta 0, porque ése es el techo útil medido (`loopback_debug.md` §27).
+- **La app recuerda la pestaña** (`@AppStorage("ui_tab")`).
+
+### La grilla de modos ya no puede esconder un modo
+
+`DSModes.all` era la **cuarta** copia de la lista de modos y se había quedado en 14 con
+22 en el firmware. Ahora la grilla se dibuja desde el `num_modes` que informa el nodo
+(`DSModes.grid(for:)`): si el firmware tiene más modos de los que la app conoce,
+aparecen igual con su índice en vez de desaparecer sin aviso.
+
+Es una mitigación, no la solución. La duplicación ya causó un bug silencioso —el modo
+21 se agregó al STM32, el ESP32 lo rechazaba devolviendo `{"status":"ok"}`, y costó una
+escalera de volumen medida en el modo equivocado— y la solución de fondo es que el
+firmware publique la lista: **issue #20**.
+
+### Verificado
+
+Con dos nodos falsos locales (uno sano, uno divergente) y una IP muerta, en el
+simulador:
+
+- polling escalonado: 12 s, 3 nodos, **4 pedidos a cada uno** — round-robin exacto;
+- la cabecera dice "2 de 3 en línea" en madera, no en teal;
+- el nodo desviado muestra `distinto al resto: modo 1 · volumen −20 dB · firmware …`;
+- sus 3 underruns salen en rojo, y el nodo muerto en rojo con "sin respuesta".
+
+Compila para dispositivo y para simulador. **Contra hardware real no se probó** — la
+placa estaba apagada el 31 de agosto.
+
+---
+
 ## 2. Cómo instalar en el iPhone
 
 1. Abrir `ios/Domosonica.xcodeproj` en Xcode. Si Xcode ofrece descargar la
@@ -156,9 +215,9 @@ sincronizar relojes), ALPS (CMU — posicionamiento acústico indoor, códigos o
 1. Modo **walker de calibración** con cadencia exacta publicada (o trigger por
    comando con timestamp de muestra).
 2. **Códigos ortogonales simultáneos** (32 chirps de pendiente distinta) — captura 1 s.
-3. `CMD_GET_CAL_RESULT`: exponer los 32 delays+signos medidos por AUTOFOCUS
-   (hoy solo van al serial).
-4. **mDNS en el ESP32** (`domosonica.local`) — la app deja de necesitar IP manual.
+3. ~~`CMD_GET_CAL_RESULT`~~ — hecho: `GET /cal` devuelve los 32 TOF, signos y
+   calidades. Ver `docs/calibracion_fase.md` y `tools/calfase.py`.
+4. ~~**mDNS en el ESP32**~~ — hecho: el ESP32 anuncia `_domosonica._tcp` y la app lo descubre (v1.6).
 5. `CMD_EVENT` push STM32→ESP32 (cambios de estado sin polling).
 
 ---
