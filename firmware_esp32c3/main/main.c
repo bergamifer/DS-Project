@@ -143,7 +143,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    9
+#define PROTO_VERSION    11
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
