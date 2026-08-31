@@ -1097,6 +1097,37 @@ static const uint32_t dimmer_channels[DIMMER_NUM_PHASES] = {
  * trozo dos veces mientras el 24 avanza dos veces, y quedan 240 muestras
  * desfasados. Justo el error que el modo 19 existe para medir. */
 static volatile uint32_t dbl_fill[4] = {0,0,0,0};
+
+/* ¿El fill lee un bloque FRESCO del ADC, o repite el anterior?
+ *
+ * Los modos que salen del ADC (0 monitor, 2-6 RX beam) leen la ventana de 240
+ * muestras que Process_ADC_Half acaba de escribir: `delay_write_pos - 240`. Si
+ * en una pasada hay un fill de TX pero la mitad del RX todavia no llego, el fill
+ * vuelve a leer LA MISMA ventana — 5 ms de audio repetidos en los 32 canales. Si
+ * llegan dos mitades entre dos fills, una ventana no sale nunca. Repetir y
+ * saltear suenan igual: rotura.
+ *
+ * Ninguno de los contadores que ya existen lo ve. Un underrun es otra cosa (la
+ * bandera puesta y no servida); dbl_fill es otra (dos mitades del MISMO banco en
+ * una pasada). Este mide la relacion RX->TX, que es la que gobierna si el audio
+ * del ADC sale continuo.
+ *
+ * Sano = el avance es exactamente AUDIO_BUFFER_SAMPLES en cada fill. */
+static volatile uint32_t fill_repeat = 0;   /* wp no avanzo: ventana repetida */
+static volatile uint32_t fill_skip   = 0;   /* wp avanzo de mas: ventana perdida */
+static volatile uint32_t fill_fresh  = 0;   /* avance normal */
+static uint32_t dwp_prev = 0;
+static uint8_t  dwp_init = 0;
+
+static inline void Fill_CheckFreshness(void) {
+  uint32_t now = delay_write_pos;
+  if (!dwp_init) { dwp_init = 1; dwp_prev = now; return; }
+  uint32_t d = (now - dwp_prev) & DELAY_LINE_MASK;
+  if (d == 0)                          fill_repeat++;
+  else if (d == AUDIO_BUFFER_SAMPLES)  fill_fresh++;
+  else                                 fill_skip++;
+  dwp_prev = now;
+}
 static volatile uint8_t need_fill_first_half = 0;
 static volatile uint8_t need_fill_second_half = 0;
 static volatile uint8_t need_fill_2a_first_half = 0;
@@ -1473,6 +1504,9 @@ static void Service_Fills(void) {
   }
 
   // SAI1_A: channels 0-7
+  /* Una medicion por ventana de TX producida: si el RX no avanzo, esta ventana
+   * repite la anterior. Ver Fill_CheckFreshness. */
+  if (need_fill_first_half || need_fill_second_half) Fill_CheckFreshness();
   uint8_t did_first_0 = 0;
   if (need_fill_first_half) {
     need_fill_first_half = 0;
@@ -1874,6 +1908,33 @@ int main(void)
       if (now > prev) { rx_aligned = 1; break; }      /* wrapeó */
       prev = now;
       if ((HAL_GetTick() - t0) > 50u) break;          /* el TX no corre */
+    }
+    /* ===== ...pero NO en el borde mismo: media ventana después =====
+     *
+     * Enganchar el RX exactamente al wrap del TX deja los dos DMA cambiando de
+     * mitad en el MISMO instante (fase 0). Y la fase entre mitades es justo lo
+     * que decide, en cada pasada, si Process_ADC_Half ya corrió cuando el fill
+     * va a leer: con los bordes pegados eso es cara o ceca. Medido en la DS11
+     * DS_1E77C4 con fase 0: de ~200 ventanas por segundo, ~11 repetidas y ~14
+     * salteadas — 12,6% del audio roto, y ningún contador previo lo veía
+     * (underrun es la bandera no servida; dbl_fill son dos mitades del mismo
+     * banco). Ver Fill_CheckFreshness.
+     *
+     * La solución no es soltar la alineación —la determinación de la latencia
+     * entre nodos, que es para lo que existe, se pierde— sino alinear a media
+     * ventana del borde: sigue siendo el mismo instante en todos los arranques
+     * y en todos los nodos, pero con AUDIO_BUFFER_SAMPLES/2 de margen a cada
+     * lado en vez de cero. La latencia sube medio buffer (2,5 ms) y es un precio
+     * barato por audio continuo.
+     *
+     * Se espera por POSICIÓN del DMA, no por HAL_Delay: el tick de 1 ms es
+     * demasiado grueso para 2,5 ms y su fase respecto del audio es arbitraria. */
+    if (rx_aligned) {
+      const uint32_t target = (uint32_t)(AUDIO_BUFFER_SAMPLES / 2) * AUDIO_CHANNELS;
+      uint32_t t1 = HAL_GetTick();
+      while ((LB_DMA_WORDS - __HAL_DMA_GET_COUNTER(&hdma_sai2_b)) < target) {
+        if ((HAL_GetTick() - t1) > 20u) break;        /* no colgar el boot */
+      }
     }
   }
   status = HAL_SAI_Receive_DMA(&hsai_BlockB3, (uint8_t*)audio_buffer_3b_rx, ADC_BUFFER_SIZE * 2);
@@ -2654,6 +2715,11 @@ int main(void)
     snprintf(db, sizeof(db), "     dblfill: b0=%lu b8=%lu b16=%lu b24=%lu\r\n",
              (unsigned long)dbl_fill[0], (unsigned long)dbl_fill[1],
              (unsigned long)dbl_fill[2], (unsigned long)dbl_fill[3]);
+    UART_Print(db);
+    /* Frescura del bloque que leen los modos del ADC — ver Fill_CheckFreshness. */
+    snprintf(db, sizeof(db), "     fill ADC: fresco=%lu repetido=%lu salteado=%lu\r\n",
+             (unsigned long)fill_fresh, (unsigned long)fill_repeat,
+             (unsigned long)fill_skip);
     UART_Print(db);
   }
         UART_Print(uart_buf);

@@ -608,6 +608,42 @@ arranca el RX igual (peor fase, pero equipo vivo) y **se reporta en el log** —
 > el instante en que arranca el RX, así que el lazo mide otra cosa. Lo que
 > importa es que ahora **es la misma en todos los arranques**.
 
+#### ⚠️ Corrección 2026-08-31 — enganchar al borde era enganchar al PEOR punto
+
+Alinear el RX al wrap del TX dejó a los dos DMA cambiando de mitad **en el mismo
+instante**. Y esa fase es justo la que decide, en cada pasada de `Service_Fills`,
+si `Process_ADC_Half` ya corrió cuando el fill va a leer su ventana. Con los
+bordes pegados, eso es cara o ceca.
+
+Medido en la DS11 `DS_1E77C4` con música entrando por J9, contador nuevo
+`Fill_CheckFreshness` (ventanas de 240 muestras por segundo):
+
+| fase | fresco | repetido | salteado | audio roto |
+|---|---|---|---|---|
+| **0** (alineado al borde) | 171/s | **11/s** | **14/s** | **12,6 %** |
+| **120** (media ventana) | 196/s | 0/s | ~2/s | ~1,1 % |
+
+Repetir una ventana o saltearla suenan igual —un corte cada 40 ms— y **ningún
+contador anterior lo veía**: un underrun es la bandera no servida, `dbl_fill` son
+dos mitades del mismo banco. Por eso el equipo informaba 0 underruns, 0 errores
+de SAI y 4,9 % de CPU mientras el audio del ADC salía roto.
+
+El arreglo NO es soltar la alineación —la determinación entre nodos es para lo
+que existe— sino alinear a **media ventana** del borde: mismo instante en todos
+los arranques, pero con 120 muestras de margen a cada lado en vez de cero.
+Verificado: fase −120 en 4 de 5 arranques y −121 en uno, la misma dispersión de
+1 muestra que tenía la alineación al borde.
+
+> **Esto vuelve a correr la latencia absoluta**, otros 120 muestras. Los números
+> de §8 y §13 se midieron con fase 0 y no son comparables con los de ahora sin
+> corregir por eso.
+
+Queda una sospecha, sin cerrar: el artefacto de "1 de 25 arranques, exactamente
+240 muestras menos" de acá abajo es **medio buffer**, la misma unidad. El
+mecanismo que se conjeturó ahí es otro (el armado de la captura, que no pasa por
+`delay_line`), así que no se puede afirmar que sea lo mismo — pero conviene
+volver a medirlo ahora que el borde dejó de ser ambiguo.
+
 ### Un artefacto del modo 19, que NO se arregló — **explicado en §13**
 
 En 1 de 25 arranques el loopback informó `t=273,67` en vez de `513,67`:
