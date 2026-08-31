@@ -83,6 +83,9 @@ firmware/build_*/
 *.d356
 *.lck
 
+### Mecenazgo ###
+mecenazgo/
+
 ### ESP32-IDF build ###
 firmware_esp32c3/build/
 firmware_esp32c3/managed_components/

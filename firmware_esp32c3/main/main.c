@@ -114,6 +114,12 @@ static void device_identity_init(void)
 #define CMD_CAP_READ     0x11   // payload: uint32 offset en bytes
 #define CMD_CAP_DATA     0x12   // STM32 -> ESP32: [offset:4][datos]
 #define CAP_CHUNK_BYTES  (PROTO_MAX_PAYLOAD - 4)
+// Resultado del AUTOFOCUS. NO dispara un scan: devuelve lo que midio el ultimo.
+// Los 32 canales no entran en una trama (32x7 = 224 contra 128 de payload), asi
+// que se lee por tramos como la captura.
+#define CMD_GET_CAL      0x13   // payload: uint8 indice del primer canal
+#define CMD_CAL_DATA     0x14   // STM32 -> ESP32: ds_cal_hdr_t + N x ds_cal_ch_t
+#define CAL_CHUNK_CH     16
 // Actualizacion de firmware del STM32 por WiFi. Los tres primeros NO se
 // contestan desde el parser del STM32: el ACK llega recien cuando termino de
 // escribir la flash, y ESE es el control de flujo — mientras no llega, no se
@@ -167,6 +173,24 @@ typedef struct __attribute__((packed)) {
     uint8_t  rsv[2];
 } ds_health_t;
 _Static_assert(sizeof(ds_health_t) == 20, "ds_health_t debe ser 20 bytes");
+
+// Espejo de ds_cal_hdr_t / ds_cal_ch_t del STM32 (uart_protocol.h).
+typedef struct __attribute__((packed)) {
+    uint8_t  first;
+    uint8_t  count;
+    uint8_t  n_channels;
+    uint8_t  state;       // 0 IDLE 1 SETTLE 2 ARM 3 CAPT 4 CORR 5 DONE
+    uint8_t  progress;
+    uint8_t  ok_count;
+} ds_cal_hdr_t;
+_Static_assert(sizeof(ds_cal_hdr_t) == 6, "ds_cal_hdr_t debe ser 6 bytes");
+
+typedef struct __attribute__((packed)) {
+    int32_t  tof_q8;      // pico de correlacion, muestras Q8 (1/256)
+    int8_t   sign;        // polaridad medida
+    uint16_t quality;     // pico/promedio x10
+} ds_cal_ch_t;
+_Static_assert(sizeof(ds_cal_ch_t) == 7, "ds_cal_ch_t debe ser 7 bytes");
 
 typedef struct __attribute__((packed)) {
     uint32_t len;
@@ -252,7 +276,7 @@ static const char *MODE_NAMES[] = {
     "TX 2k BARRIDO izq<->der @1m",
     "BARRIDO VERTICAL 800Hz arriba<->abajo @1m",
     "TX foco CALIBRADO (AUTOFOCUS guardado)",
-    "LOOPBACK electrico (bancos 0/8/16/24 -> ADC 0-3)",
+    "LOOPBACK electrico (par e impar de cada banco -> ADC)",
     "BARRIDO DE FRECUENCIA por el lazo (20 Hz - 20 kHz)",
     "TONO FIJO 500 Hz por el lazo (medicion con tester)",
 };
@@ -272,6 +296,9 @@ static uint8_t           last_cap_data[CAP_CHUNK_BYTES];
 static uint32_t          last_cap_off;
 static uint16_t          last_cap_len;
 static SemaphoreHandle_t cap_data_sem;
+static ds_cal_hdr_t      last_cal_hdr;  // valido tras tomar cal_sem
+static ds_cal_ch_t       last_cal_ch[CAL_CHUNK_CH];
+static SemaphoreHandle_t cal_sem;
 
 // Serializa las tramas hacia el STM32. Sin esto, el push periodico de la IP
 // (monitor task) puede intercalarse con la transaccion comando→ACK de un handler
@@ -438,6 +465,23 @@ static bool frame_feed(uint8_t b)
                 last_cap_len = (uint16_t)(fr_len - 4);
                 if (last_cap_len) memcpy(last_cap_data, &fr_payload[4], last_cap_len);
                 xSemaphoreGive(cap_data_sem);
+            }
+        } else if (fr_cmd == CMD_CAL_DATA && fr_len >= sizeof(ds_cal_hdr_t) &&
+                   fr_len <= PROTO_MAX_PAYLOAD) {
+            uint8_t x = 0;
+            for (uint16_t i = 0; i < fr_len; i++) x ^= fr_payload[i];
+            if (x == fr_cksum) {
+                ds_cal_hdr_t h;
+                memcpy(&h, fr_payload, sizeof(ds_cal_hdr_t));
+                /* El largo manda sobre lo que dice la cabecera: una trama
+                 * truncada con count alto leeria basura del buffer. */
+                uint16_t have = (uint16_t)((fr_len - sizeof(ds_cal_hdr_t)) / sizeof(ds_cal_ch_t));
+                if (h.count > have) h.count = (uint8_t)have;
+                if (h.count > CAL_CHUNK_CH) h.count = CAL_CHUNK_CH;
+                last_cal_hdr = h;
+                if (h.count) memcpy(last_cal_ch, &fr_payload[sizeof(ds_cal_hdr_t)],
+                                    (size_t)h.count * sizeof(ds_cal_ch_t));
+                xSemaphoreGive(cal_sem);
             }
         } else if (fr_cmd == CMD_HEALTH && fr_len == sizeof(ds_health_t)) {
             uint8_t x = 0;
@@ -1218,6 +1262,75 @@ static int hchk(char *o, size_t n, int *first, const char *name, int st,
     return k;
 }
 
+/* GET /cal — el resultado del ultimo scan del AUTOFOCUS, los 32 canales.
+ *
+ * NO dispara un scan (para eso esta POST /mode con el modo del AUTOFOCUS).
+ * Devuelve lo que haya medido el ultimo, y `state`/`progress` dicen si quedo a
+ * mitad de camino.
+ *
+ * `tof_q8` viene CRUDO, en muestras Q8: 1/256 de muestra = 81 ns = 28 um de
+ * camino acustico. Lo que vale del scan no es el numero absoluto sino la
+ * diferencia entre parlantes; normalizarlo aca le sacaria informacion al que
+ * despues le reste la geometria. La conversion a microsegundos se hace afuera:
+ *     us = tof_q8 / 256 / 48000 * 1e6
+ */
+static esp_err_t cal_handler(httpd_req_t *req)
+{
+    char buf[3600];
+    int  p = 0;
+    httpd_resp_set_type(req, "application/json");
+
+    ds_cal_hdr_t hdr0;
+    bool have_hdr = false;
+    int  total = 0;
+
+    p += snprintf(buf + p, sizeof(buf) - p, "{\"ok\":true,\"channels\":[");
+
+    for (int first = 0; first < 64; first += CAL_CHUNK_CH) {
+        uint8_t r1 = (uint8_t)first;
+        xSemaphoreTake(cal_sem, 0);                 // drenar respuesta vieja
+        uart_send_frame(CMD_GET_CAL, &r1, 1);
+
+        if (xSemaphoreTake(cal_sem, 1500 / portTICK_PERIOD_MS) != pdTRUE) {
+            p = snprintf(buf, sizeof(buf),
+                         "{\"ok\":false,\"message\":\"el STM32 no contesto el pedido "
+                         "de calibracion (canal %d)\"}", first);
+            httpd_resp_send(req, buf, p);
+            return ESP_OK;
+        }
+
+        ds_cal_hdr_t h = last_cal_hdr;
+        if (!have_hdr) { hdr0 = h; have_hdr = true; }
+
+        for (int i = 0; i < h.count; i++) {
+            const ds_cal_ch_t *c = &last_cal_ch[i];
+            p += snprintf(buf + p, sizeof(buf) - p,
+                          "%s{\"ch\":%d,\"tof_q8\":%ld,\"sign\":%d,\"quality\":%u}",
+                          total ? "," : "", h.first + i,
+                          (long)c->tof_q8, (int)c->sign, (unsigned)c->quality);
+            total++;
+        }
+
+        /* Se termino cuando este tramo cubrio hasta el ultimo canal, o cuando
+         * vino vacio (pedido fuera de rango). Sin esto el lazo confiaria en que
+         * n_channels sea multiplo de CAL_CHUNK_CH. */
+        if (h.count == 0 || (h.first + h.count) >= h.n_channels) break;
+    }
+
+    static const char *st_name[] = { "idle", "settle", "arm", "capt", "corr", "done" };
+    uint8_t st = have_hdr ? hdr0.state : 0;
+    p += snprintf(buf + p, sizeof(buf) - p,
+                  "],\"n_channels\":%u,\"state\":\"%s\",\"progress\":%u,"
+                  "\"ok_count\":%u,\"q8_per_sample\":256,\"rate_hz\":48000}",
+                  have_hdr ? hdr0.n_channels : 0,
+                  st < (sizeof(st_name) / sizeof(st_name[0])) ? st_name[st] : "?",
+                  have_hdr ? hdr0.progress : 0,
+                  have_hdr ? hdr0.ok_count : 0);
+
+    httpd_resp_send(req, buf, p);
+    return ESP_OK;
+}
+
 static esp_err_t health_handler(httpd_req_t *req)
 {
     xSemaphoreTake(health_sem, 0);              // drenar respuesta vieja
@@ -1793,7 +1906,7 @@ static const char INDEX_HTML[] =
  * arriba. Agregar un modo y olvidarse de esta linea deja el modo SIN BOTON: el
  * 17 quedo invisible en la pagina hasta que se noto. Al agregar un modo se
  * tocan TRES lugares. */
-"const N=20,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. LEJOS 2m','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','TX 2k ondul. centro','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in','TX 2k BARRIDO izq-der','BARRIDO VERTICAL 800Hz','TX foco CALIBRADO','LOOPBACK electrico'];"
+"const N=22,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. LEJOS 2m','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','TX 2k ondul. centro','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in','TX 2k BARRIDO izq-der','BARRIDO VERTICAL 800Hz','TX foco CALIBRADO','LOOPBACK electrico','BARRIDO DE FRECUENCIA','TONO FIJO 500 Hz'];"
 "const md=document.getElementById('modes');"
 /* El numero adelante: es lo que se usa para referenciar el modo en los comandos
  * (POST /mode {"mode":N}), en los logs y al hablar del equipo. */
@@ -2115,6 +2228,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/firmware-esp", .method = HTTP_POST, .handler = firmware_esp_handler },
             { .uri = "/health",  .method = HTTP_GET,  .handler = health_handler  },
             { .uri = "/capture", .method = HTTP_GET,  .handler = capture_handler },
+            { .uri = "/cal",     .method = HTTP_GET,  .handler = cal_handler     },
         };
         for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
             esp_err_t e = httpd_register_uri_handler(server, &uris[i]);
@@ -2219,7 +2333,30 @@ static void wifi_init(void)
             mdns_instance_name_set(inst);
             mdns_txt_item_t txt[] = { {"id", device_id} };
             mdns_service_add(NULL, "_http", "_tcp", 80, txt, 1);
-            printf("[ESP32] mDNS: http://%s.local  (id %s)\n",
+
+            /* Ademas del _http generico, un tipo de servicio PROPIO.
+             *
+             * Con solo _http._tcp, un cliente que quiera armar la lista de la
+             * instalacion tiene que enumerar todo lo que habla HTTP en la red
+             * —impresoras, el router, camaras— y despues adivinar cual es un
+             * nodo. Con _domosonica._tcp la busqueda devuelve exactamente los
+             * nodos y nada mas, que es lo que la app iOS necesita para dejar de
+             * pedir 15 direcciones IP a mano.
+             *
+             * En el TXT va lo que sirve para armar la lista SIN conectarse a
+             * cada uno: el id de la placa y la version del firmware del ESP32.
+             * El estado del STM32 NO va aca a proposito: cambia todo el tiempo
+             * y un registro mDNS cacheado que diga "vivo" cuando no lo esta es
+             * peor que no decir nada. Para eso esta GET /status. */
+            const esp_app_desc_t *ad = esp_app_get_description();
+            mdns_txt_item_t txt_ds[] = {
+                { "id",  device_id },
+                { "ver", ad ? ad->version : "?" },
+            };
+            mdns_service_add(NULL, "_domosonica", "_tcp", 80,
+                             txt_ds, sizeof(txt_ds) / sizeof(txt_ds[0]));
+
+            printf("[ESP32] mDNS: http://%s.local  (id %s, _domosonica._tcp)\n",
                    mdns_host, device_id);
         } else {
             printf("[ESP32] mDNS no arranco (%s) — usar la IP\n",
@@ -2325,6 +2462,7 @@ void app_main(void)
     health_sem = xSemaphoreCreateBinary();
     cap_info_sem = xSemaphoreCreateBinary();
     cap_data_sem = xSemaphoreCreateBinary();
+    cal_sem = xSemaphoreCreateBinary();
     status_sem = xSemaphoreCreateBinary();
     uart_tx_mutex = xSemaphoreCreateRecursiveMutex();
 

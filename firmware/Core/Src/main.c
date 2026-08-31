@@ -479,7 +479,7 @@ static const ui_state_t ui_states[] = {
   // canal de cada banco y mide lo que vuelve por el ADC a través de los
   // adaptadores pasivos (docs/loopback_debug.md). Informa por el serie cada 2 s.
   // Sin adaptadores conectados dice "sin senal" y no hace nada más.
-  { .name = "LOOPBACK electrico (bancos 0/8/16/24 -> ADC 0-3)", .loopb = 1 },
+  { .name = "LOOPBACK electrico (par e impar de cada banco -> ADC)", .loopb = 1 },
   // BARRIDO DE FRECUENCIA: tampoco suena para nadie. Emite un tono por canal de
   // cada banco y lo detecta coherentemente en las ocho entradas, punto por punto
   // de 20 Hz a 20 kHz. Con el cable de J13 mide la cadena DAC → ADC SIN
@@ -1605,16 +1605,41 @@ int main(void)
    * su propia causa y no la heredada.
    *
    * Qué separa cada hipótesis:
-   *   POR       la alimentación llegó a CERO — corte de luz, o se desenchufó.
-   *   BOR sin POR  el riel se hundió bajo el umbral pero no llegó a cero:
-   *             es la firma de la falla #2 de ds11_errata.md.
+   *   POR       se cortó la alimentación, O el riel se hundió. Ver el aviso.
    *   PIN       NRST — el ST-Link o el pulsador.
-   *   IWDG/WWDG el firmware se colgó.
    *   SFT       reinicio por software (el nuestro, tras un OTA).
+   *   LPWR      salida ilegal de un modo de bajo consumo.
    *
    * El orden del decodificador NO es arbitrario: un POR deja además PIN y BOR
    * en alto, y los watchdogs dejan PIN. Se pregunta de la causa más específica
-   * a la más genérica, y por eso PIN queda al final. */
+   * a la más genérica, y por eso PIN queda al final.
+   *
+   * ⚠️ POR y BOR NO SE DISTINGUEN EN ESTA PLACA, y conviene saberlo antes de
+   * usar este dato para decidir nada.
+   *
+   * La primera versión de esto prometía separar "corte de luz" de "hundimiento
+   * del riel" (la falla #2 de ds11_errata.md) mirando BOR sin POR. No funciona:
+   * el umbral del brown-out sale del option byte BOR_LEV, cuyo valor de fábrica
+   * deja el BOR APAGADO —el nivel efectivo queda en el del PDR, ~1,6 V— y este
+   * proyecto NO programa option bytes a propósito (el bootloader propio de
+   * ota.c vive sin tocarlos). Con BOR apagado, cualquier hundimiento capaz de
+   * resetear el micro cruza también el PDR y levanta PORRSTF, así que la rama
+   * de BOR nunca se alcanza.
+   *
+   * Para que la distinción exista habría que programar BOR_LEV en nivel 2 o 3
+   * (~2,4-2,7 V) una vez por placa. Es una decisión aparte: tocar option bytes
+   * en una placa que arranca desde un bootloader propio merece su propia
+   * verificación, no un efecto secundario de un cambio de diagnóstico.
+   *
+   * Mientras tanto el tag sigue valiendo para lo que SÍ separa —PIN, SFT y
+   * LPWR contra todo lo demás—, que ya es bastante más de lo que había.
+   *
+   * IWDG/WWDG están en el decodificador pero HOY SON RAMAS MUERTAS: no se
+   * arranca ningún watchdog en todo el firmware. Un cuelgue no produce reset ni
+   * deja rastro. Se dejan porque el día que se habilite el IWDG (su patada
+   * entra natural en el main loop) el decodificador ya está listo, pero
+   * mientras tanto "el firmware se colgó" es una hipótesis que este dato NO
+   * puede descartar. */
   reset_rsr = RCC->RSR;
   RCC->RSR |= RCC_RSR_RMVF;
   if      (reset_rsr & RCC_RSR_PORRSTF)   reset_tag = "POR";
@@ -1660,10 +1685,14 @@ int main(void)
   // Startup message
   UART_Print("\r\n=== DS11 Beamforming Audio (32ch) ===\r\n");
   /* Por qué arrancamos. Ver el bloque de reset_rsr arriba. */
+  /* El sufijo dice lo que el dato SOPORTA, no lo que uno querria que dijera:
+   * con BOR_LEV de fabrica, un corte de alimentacion y un hundimiento del riel
+   * levantan los MISMOS flags. Ver el bloque de reset_rsr arriba. */
   snprintf(uart_buf, sizeof(uart_buf), "RESET: %s (RSR=0x%08lX)%s\r\n",
            reset_tag, (unsigned long)reset_rsr,
-           (reset_rsr & RCC_RSR_PORRSTF) ? "  <- la alimentacion llego a cero" :
-           (reset_rsr & RCC_RSR_BORRSTF) ? "  <- hundimiento del riel, NO corte de alimentacion" : "");
+           (reset_rsr & RCC_RSR_PORRSTF)
+             ? "  <- corte de alimentacion O hundimiento del riel (no se separan)"
+             : "");
   UART_Print(uart_buf);
   /* Qué binario es y desde dónde corre. Con actualización por WiFi las dos
    * cosas dejaron de ser obvias: la imagen pudo haberla subido otro. */
@@ -2327,6 +2356,43 @@ int main(void)
         ds_health_t h;
         Health_Run(&h);
         UART_Protocol_SendHealth(&h);
+      }
+
+      /* ===== Lectura del resultado del AUTOFOCUS (CMD_GET_CAL) =====
+       *
+       * Devuelve lo que midio el ULTIMO scan; no dispara uno nuevo. Los 32
+       * canales no entran en una trama, asi que el pedido trae el indice del
+       * primer canal y la respuesta dice cuantos manda: dos tramas alcanzan.
+       *
+       * Se manda `cal_tof_q8` CRUDO. Lo que vale del scan no es el numero
+       * absoluto sino la diferencia entre parlantes, y normalizarlo aca le
+       * sacaria informacion al que despues le reste la geometria (issue #21).
+       *
+       * Un `first` fuera de rango contesta igual, con count=0. Un pedido que se
+       * queda sin respuesta es peor que uno que responde "no hay nada": el
+       * lector no puede distinguir "fuera de rango" de "se colgo el enlace". */
+      uint8_t cal_first;
+      if (UART_Protocol_GetCalReq(&cal_first)) {
+        ds_cal_hdr_t hdr;
+        ds_cal_ch_t  chs[CAL_CHUNK_CH];
+        uint8_t n = 0;
+        if (cal_first < CAL_NUM_CH) {
+          uint8_t left = (uint8_t)(CAL_NUM_CH - cal_first);
+          n = (left > CAL_CHUNK_CH) ? CAL_CHUNK_CH : left;
+          for (uint8_t i = 0; i < n; i++) {
+            uint8_t k = (uint8_t)(cal_first + i);
+            chs[i].tof_q8  = cal_tof_q8[k];
+            chs[i].sign    = cal_meas_sign[k];
+            chs[i].quality = cal_quality[k];
+          }
+        }
+        hdr.first      = cal_first;
+        hdr.count      = n;
+        hdr.n_channels = CAL_NUM_CH;
+        hdr.state      = (uint8_t)cal_state;
+        hdr.progress   = cal_progress;
+        hdr.ok_count   = cal_ok_count;
+        UART_Protocol_SendCalData(&hdr, chs);
       }
 
       if (UART_Protocol_StatusRequested()) {
@@ -4144,7 +4210,7 @@ static void LB_Process(void) {
   }
 
   /* ===== Informe ===== */
-  UART_Print("\r\nLOOPBACK (chirp por ch0/8/16/24) ---------------------------\r\n");
+  UART_Print("\r\nLOOPBACK (chirp por ch0/1/8/9/16/17/24/25) ------------------\r\n");
   /* Fase de los DMA al armar. NDTR cuenta hacia ABAJO desde la cuenta programada,
    * así que la posición de lectura/escritura es (total - NDTR), y dividido por
    * los canales da el índice de muestra dentro del doble buffer (0..479).
@@ -4348,7 +4414,7 @@ static void FS_Report(void) {
   /* Holgados a propósito: el compilador acota %ld por el peor caso de un
    * long, no por el rango real, y con buffers justos avisa por overflow. */
   char dbs[24], taus[32];
-  UART_Print("\r\nBARRIDO DE FRECUENCIA (ch0/8/16/24, tono -6 dBFS) ---------\r\n");
+  UART_Print("\r\nBARRIDO DE FRECUENCIA (par e impar por banco, -6 dBFS) ----\r\n");
   uint8_t live = 0xFF, n_ok = 0;
   /* La referencia de la diafonía es la entrada MÁS FUERTE, no la primera que
    * pasa el umbral.

@@ -55,6 +55,8 @@ static volatile uint8_t  cap_start_flag = 0;
 static volatile uint16_t cap_start_n = 0;
 static volatile uint8_t  cap_read_flag = 0;
 static volatile uint32_t cap_read_off = 0;
+static volatile uint8_t  cal_req_flag = 0;   /* CMD_GET_CAL: la trama la arma el main loop */
+static volatile uint8_t  cal_req_first = 0;
 
 /* IP del ESP32 (CMD_ESP_INFO). Escrita en contexto ISR, leída en el main loop:
  * el NUL se pone último, así un lector nunca ve una cadena sin terminar. */
@@ -286,6 +288,11 @@ static void process_byte(uint8_t byte)
                          | ((uint32_t)rx_payload[2] << 16) | ((uint32_t)rx_payload[3] << 24);
             cap_read_flag = 1;
             rx_frame_count++;
+        } else if (rx_command == CMD_GET_CAL && rx_payload_len == 1) {
+            cal_req_first = rx_payload[0];
+            cal_req_flag = 1;
+            rx_frame_count++;
+            /* Sin ACK: la trama CMD_CAL_DATA es la respuesta, igual que el status */
         } else if (rx_command == CMD_SELFTEST && rx_payload_len == 0) {
             selftest_req_flag = 1;   /* el main loop lee I2C y manda CMD_HEALTH */
             rx_frame_count++;
@@ -645,6 +652,31 @@ void UART_Protocol_SendCapData(uint32_t offset, const uint8_t *data, uint16_t le
     pl[2] = (uint8_t)(offset >> 16);  pl[3] = (uint8_t)(offset >> 24);
     memcpy(&pl[4], data, len);
     send_frame_yielding(CMD_CAP_DATA, pl, (uint16_t)(4 + len));
+}
+
+uint8_t UART_Protocol_GetCalReq(uint8_t *first)
+{
+    if (!cal_req_flag) return 0;
+    cal_req_flag = 0;
+    *first = cal_req_first;
+    return 1;
+}
+
+void UART_Protocol_SendCalData(const ds_cal_hdr_t *hdr, const ds_cal_ch_t *chs)
+{
+    uint8_t pl[PROTO_MAX_PAYLOAD];
+    uint8_t n = hdr->count;
+    if (n > CAL_CHUNK_CH) n = CAL_CHUNK_CH;
+    memcpy(pl, hdr, sizeof(ds_cal_hdr_t));
+    /* Canal por canal y no de un memcpy: ds_cal_ch_t es packed, asi que el
+     * arreglo del llamador ya viene contiguo, pero copiarlo con el tamano
+     * declarado deja el bug de un cambio de struct fuera del alcance. */
+    for (uint8_t i = 0; i < n; i++) {
+        memcpy(&pl[sizeof(ds_cal_hdr_t) + i * sizeof(ds_cal_ch_t)],
+               &chs[i], sizeof(ds_cal_ch_t));
+    }
+    send_frame_yielding(CMD_CAL_DATA, pl,
+                        (uint16_t)(sizeof(ds_cal_hdr_t) + n * sizeof(ds_cal_ch_t)));
 }
 
 void UART_Protocol_SendStatus(const ds_status_t *st)

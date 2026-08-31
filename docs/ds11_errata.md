@@ -148,11 +148,46 @@ RESET: SFT (RSR=0x01460000)                      ← en el banner de arranque
 
 | tag | qué pasó |
 |---|---|
-| **POR** | la alimentación llegó a **cero** — corte de luz, o se desenchufó |
-| **BOR** (sin POR) | el riel se hundió bajo el umbral **sin** llegar a cero — **la firma de esta falla #2** |
+| **POR** | se cortó la alimentación **o** se hundió el riel — ⚠️ **no se separan**, ver abajo |
 | **PIN** | NRST: el ST-Link o el pulsador |
-| **IWDG / WWDG** | el firmware se colgó |
 | **SFT** | reinicio por software (el nuestro, tras un OTA) |
+| **LPWR** | salida ilegal de un modo de bajo consumo |
+| ~~BOR~~ | rama inalcanzable — ver abajo |
+| ~~IWDG / WWDG~~ | ramas muertas: no se arranca ningún watchdog |
+
+> ### 🔴 Corrección del 2026-08-31 — lo que este dato NO resuelve
+>
+> La primera versión de esta sección prometía separar el corte de luz del
+> hundimiento del riel mirando **BOR sin POR**. **No funciona**, y conviene
+> saberlo antes de usarlo para decidir si repoblar C290.
+>
+> El umbral del brown-out sale del option byte `BOR_LEV`, cuyo valor de fábrica
+> deja el BOR **apagado** — el nivel efectivo queda en el del PDR, ~1,6 V. Y
+> este proyecto **no programa option bytes a propósito**: el bootloader propio
+> de `ota.c` vive sin tocarlos. Con BOR apagado, cualquier hundimiento capaz de
+> resetear el micro cruza también el PDR y levanta `PORRSTF`, así que la rama de
+> BOR nunca se alcanza.
+>
+> Peor que inútil: el mensaje decía `<- la alimentacion llego a cero` ante un
+> POR, dándole autoridad impresa a la conclusión equivocada justo en el caso que
+> se quería diagnosticar. Ya está corregido — ahora dice
+> `corte de alimentacion O hundimiento del riel (no se separan)`.
+>
+> **Para que la distinción exista** habría que programar `BOR_LEV` en nivel 2 o
+> 3 (~2,4-2,7 V), una vez por placa. Es una decisión aparte: tocar option bytes
+> en una placa que arranca desde un bootloader propio merece su propia
+> verificación, no un efecto secundario de un cambio de diagnóstico.
+>
+> **Lo que el tag sí separa** —`PIN`, `SFT` y `LPWR` contra todo lo demás— sigue
+> valiendo, y ya es bastante más de lo que había. Para medir la caída del riel,
+> el camino que no depende de nada de esto es el tester en +5VA **mientras**
+> suena (issue #16).
+>
+> **Método**: la tabla original se escribió razonando desde los flags que
+> `RCC_RSR` *tiene*, sin verificar que el hardware los *produzca*. Un flag que
+> existe en el datasheet no es un flag que vaya a levantarse. Lo encontró un
+> code review, no una medición — y es la misma forma de error que
+> `loopback_debug.md` §22.6 y §27.4.
 
 Tres detalles que hacen que esto funcione, y que costaron encontrarlos:
 

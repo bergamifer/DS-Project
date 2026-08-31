@@ -85,6 +85,25 @@
  * trama perdida corre todo lo que sigue y el archivo sale mal sin avisar. */
 #define CAP_CHUNK_BYTES     (PROTO_MAX_PAYLOAD - 4)
 
+/* ===== Resultado del AUTOFOCUS (lectura, no dispara nada) =====
+ *
+ * El scan del AUTOFOCUS mide, parlante por parlante, tiempo de vuelo, polaridad
+ * y calidad de la correlación. Hasta la v11 esos números SÓLO salían por el
+ * puerto serie: para usarlos había que tener el cable enchufado y parsear texto.
+ *
+ * Los 32 canales no entran en una trama (32 × 7 = 224 bytes contra 128 de
+ * payload), así que la lectura va por tramos como la captura: el pedido lleva
+ * el índice del primer canal y la respuesta dice cuántos manda. Dos tramas
+ * cubren los 32.
+ *
+ * NO dispara un scan. Devuelve lo que haya medido el último, y `state` +
+ * `progress` dicen si está a mitad de camino. */
+#define CMD_GET_CAL         0x13    /* payload: uint8 índice del primer canal */
+#define CMD_CAL_DATA        0x14    /* STM32 → ESP32: ds_cal_hdr_t + N×ds_cal_ch_t */
+
+/* Canales por trama. 6 + 16×7 = 118 ≤ PROTO_MAX_PAYLOAD. */
+#define CAL_CHUNK_CH        16
+
 /* ===== Actualización de firmware por WiFi (0x20-0x23) =====
  *
  * Los tres primeros NO se contestan desde el parser: el ACK lo manda el MAIN
@@ -119,7 +138,7 @@
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      10   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      11   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -136,7 +155,12 @@
                                  * es el último que uno flasheó a mano.
                                  * v9: + CMD_SELFTEST/CMD_HEALTH. ds_status_t NO
                                  * cambió — lo que cambió es el repertorio de
-                                 * comandos, que también es contrato. */
+                                 * comandos, que también es contrato.
+                                 * v11: + CMD_GET_CAL/CMD_CAL_DATA — el
+                                 * resultado del AUTOFOCUS deja de vivir sólo en
+                                 * el serie. Es lo que habilita separar el
+                                 * retardo propio de cada parlante del camino
+                                 * geométrico (issue #21). */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -247,6 +271,46 @@ typedef struct __attribute__((packed)) {
 } ds_health_t;
 
 _Static_assert(sizeof(ds_health_t) == 20, "ds_health_t must be 20 bytes");
+
+/**
+ * @brief Cabecera de un tramo del resultado del AUTOFOCUS (CMD_CAL_DATA).
+ *
+ * Va en TODAS las tramas, no sólo en la primera: así cada una se entiende sola
+ * y el lector no tiene que acordarse de lo que vino antes. Son 6 bytes.
+ */
+typedef struct __attribute__((packed)) {
+    uint8_t  first;        /* índice del primer canal de esta trama */
+    uint8_t  count;        /* cuántos canales vienen acá */
+    uint8_t  n_channels;   /* total que recorre el scan (CAL_NUM_CH) */
+    uint8_t  state;        /* cal_state_t: 0 IDLE 1 SETTLE 2 ARM 3 CAPT 4 CORR 5 DONE */
+    uint8_t  progress;     /* parlantes ya medidos */
+    uint8_t  ok_count;     /* de ésos, con calidad ≥ CAL_Q_MIN */
+} ds_cal_hdr_t;
+
+_Static_assert(sizeof(ds_cal_hdr_t) == 6, "ds_cal_hdr_t must be 6 bytes");
+
+/**
+ * @brief Medición de UN parlante (CMD_CAL_DATA).
+ *
+ * `tof_q8` es el dato crudo, sin normalizar: el pico de la correlación en
+ * MUESTRAS Q8 (1/256 de muestra = 81 ns = 28 µm de camino acústico). Se manda
+ * crudo a propósito, porque lo que vale del scan no es el número absoluto sino
+ * la diferencia entre parlantes, y cualquier normalización que haga el firmware
+ * le saca información al que después quiera restarle la geometría.
+ *
+ * Lo que mide mezcla tres cosas —el instante de disparo, el retardo propio del
+ * parlante y el camino hasta el micrófono—, y separarlas es un ajuste por
+ * mínimos cuadrados que se hace afuera. Ver issue #21.
+ */
+typedef struct __attribute__((packed)) {
+    int32_t  tof_q8;       /* pico de correlación, muestras Q8 */
+    int8_t   sign;         /* polaridad medida: +1 / −1 */
+    uint16_t quality;      /* pico/promedio ×10 — ≥100 es una medición sólida */
+} ds_cal_ch_t;
+
+_Static_assert(sizeof(ds_cal_ch_t) == 7, "ds_cal_ch_t must be 7 bytes");
+_Static_assert(sizeof(ds_cal_hdr_t) + CAL_CHUNK_CH * sizeof(ds_cal_ch_t)
+               <= PROTO_MAX_PAYLOAD, "un tramo de calibracion no entra en una trama");
 
 /**
  * @brief Telemetry snapshot (CMD_STATUS response). Little-endian packed —
@@ -498,5 +562,15 @@ void UART_Protocol_SendCapInfo(const ds_cap_info_t *info);
 
 /** @brief Manda CMD_CAP_DATA con un tramo. Sólo desde el main loop. */
 void UART_Protocol_SendCapData(uint32_t offset, const uint8_t *data, uint16_t len);
+
+/**
+ * @brief Poll de un pedido CMD_GET_CAL.
+ * @param first  destino: índice del primer canal pedido.
+ * @return 1 si había pedido (la bandera se baja al leerla).
+ */
+uint8_t UART_Protocol_GetCalReq(uint8_t *first);
+
+/** @brief Manda un tramo CMD_CAL_DATA. Sólo desde el main loop, como SendStatus. */
+void UART_Protocol_SendCalData(const ds_cal_hdr_t *hdr, const ds_cal_ch_t *chs);
 
 #endif /* UART_PROTOCOL_H */
