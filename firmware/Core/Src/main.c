@@ -1910,6 +1910,33 @@ int main(void)
   UART_Print("SAI1_A/B → 4xPCM1690 (32ch TDM8), SAI3_B ← AK5538VN (8ch TDM256)\r\n");
   UART_Print("MODE: ADC monitor (default). K2: monitor -> walker -> RX beam -> TX focus -> AUTOFOCUS\r\n\r\n");
 
+  /* ¿Hay algún modo sin rama en el fill? Un modo que no prende ninguna bandera
+   * cae en el fallback silencioso del final de Fill_Audio_Beamform, y el
+   * síntoma —un modo que no suena— es indistinguible de un cable flojo.
+   *
+   * Se chequea acá, en cada arranque, y no por inspección: agregar un modo a
+   * `ui_states[]` y olvidarse de la bandera es exactamente la clase de error
+   * que este proyecto ya cometió tres veces con la lista de modos. Cuesta 22
+   * iteraciones una vez. */
+  {
+    uint8_t huecos = 0;
+    for (uint8_t k = 0; k < UI_NUM_STATES; k++) {
+      const ui_state_t *u = &ui_states[k];
+      if (u->monitor || u->walker || u->beam || u->af || u->tone ||
+          u->mf || u->mfin || u->loopb || u->fsweep) continue;
+      huecos++;
+      snprintf(uart_buf, sizeof(uart_buf),
+               "⚠ MODO SIN RAMA: %u \"%s\" no prende ninguna — sonaria en silencio\r\n",
+               (unsigned)k, u->name);
+      UART_Print(uart_buf);
+    }
+    if (!huecos) {
+      snprintf(uart_buf, sizeof(uart_buf),
+               "Modos: %u, todos con rama en el fill\r\n", (unsigned)UI_NUM_STATES);
+      UART_Print(uart_buf);
+    }
+  }
+
   // === ADC3 temperature sensor ===
   MX_ADC3_Init();
 
@@ -5804,38 +5831,33 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
     return;
   }
 
-  uint32_t wp = rd + samples;   /* fin de la ventana asignada */
-  uint8_t master = beam_config.mute_global ? 0 : beam_config.master_gain;
-
-  for (uint32_t i = 0; i < samples; i++) {
-    for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
-      uint32_t gch = ch_offset + ch;
-      uint16_t delay = beam_config.delays[gch];
-      if (delay > MAX_DELAY_SAMPLES) delay = MAX_DELAY_SAMPLES;
-
-      // Read from delay line: wp points to next write position,
-      // so the most recent sample is at wp-1. We want sample that is
-      // 'delay' samples old, offset by buffer position.
-      uint32_t read_pos = (wp - delay - samples + i) & DELAY_LINE_MASK;
-      uint32_t src_ch = (gch < 8) ? gch : 0;  // map global ch to ADC ch; clamp to 0-7
-      /* ADC samples are 32-bit (SAI3_B DataSize=32); the DAC path is 24-bit
-       * right-aligned (SAI1/2 DataSize=24 → bits [23:0]). Shift before gain —
-       * also keeps `sample * gain` within int32 range. */
-      int32_t sample = delay_line[src_ch][read_pos] >> 8;
-
-      // Apply per-channel gain (fixed-point: * gain >> 8)
-      uint8_t gain = beam_config.gains[gch];
-      sample = (sample * gain) >> 8;
-
-      // Apply master gain
-      sample = (sample * master) >> 8;
-
-      // Apply per-channel mute
-      if (beam_config.mutes & (1UL << gch)) {
-        sample = 0;
-      }
-
-      buffer[i * AUDIO_CHANNELS + ch] = sample;
+  /* ===== Ningún modo prendió su rama: silencio, y se avisa =====
+   *
+   * Acá vivía un passthrough de bring-up con `src_ch = (gch < 8) ? gch : 0`, o
+   * sea que los canales 8 a 31 leían TODOS la entrada 0 (issue #13). Se
+   * eliminó, y no porque estuviera mal: porque **es inalcanzable**. Las 22
+   * entradas de `ui_states[]` prenden alguna rama, y `UI_ApplyCustomBeam`
+   * siempre prende `beam` o un MULTIFOCUS. Verificado sobre la tabla entera.
+   *
+   * Que fuera inalcanzable era justamente el problema: leído de arriba parecía
+   * describir cómo mapea el instrumento sus 32 salidas —y no describe nada—.
+   * El beamforming real vive en las ramas de arriba: `beam_enabled` hace el
+   * delay-and-sum de los 8 micrófonos, `tx_steer_enabled` proyecta con retardo
+   * fraccional Q8, y `mfocus_in_enabled` lleva cada entrada a su propio punto.
+   *
+   * Queda un fallback que no puede mentir: silencio y un aviso, una sola vez.
+   * Si algún día un modo nuevo se agrega sin rama, se oye silencio y el serie
+   * dice cuál — en vez de escuchar un mapeo inventado y no saberlo. */
+  (void)rd;
+  for (uint32_t i = 0; i < samples * AUDIO_CHANNELS; i++) buffer[i] = 0;
+  if (ch_offset == 0) {
+    static uint8_t warned = 0;
+    if (!warned) {
+      warned = 1;
+      snprintf(uart_buf, sizeof(uart_buf),
+               "MODO SIN RAMA: el modo %u no prende ninguna rama del fill — silencio\r\n",
+               (unsigned)ui_state_idx);
+      UART_Print(uart_buf);
     }
   }
 }
