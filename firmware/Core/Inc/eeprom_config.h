@@ -13,11 +13,15 @@
 #include <stdint.h>
 
 #define EEPROM_CFG_MAGIC       0xD509BEEF
-#define EEPROM_CFG_VERSION     5   /* v2: += master_vol_db; v3: += last_mode;
+#define EEPROM_CFG_VERSION     6   /* v2: += master_vol_db; v3: += last_mode;
                                     * v4: += in_gain_db (ganancia de entrada);
                                     * v5: += la calibración del AUTOFOCUS
                                     * (polaridades + foco medido), que antes se
                                     * perdía en cada reinicio.
+                                    * v6: += autostart + autostart_fails — el
+                                    * arranque autónomo de los amplificadores,
+                                    * para que un nodo sin WiFi no quede mudo
+                                    * (issue #19).
                                     * Un bump descarta lo guardado y vuelve a
                                     * los defaults — es una vez y a propósito:
                                     * leer bytes viejos con layout nuevo daría

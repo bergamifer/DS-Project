@@ -63,6 +63,8 @@ static volatile uint8_t  modes_req_flag = 0; /* CMD_GET_MODES: idem */
  * descartaba el indice fuera de rango en silencio, asi que POST /mode devolvia
  * {"status":"ok"} y no pasaba nada (issue #20). 0 = todavia no lo dijeron. */
 static volatile uint8_t  mode_count_known = 0;
+static volatile uint8_t  autostart_req_flag = 0;
+static volatile uint8_t  autostart_req_on = 0;
 static volatile uint8_t  modes_req_first = 0;
 static volatile uint8_t  cal_req_first = 0;
 
@@ -301,6 +303,11 @@ static void process_byte(uint8_t byte)
                          | ((uint32_t)rx_payload[2] << 16) | ((uint32_t)rx_payload[3] << 24);
             cap_read_flag = 1;
             rx_frame_count++;
+        } else if (rx_command == CMD_SET_AUTOSTART && rx_payload_len == 1) {
+            autostart_req_on = rx_payload[0] ? 1 : 0;
+            autostart_req_flag = 1;
+            rx_frame_count++;
+            send_ack();
         } else if (rx_command == CMD_GET_MODES && rx_payload_len == 1) {
             modes_req_first = rx_payload[0];
             modes_req_flag = 1;
@@ -681,6 +688,14 @@ uint8_t UART_Protocol_GetCalReq(uint8_t *first)
 }
 
 void UART_Protocol_SetModeCount(uint8_t n) { mode_count_known = n; }
+
+uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on)
+{
+    if (!autostart_req_flag) return 0;
+    autostart_req_flag = 0;
+    *on = autostart_req_on;
+    return 1;
+}
 
 uint8_t UART_Protocol_GetModesReq(uint8_t *first)
 {

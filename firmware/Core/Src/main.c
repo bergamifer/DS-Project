@@ -157,6 +157,25 @@ typedef struct {
     int8_t   cal_sign[BEAM_NUM_CHANNELS];   // polaridad medida (+1/−1)
     uint16_t cal_delay_q8[BEAM_NUM_CHANNELS]; // foco medido en el punto del mic
     uint8_t  cal_valid;                     // 1 = hay una calibración guardada
+    /* ===== Arranque autónomo (v6) — issue #19 =====
+     * Los 32 amplificadores arrancan apagados y se encienden por comando. Eso
+     * es una herramienta de diagnóstico que vale la pena (separa "reinicia por
+     * consumo" de "reinicia igual"), pero ata el sonido a que el ESP32 esté
+     * vivo Y EN RED: en una instalación, un nodo que pierde el WiFi queda mudo
+     * toda la función y no hay forma de encenderlo sin ir hasta la placa.
+     *
+     * Con `autostart` en 1 el nodo se enciende solo, sin red y sin nadie. Es
+     * opt-in y se persiste: en el banco sigue arrancando mudo, que es lo que
+     * uno quiere cuando está midiendo.
+     *
+     * `autostart_fails` es el freno. Se INCREMENTA Y SE GUARDA ANTES de
+     * encender, y se limpia recién cuando el nodo lleva un rato estable con los
+     * amps prendidos. Así, si el que reinicia el equipo es el consumo de los
+     * amplificadores, cada intento deja su marca en la EEPROM aunque la
+     * alimentación se caiga en el acto — y tras AUTOSTART_MAX_FAILS el nodo
+     * deja de intentar y espera un comando, en vez de quedar rebotando. */
+    uint8_t  autostart;                     // 1 = encender los amps sin red
+    uint8_t  autostart_fails;               // intentos que no llegaron a estables
 } beam_config_t;
 /* La calibración llevó la config de 108 a 208 bytes. Sin este chequeo, cruzar
  * el techo se manifestaría como "el equipo dejó de recordar los ajustes",
@@ -1043,6 +1062,31 @@ static const uint8_t dac_addrs[4] = {
  * reinicio imposible de diagnosticar. */
 static volatile uint8_t amps_enabled = 0;
 
+/* ===== Arranque autónomo de los amplificadores — issue #19 =====
+ *
+ * 15 s de espera antes de encender: da tiempo a que el pipeline se asiente y a
+ * que alguien que esté en la placa alcance a apagarlo si no era lo que queria.
+ * 60 s con los amps prendidos y sin errores nuevos para declarar el intento
+ * bueno y borrar el contador. Tres intentos: si el consumo de los amplificadores
+ * es lo que reinicia el equipo, tres veces alcanza para saberlo y seguir
+ * intentando solo produce un nodo que rebota toda la noche. */
+#define AUTOSTART_ARM_MS      15000u
+#define AUTOSTART_STABLE_MS   60000u
+#define AUTOSTART_MAX_FAILS   3
+
+typedef enum {
+  AS_OFF = 0,      /* desactivado, o ya se rindió */
+  AS_WAIT,         /* contando los 15 s */
+  AS_SETTLING,     /* amps encendidos, contando los 60 s */
+  AS_DONE,         /* estable: contador limpio */
+  AS_GAVEUP        /* se rindió tras AUTOSTART_MAX_FAILS */
+} autostart_state_t;
+
+static autostart_state_t autostart_state = AS_OFF;
+static uint32_t autostart_t0 = 0;         /* referencia del temporizador */
+static uint32_t autostart_und0 = 0;       /* underruns al armar */
+static uint32_t autostart_sai0 = 0;       /* errores de SAI al armar */
+
 /* Causa del último reset, latcheada en main() antes de que nada la pise.
  *
  * Existe por una pregunta concreta que apareció el 2026-08-27 y que no se pudo
@@ -1293,6 +1337,8 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void Service_Fills(void);
 static void Set_In_Gain(uint8_t db);
 static void Set_Amps(uint8_t on);
+static void Autostart_Tick(void);
+static void Autostart_ManualOverride(uint8_t turning_on);
 static void Config_LoadDefaults(void);
 static void Config_FactoryReset(void);
 static void UART_Print(const char *str);
@@ -2225,6 +2271,27 @@ int main(void)
   amps_enabled = 0;
   UART_Print("PAM8302A: SD LOW — 32 amps APAGADOS. Habilitar con POST /amps {\"on\":true}\r\n");
 
+  /* Arranque autónomo: decide acá, con la config ya cargada de la EEPROM. */
+  if (!beam_config.autostart) {
+    autostart_state = AS_OFF;
+  } else if (beam_config.autostart_fails >= AUTOSTART_MAX_FAILS) {
+    autostart_state = AS_GAVEUP;
+    snprintf(uart_buf, sizeof(uart_buf),
+             "AUTOARRANQUE: SUSPENDIDO tras %u intentos\r\n",
+             (unsigned)beam_config.autostart_fails);
+    UART_Print(uart_buf);
+    UART_Print("  revisa la alimentacion; se rearma con POST /amps o K2 largo\r\n");
+  } else {
+    autostart_state = AS_WAIT;
+    autostart_t0 = HAL_GetTick();
+    snprintf(uart_buf, sizeof(uart_buf),
+             "AUTOARRANQUE: armado — los amps se encienden solos en %lu s "
+             "(intento %u de %u). No hace falta red.\r\n",
+             (unsigned long)(AUTOSTART_ARM_MS / 1000u),
+             (unsigned)(beam_config.autostart_fails + 1), AUTOSTART_MAX_FAILS);
+    UART_Print(uart_buf);
+  }
+
   // === ESP32 UART protocol init ===
   UART_Protocol_Init(&huart4, &huart7);
   /* El parser necesita saber cuántos modos hay para poder rechazar los que no
@@ -2311,6 +2378,8 @@ int main(void)
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
     if (autofocus_enabled) Cal_Process();
 
+    Autostart_Tick();
+
     // ===== LOOPBACK driver — misma disciplina: correlación en trozos =====
     if (lb_enabled) LB_Process();
     if (fs_enabled) FS_Process();
@@ -2374,6 +2443,7 @@ int main(void)
           (DWT->CYCCNT - k2_press_dwt) > (1000UL * 480000UL)) {
         k2_long_done = 1;                          // el soltar ya no cambia modo
         UART_Print("K2 largo: ");
+        Autostart_ManualOverride(!amps_enabled);
         Set_Amps(!amps_enabled);
       }
     }
@@ -2435,7 +2505,31 @@ int main(void)
         }
       }
 
-      if (UART_Protocol_GetAmpsRequest(&amps_on)) Set_Amps(amps_on);
+      {
+        uint8_t as_on;
+        if (UART_Protocol_GetAutostartRequest(&as_on)) {
+          beam_config.autostart = as_on;
+          /* Prender el autoarranque limpia el contador: es un pedido explícito
+           * de "intentá de nuevo", y si no, activarlo en un nodo que ya se había
+           * rendido no haría nada y no habría forma de saber por qué. */
+          if (as_on) beam_config.autostart_fails = 0;
+          Arm_Config_Save();
+          if (as_on && autostart_state == AS_OFF && !amps_enabled) {
+            autostart_state = AS_WAIT;
+            autostart_t0 = HAL_GetTick();
+          } else if (!as_on) {
+            autostart_state = AS_OFF;
+          }
+          snprintf(uart_buf, sizeof(uart_buf), "AUTOARRANQUE: %s\r\n",
+                   as_on ? "activado (se enciende solo al arrancar)" : "desactivado");
+          UART_Print(uart_buf);
+        }
+      }
+
+      if (UART_Protocol_GetAmpsRequest(&amps_on)) {
+        Autostart_ManualOverride(amps_on);
+        Set_Amps(amps_on);
+      }
 
       if (UART_Protocol_GetFactoryResetRequest()) Config_FactoryReset();
 
@@ -2614,7 +2708,9 @@ int main(void)
         st.out_clip_count = out_clip_count;
         st.state_flags = (amps_enabled ? STATE_F_AMPS : 0)
                        | (custom_beam_active ? STATE_F_CUSTOM : 0)
-                       | (beam_config.cal_valid ? STATE_F_CALIB : 0);
+                       | (beam_config.cal_valid ? STATE_F_CALIB : 0)
+                       | (beam_config.autostart ? STATE_F_AUTOSTART : 0)
+                       | (autostart_state == AS_GAVEUP ? STATE_F_AUTO_HELD : 0);
         st.uptime_ms = HAL_GetTick();
         st.cpu_fills_x10 = cpu_fills_x10;
         st.mic_live_mask = mic_live_mask;
@@ -4779,6 +4875,10 @@ static void Config_LoadDefaults(void) {
   for (uint32_t k = 0; k < BEAM_NUM_CHANNELS; k++) beam_config.cal_sign[k] = 1;
   memset(beam_config.cal_delay_q8, 0, sizeof(beam_config.cal_delay_q8));
   beam_config.cal_valid = 0;
+  /* Arranque autónomo APAGADO de fábrica: en el banco uno quiere que el equipo
+   * arranque mudo. Se prende a propósito, para instalación. */
+  beam_config.autostart = 0;
+  beam_config.autostart_fails = 0;
 }
 
 /** @brief Reset de fábrica: defaults + focos + volumen + modo, y persiste.
@@ -4806,6 +4906,93 @@ static void Config_FactoryReset(void) {
  * reinicio viene de la demanda de los 32 amps sobre el buck (que quedó con
  * menos bulk tras remover C290 — ver docs/ds11_errata.md).
  */
+/** @brief Un comando manual de amps manda sobre el autoarranque.
+ *
+ * Dos cosas, y las dos importan:
+ *  - Si el autoarranque estaba contando, se desarma: quien está operando el
+ *    equipo no tiene por qué pelearse con un temporizador.
+ *  - Un "encender" manual limpia el contador de intentos fallidos. Es el
+ *    rearme que promete el mensaje de SUSPENDIDO: si una persona encendió los
+ *    amps a mano y el equipo sobrevivió, la sospecha de que la alimentación no
+ *    aguanta queda desmentida por evidencia.
+ */
+static void Autostart_ManualOverride(uint8_t turning_on)
+{
+  if (autostart_state == AS_WAIT) {
+    autostart_state = AS_OFF;
+    UART_Print("AUTOARRANQUE: desarmado (mando manual)\r\n");
+  }
+  if (turning_on && beam_config.autostart_fails) {
+    beam_config.autostart_fails = 0;
+    Arm_Config_Save();
+    UART_Print("AUTOARRANQUE: contador de intentos rearmado\r\n");
+  }
+}
+
+/** @brief Avanza el arranque autónomo. Se llama desde el main loop.
+ *
+ * Tres estados con sentido: esperar a que el pipeline se asiente, encender, y
+ * esperar a que se demuestre estable antes de dar el intento por bueno.
+ *
+ * El orden importa y no es intercambiable: **el contador se guarda ANTES de
+ * encender**. Si lo que reinicia el equipo es la corriente que piden los 32
+ * amplificadores al arrancar, el reinicio ocurre milisegundos después de subir
+ * SD — y para entonces la marca ya tiene que estar en la EEPROM. Guardarla
+ * después sería no guardarla nunca, justo en el único caso que importa.
+ *
+ * "Sano" es: no aparecieron underruns ni errores de SAI desde que se armó. No
+ * se exige cero absoluto porque el arranque deja algunos: lo que importa es que
+ * no sigan apareciendo. */
+static void Autostart_Tick(void)
+{
+  switch (autostart_state) {
+    case AS_WAIT: {
+      if ((HAL_GetTick() - autostart_t0) < AUTOSTART_ARM_MS) break;
+      if (amps_enabled) {           /* alguien se adelantó: por red o por K2 */
+        autostart_state = AS_OFF;
+        UART_Print("AUTOARRANQUE: ya estaban encendidos, no hago nada\r\n");
+        break;
+      }
+      /* La marca primero. Bloquea ~12 ms cooperativos (EEPROM_Yield sirve los
+       * fills), y todavía no hay nada sonando. */
+      beam_config.autostart_fails++;
+      if (EEPROM_IsAvailable()) {
+        EEPROM_SaveConfig(&beam_config, sizeof(beam_config));
+      }
+      autostart_und0 = underrun_total;
+      autostart_sai0 = sai_error_total;
+      autostart_t0   = HAL_GetTick();
+      autostart_state = AS_SETTLING;
+      UART_Print("AUTOARRANQUE: encendiendo\r\n");
+      Set_Amps(1);
+      break;
+    }
+    case AS_SETTLING: {
+      if (underrun_total != autostart_und0 || sai_error_total != autostart_sai0) {
+        /* Aparecieron errores con los amps prendidos. No se apaga nada —puede
+         * ser ruido y el sonido vale más que la prolijidad—, pero el intento no
+         * se da por bueno: el contador queda como está y el próximo arranque
+         * sabe que este no cerró. */
+        autostart_und0 = underrun_total;
+        autostart_sai0 = sai_error_total;
+        autostart_t0   = HAL_GetTick();
+        break;
+      }
+      if ((HAL_GetTick() - autostart_t0) < AUTOSTART_STABLE_MS) break;
+      autostart_state = AS_DONE;
+      if (beam_config.autostart_fails) {
+        beam_config.autostart_fails = 0;
+        if (EEPROM_IsAvailable()) {
+          EEPROM_SaveConfig(&beam_config, sizeof(beam_config));
+        }
+      }
+      UART_Print("AUTOARRANQUE: estable, contador de intentos en cero\r\n");
+      break;
+    }
+    default: break;
+  }
+}
+
 static void Set_Amps(uint8_t on) {
   if (on) {
     /* "on" SIEMPRE pasa por off primero — no es redundante.

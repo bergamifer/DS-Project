@@ -117,6 +117,7 @@ static void device_identity_init(void)
 // Resultado del AUTOFOCUS. NO dispara un scan: devuelve lo que midio el ultimo.
 // Los 32 canales no entran en una trama (32x7 = 224 contra 128 de payload), asi
 // que se lee por tramos como la captura.
+#define CMD_SET_AUTOSTART 0x18  // payload: uint8 (1=on, 0=off), persistido
 #define CMD_GET_MODES    0x16   // payload: uint8 indice del primer modo
 #define CMD_MODES_DATA   0x17   // STM32 -> ESP32: ds_modes_hdr_t + nombres NUL
 #define CMD_GET_CAL      0x13   // payload: uint8 indice del primer canal
@@ -145,7 +146,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    12
+#define PROTO_VERSION    13
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -245,6 +246,8 @@ _Static_assert(sizeof(ds_status_t) == 85, "ds_status_t debe ser 85 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 #define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
+#define STATE_F_AUTOSTART 0x08 // v13: el nodo enciende los amps solo, sin red
+#define STATE_F_AUTO_HELD 0x10 // v13: ...pero esta suspendido tras N intentos
 
 // Espejo de ui_states[] del STM32 — actualizar junto con el firmware STM32.
 // El indice es lo que viaja en CMD_SET_MODE; el nombre es solo para la UI.
@@ -909,7 +912,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"cpu_fills_pct\":%u.%u,"
             "\"mic_live\":%u,\"cal_prog\":%u,\"cal_ok\":%u,\"cal_saved\":%s,"
             "\"fw_id\":\"%08lX\",\"fw_build\":%lu,\"ota_state\":%u,\"ota_pct\":%u,"
-            "\"dma_phase\":%d,"
+            "\"dma_phase\":%d,\"autostart\":%s,\"autostart_held\":%s,"
             "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             device_id,
@@ -935,6 +938,8 @@ static esp_err_t status_handler(httpd_req_t *req)
             /* Vale sólo si la trama llego completa: un STM32 con firmware
              * viejo manda 83 bytes y este campo seria basura de pila. */
             (last_status_len >= sizeof(ds_status_t)) ? (int)s->dma_phase : -1,
+            (s->state_flags & STATE_F_AUTOSTART) ? "true" : "false",
+            (s->state_flags & STATE_F_AUTO_HELD) ? "true" : "false",
             self, (unsigned)last_status_len,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
@@ -1053,6 +1058,43 @@ static esp_err_t beam_handler(httpd_req_t *req)
 // Los amps arrancan APAGADOS (ver docs/ds11_errata.md): con ellos off corre
 // todo el pipeline en silencio, lo que aisla si un reinicio viene de la
 // demanda de los PAM8302A sobre el buck.
+/** POST /autostart {"on":true|false}
+ *
+ * Con esto en true el nodo enciende sus 32 amplificadores SOLO al arrancar, sin
+ * red y sin que nadie mande nada. Es lo que hace que un nodo que perdio el WiFi
+ * no quede mudo toda la funcion (issue #19).
+ *
+ * Se persiste en la EEPROM del STM32, o sea que sobrevive a un corte de luz —
+ * que es exactamente el caso que hay que cubrir. */
+static esp_err_t autostart_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"bad json\"}");
+        return ESP_OK;
+    }
+    cJSON *jon = cJSON_GetObjectItem(root, "on");
+    uint8_t on = (jon && (cJSON_IsTrue(jon) || jon->valueint)) ? 1 : 0;
+    cJSON_Delete(root);
+
+    int ack = uart_send_and_wait_ack(CMD_SET_AUTOSTART, &on, 1, 500);
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"%s\",\"autostart\":%s}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"), on ? "true" : "false");
+    printf("[ESP32] POST /autostart %s -> %s\n", on ? "ON" : "OFF",
+           ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 static esp_err_t amps_handler(httpd_req_t *req)
 {
     char buf[128];
@@ -1894,6 +1936,18 @@ static const char INDEX_HTML[] =
 "<div class=row><button onclick=setAmps(1)>Encender amps</button>"
 "<button onclick=setAmps(0)>Apagar amps</button>"
 "<span class=val id=ampsv>...</span></div>"
+/* El arranque autonomo va PEGADO a los amps porque es lo mismo visto en el
+ * tiempo: quien decide encenderlos es quien tiene que decidir si se encienden
+ * solos la proxima vez. */
+"<div class=row><label style='font-size:.85em'>"
+"<input type=checkbox id=autos onchange=setAuto(this.checked)> "
+"Encender solos al arrancar</label>"
+"<span class=val id=autosv></span></div>"
+"<div style='font-size:.75em;color:#888;margin-top:4px'>Para instalaci&oacute;n: el "
+"nodo enciende sus amplificadores <b>sin red y sin que nadie mande nada</b>, 15 s "
+"despu&eacute;s de arrancar. Si el equipo se reinicia tres veces seguidas sin "
+"estabilizarse, deja de intentar y avisa &mdash; para no rebotar toda la noche si "
+"lo que falla es la alimentaci&oacute;n.</div>"
 "<div style='font-size:.75em;color:#888;margin-top:6px'>Arrancan apagados. "
 "El estado que se muestra viene de la placa, no de esta p&aacute;gina.</div></div>"
 "<div class=card><h2>Modo</h2><div class=grid id=modes></div></div>"
@@ -2029,6 +2083,8 @@ static const char INDEX_HTML[] =
 "['az','fx','fy','fz'].forEach(id=>{const e=document.getElementById(id);"
 "e.oninput=()=>document.getElementById(id+'v').textContent=e.value+(id=='az'?'\\u00b0':'');});"
 "function setVol(d){fetch('/volume',{method:'POST',body:JSON.stringify({db:d})});}"
+"function setAuto(o){fetch('/autostart',{method:'POST',body:JSON.stringify({on:!!o})})"
+".then(r=>r.json()).then(s=>{autosv.textContent=s.status=='ok'?'':s.status;});}"
 "function setAmps(o){fetch('/amps',{method:'POST',body:JSON.stringify({on:!!o})})"
 ".then(r=>r.json()).then(s=>{ampsv.textContent=s.status=='ok'?(o?'ON':'OFF'):s.status;});}"
 "let volT=0,volTouch=0;"
@@ -2243,6 +2299,11 @@ static const char INDEX_HTML[] =
 /* El estado de los amps y el "custom" vienen del STM32, no de lo que la pagina
  * recuerde haber clickeado: un reboot o el K2 largo lo cambian por afuera. */
 "if(s.amps!=null){ampsv.textContent=s.amps?'ON':'OFF';ampsv.style.color=s.amps?'#6d6':'#888';}"
+/* El "suspendido" se dice fuerte: el caso peligroso no es que este apagado,
+ * es creer que va a encender solo y que no vaya a pasar. */
+"if(s.autostart!=null){autos.checked=s.autostart;"
+"autosv.textContent=s.autostart_held?'SUSPENDIDO':'';"
+"autosv.style.color=s.autostart_held?'#e66':'#888';}"
 "const cm=document.getElementById('custom');"
 "cm.textContent=s.custom?'\u26a0 beam modificado a mano \u2014 el modo marcado no es lo que suena':'';"
 /* Los contadores del STM32 son monotonicos: lo que importa es que CREZCAN
@@ -2334,6 +2395,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/beam",    .method = HTTP_POST, .handler = beam_handler    },
             { .uri = "/volume",  .method = HTTP_POST, .handler = volume_handler  },
             { .uri = "/amps",    .method = HTTP_POST, .handler = amps_handler    },
+            { .uri = "/autostart", .method = HTTP_POST, .handler = autostart_handler },
             { .uri = "/reset",   .method = HTTP_POST, .handler = reset_handler   },
             { .uri = "/ingain",  .method = HTTP_POST, .handler = ingain_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },

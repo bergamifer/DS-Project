@@ -118,6 +118,12 @@
  * la respuesta dice cuantos manda, igual que CMD_GET_CAL.
  *
  * ⚠️ 0x15 NO se puede usar: es CMD_NACK. */
+#define CMD_SET_AUTOSTART   0x18    /* payload: uint8 (1=on, 0=off). Arranque
+                                     * autonomo de los amplificadores: con esto
+                                     * en 1 el nodo se enciende SOLO, sin red y
+                                     * sin nadie. Se persiste. Es lo que evita
+                                     * que un nodo que pierde el WiFi quede mudo
+                                     * toda la funcion (issue #19). */
 #define CMD_GET_MODES       0x16    /* payload: uint8 indice del primer modo */
 #define CMD_MODES_DATA      0x17    /* STM32 → ESP32: ds_modes_hdr_t + nombres
                                      * NUL-terminados, uno detras del otro */
@@ -169,7 +175,7 @@ typedef struct __attribute__((packed)) {
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      12   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      13   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -194,7 +200,11 @@ typedef struct __attribute__((packed)) {
                                  * geométrico (issue #21).
                                  * v12: + CMD_GET_MODES/CMD_MODES_DATA — la
                                  * lista de modos deja de estar copiada a mano
-                                 * en el ESP32 y en la página (issue #20). */
+                                 * en el ESP32 y en la página (issue #20).
+                                 * v13: + CMD_SET_AUTOSTART y los flags
+                                 * STATE_F_AUTOSTART / STATE_F_AUTO_HELD — el
+                                 * nodo puede encender los amplificadores sin
+                                 * red (issue #19). */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -411,6 +421,13 @@ typedef struct __attribute__((packed)) {
  * forma de saber si el equipo arrancó con las polaridades medidas o con las
  * nominales era leer el log de arranque — que se pierde al reiniciar. */
 #define STATE_F_CALIB   0x04
+/* STATE_F_AUTOSTART: el arranque autonomo esta activado en este nodo.
+ * STATE_F_AUTO_HELD: esta activado pero SUSPENDIDO — ya fallo AUTOSTART_MAX_FAILS
+ * veces seguidas y no va a volver a intentar solo. Son dos cosas distintas y la
+ * UI tiene que poder distinguirlas: la primera es "va a sonar solo", la segunda
+ * es "creias que iba a sonar solo y no va a pasar". */
+#define STATE_F_AUTOSTART 0x08
+#define STATE_F_AUTO_HELD 0x10
 
 /* El `uptime_ms` que publicaba /status era el del ESP32, no el del STM32: un
  * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18
@@ -610,6 +627,8 @@ void UART_Protocol_SendCalData(const ds_cal_hdr_t *hdr, const ds_cal_ch_t *chs);
 /** @brief Le dice al parser cuántos modos existen, para que pueda NACKear un
  *         CMD_SET_MODE fuera de rango en vez de ACKearlo y descartarlo. */
 void UART_Protocol_SetModeCount(uint8_t n);
+/** @brief ¿Llegó un CMD_SET_AUTOSTART? Devuelve 1 y el valor pedido. */
+uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on);
 /** @brief ¿Llegó un CMD_GET_MODES? Devuelve 1 y el índice del primer modo. */
 uint8_t UART_Protocol_GetModesReq(uint8_t *first);
 /** @brief Contesta CMD_MODES_DATA. `names` son `hdr->count` cadenas contiguas
