@@ -75,6 +75,26 @@ uint8_t EEPROM_IsAvailable(void);
 eeprom_status_t EEPROM_SaveConfig(const void *config, uint16_t config_size);
 
 /**
+ * @brief Igual que EEPROM_LoadConfig pero exigiendo una versión CONCRETA y un
+ *        tamaño concreto, en vez de los actuales.
+ *
+ * Existe para migrar. Un bump de versión descartaba TODO lo guardado, y entre
+ * eso está la calibración del AUTOFOCUS — que se persiste justamente porque
+ * rehacerla en una instalación, con el micrófono en su lugar, es imposible.
+ * Perderla cada vez que se agrega un campo a la config es un precio que no hay
+ * ninguna razón para pagar: el struct crece SÓLO por el final, así que los bytes
+ * viejos siguen significando lo mismo.
+ *
+ * El registro no guarda su tamaño, así que el llamador tiene que decir cuánto
+ * medía esa versión. Ver `cfg_layouts[]` en main.c.
+ */
+eeprom_status_t EEPROM_LoadConfigAs(void *config, uint16_t config_size,
+                                    uint16_t version);
+
+/** @brief Qué versión hay guardada. EEPROM_ERR_MAGIC si no hay nada. */
+eeprom_status_t EEPROM_PeekVersion(uint16_t *version);
+
+/**
  * @brief Load beamforming config from EEPROM.
  *
  * ⚠️ `config` NO se toca salvo que TODO valide (magic + versión + CRC). Antes

@@ -61,6 +61,9 @@ static inline void wp_enable(void)
 /* ============================================================
  * CRC-16/CCITT (polynomial 0x1021, init 0xFFFF)
  * ============================================================ */
+static eeprom_status_t eeprom_load_impl(void *config, uint16_t config_size,
+                                        uint16_t want_version);
+
 static uint16_t crc16_ccitt(const uint8_t *data, uint16_t len)
 {
     uint16_t crc = 0xFFFF;
@@ -218,7 +221,31 @@ eeprom_status_t EEPROM_SaveConfig(const void *config, uint16_t config_size)
     return EEPROM_OK;
 }
 
+eeprom_status_t EEPROM_PeekVersion(uint16_t *version)
+{
+    uint32_t magic;
+    if (eeprom_read(EEPROM_CFG_BASE_ADDR, (uint8_t*)&magic, 4) != HAL_OK)
+        return EEPROM_ERR_I2C;
+    if (magic != EEPROM_CFG_MAGIC)
+        return EEPROM_ERR_MAGIC;
+    if (eeprom_read(EEPROM_CFG_BASE_ADDR + 4, (uint8_t*)version, 2) != HAL_OK)
+        return EEPROM_ERR_I2C;
+    return EEPROM_OK;
+}
+
+eeprom_status_t EEPROM_LoadConfigAs(void *config, uint16_t config_size,
+                                    uint16_t version)
+{
+    return eeprom_load_impl(config, config_size, version);
+}
+
 eeprom_status_t EEPROM_LoadConfig(void *config, uint16_t config_size)
+{
+    return eeprom_load_impl(config, config_size, EEPROM_CFG_VERSION);
+}
+
+static eeprom_status_t eeprom_load_impl(void *config, uint16_t config_size,
+                                        uint16_t want_version)
 {
     uint16_t addr = EEPROM_CFG_BASE_ADDR;
 
@@ -236,7 +263,7 @@ eeprom_status_t EEPROM_LoadConfig(void *config, uint16_t config_size)
     uint16_t version;
     if (eeprom_read(addr, (uint8_t*)&version, 2) != HAL_OK)
         return EEPROM_ERR_I2C;
-    if (version != EEPROM_CFG_VERSION)
+    if (version != want_version)
         return EEPROM_ERR_VERSION;
     addr += 2;
 

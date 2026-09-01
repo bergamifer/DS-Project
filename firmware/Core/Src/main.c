@@ -181,6 +181,11 @@ typedef struct {
  * el techo se manifestaría como "el equipo dejó de recordar los ajustes",
  * mucho después y lejos del campo que lo causó — el guardado es diferido y
  * falla en silencio salvo por una línea del serie. */
+/* La v6 tiene el MISMO tamaño que la v5: los dos uint8_t nuevos entraron en el
+ * relleno. Si esto deja de valer, la entrada { 5, 208 } de cfg_layouts deja de
+ * ser el tamaño de la v5 y hay que revisarla. */
+_Static_assert(sizeof(beam_config_t) == 208,
+               "cambio el tamano de beam_config_t: revisar cfg_layouts[]");
 _Static_assert(sizeof(beam_config_t) <= EEPROM_CFG_MAX_SIZE,
                "beam_config_t no entra en el buffer de la EEPROM");
 
@@ -1964,6 +1969,62 @@ int main(void)
 
     if (EEPROM_IsAvailable()) {
       eeprom_status_t eep_status = EEPROM_LoadConfig(&beam_config, sizeof(beam_config));
+
+      /* ===== Migración de una config guardada con un layout anterior =====
+       *
+       * Un bump de versión descartaba TODO lo guardado y volvía a los defaults.
+       * Para el volumen y el modo eso es una molestia; para la calibración del
+       * AUTOFOCUS es caro de verdad — se persiste justamente porque rehacerla
+       * en una instalación, con el micrófono en su lugar, no se puede pedir.
+       * Perderla cada vez que se agrega un campo no tiene por qué pasar:
+       * `beam_config_t` crece SÓLO por el final, así que los bytes viejos
+       * siguen significando exactamente lo mismo.
+       *
+       * Se leen con el tamaño que tenía ESA versión (el registro no lo guarda,
+       * de ahí la tabla), se copian sobre los defaults ya cargados, y los campos
+       * nuevos quedan en su default. Después se reescribe con el layout actual,
+       * así la migración pasa una sola vez.
+       *
+       * ⚠️ Al agregar un campo a beam_config_t: subir EEPROM_CFG_VERSION Y
+       * agregar acá la entrada de la versión que queda vieja, con el tamaño que
+       * tenía. Sin eso vuelve a descartar en silencio. */
+      if (eep_status == EEPROM_ERR_VERSION) {
+        /* Los tamaños van como NÚMEROS, no como `sizeof(...) - N`.
+         *
+         * Escribirlos como resta del tamaño actual parece más prolijo y está
+         * mal: `beam_config_t` se alinea a 4, así que los dos `uint8_t` que
+         * agregó la v6 entraron en el relleno que ya existía y **sizeof no
+         * cambió** — 208 en las dos. Un `sizeof - 2` habría leído 206 bytes, con
+         * el CRC en la dirección equivocada, y la migración fallaría siempre
+         * sin decir por qué. Se descubrió probándola, no leyéndola.
+         *
+         * El tamaño de una versión vieja es un hecho histórico y no una función
+         * del struct de hoy; escribirlo como constante es lo único que no se
+         * rompe solo cuando el struct vuelva a crecer. */
+        static const struct { uint16_t ver; uint16_t size; } cfg_layouts[] = {
+          { 5, 208 },   /* hasta la calibración del AUTOFOCUS inclusive */
+        };
+        uint16_t stored = 0;
+        EEPROM_PeekVersion(&stored);
+        for (uint32_t i = 0; i < sizeof(cfg_layouts)/sizeof(cfg_layouts[0]); i++) {
+          if (cfg_layouts[i].ver != stored) continue;
+          if (EEPROM_LoadConfigAs(&beam_config, cfg_layouts[i].size,
+                                  cfg_layouts[i].ver) != EEPROM_OK) break;
+          snprintf(uart_buf, sizeof(uart_buf),
+                   "EEPROM: config v%u migrada a v%u — se conserva lo guardado\r\n",
+                   (unsigned)stored, (unsigned)EEPROM_CFG_VERSION);
+          UART_Print(uart_buf);
+          eeprom_save_pending = 1;      /* reescribir ya con el layout nuevo */
+          eep_status = EEPROM_OK;
+          break;
+        }
+        if (eep_status != EEPROM_OK) {
+          snprintf(uart_buf, sizeof(uart_buf),
+                   "EEPROM: config v%u no se pudo migrar (err %d) — defaults\r\n",
+                   (unsigned)stored, (int)eep_status);
+          UART_Print(uart_buf);
+        }
+      }
       if (eep_status == EEPROM_OK) {
         UART_Print("EEPROM: Config loaded OK\r\n");
         sprintf(uart_buf, "  master_gain=%u mute=%u mutes=0x%08lX\r\n",
