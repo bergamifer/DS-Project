@@ -25,6 +25,42 @@ struct RIRResult {
     let midRT: Float?
 }
 
+// MARK: - buffer compartido con el hilo de audio
+
+/// Lo que graba el tap de AVAudioEngine, protegido por un candado.
+///
+/// Existe como tipo propio y no como un par `var` + `NSLock` sueltos por una
+/// razón concreta: el tap corre en el hilo de audio en tiempo real y el resto
+/// del medidor corre en el MainActor, así que tomar el candado a mano desde los
+/// dos lados es exactamente el patrón que Swift 6 rechaza —`lock()` en contexto
+/// asíncrono es un error, no un aviso—. Con métodos SÍNCRONOS que se encargan
+/// del candado adentro, el llamador async nunca lo toca y el compilador queda
+/// conforme sin que haya que apagar ninguna comprobación.
+///
+/// `@unchecked Sendable` es la afirmación explícita de que la seguridad la da el
+/// candado y no el compilador. Es el lugar correcto para esa afirmación: acá
+/// está, en doce líneas que se pueden auditar de un vistazo.
+private final class RecordBuffer: @unchecked Sendable {
+    private var samples: [Float] = []
+    private let lock = NSLock()
+
+    func reset(capacity: Int) {
+        lock.lock(); defer { lock.unlock() }
+        samples = []
+        samples.reserveCapacity(capacity)
+    }
+
+    func append(_ p: UnsafePointer<Float>, count: Int) {
+        lock.lock(); defer { lock.unlock() }
+        samples.append(contentsOf: UnsafeBufferPointer(start: p, count: count))
+    }
+
+    func take() -> [Float] {
+        lock.lock(); defer { lock.unlock() }
+        return samples
+    }
+}
+
 // MARK: - medidor
 
 @MainActor
@@ -41,13 +77,16 @@ final class RIRMeter: ObservableObject {
 
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
-    private var recorded: [Float] = []
-    private let recLock = NSLock()
+    private let recorded = RecordBuffer()
 
     // parámetros del sweep
     private let sweepT = 3.0        // s
     private let tailT = 1.8         // s de cola para capturar la reverberación
     private let f1 = 60.0           // Hz (el parlante del iPhone no baja de ahí)
+
+    private nonisolated static func schedule(_ b: AVAudioPCMBuffer, on p: AVAudioPlayerNode) {
+        p.scheduleBuffer(b, at: nil, options: [], completionHandler: nil)
+    }
 
     func measure() async {
         state = .running("pidiendo micrófono…")
@@ -85,15 +124,12 @@ final class RIRMeter: ObservableObject {
             }
 
             // --- grabar + reproducir ---
-            recLock.lock(); recorded = []; recorded.reserveCapacity(Int(fs * (sweepT + tailT + 1))); recLock.unlock()
+            recorded.reset(capacity: Int(fs * (sweepT + tailT + 1)))
 
             engine.inputNode.removeTap(onBus: 0)
             engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] pcm, _ in
                 guard let self, let ch = pcm.floatChannelData else { return }
-                let n = Int(pcm.frameLength)
-                self.recLock.lock()
-                self.recorded.append(contentsOf: UnsafeBufferPointer(start: ch[0], count: n))
-                self.recLock.unlock()
+                self.recorded.append(ch[0], count: Int(pcm.frameLength))
             }
 
             if engine.attachedNodes.contains(player) == false { engine.attach(player) }
@@ -102,7 +138,11 @@ final class RIRMeter: ObservableObject {
             try engine.start()
 
             state = .running("silencio — midiendo…")
-            player.scheduleBuffer(buf, at: nil, options: [], completionHandler: nil)
+            /* Se agenda desde un helper síncrono a propósito. La versión async de
+             * scheduleBuffer no vuelve hasta que TERMINA de sonar, y acá hace
+             * falta que vuelva enseguida para poder ir informando el progreso en
+             * el lazo de abajo. */
+            Self.schedule(buf, on: player)
             player.play()
 
             let total = sweepT + tailT
@@ -119,7 +159,7 @@ final class RIRMeter: ObservableObject {
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
 
             state = .running("procesando…")
-            recLock.lock(); let rec = recorded; recLock.unlock()
+            let rec = recorded.take()
             guard rec.count > sweep.count else {
                 state = .failed("Grabación demasiado corta.")
                 return
