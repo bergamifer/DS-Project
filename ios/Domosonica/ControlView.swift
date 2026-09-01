@@ -25,7 +25,8 @@ struct ControlView: View {
                 SectionLabel(text: "Modos")
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())],
                           spacing: 10) {
-                    ForEach(DSModes.all) { m in
+                    ForEach(DSModes.grid(names: app.modeNames,
+                                         numModes: app.status?.numModes)) { m in
                         ModeButton(mode: m, active: app.status?.mode == m.id) {
                             app.setMode(m.id)
                         }

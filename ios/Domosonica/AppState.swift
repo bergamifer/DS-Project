@@ -31,6 +31,9 @@ final class AppState: ObservableObject {
 
     // MARK: publicado
     @Published var status: DSStatus?
+    /// Los nombres de modo que informa el nodo (`GET /modes`). Vacío = todavía
+    /// no contestó; la grilla usa `num_modes` del status mientras tanto.
+    @Published var modeNames: [String] = []
     @Published var conn: Conn = .offline
     @Published var lastError: String?
     @Published var sending = false
@@ -77,9 +80,16 @@ final class AppState: ObservableObject {
             status = s
             conn = s.stmOnline ? .online : .bridgeOnly
             lastError = nil
+            /* La lista se pide UNA vez por nodo vivo, no en cada poll: no cambia
+             * salvo que se actualice el firmware, y ese caso lo cubre que se
+             * vacíe al cambiar de nodo o al perder la conexión. */
+            if modeNames.isEmpty, s.stmOnline {
+                modeNames = (try? await client.modes()) ?? []
+            }
         } catch {
             status = nil
             conn = .offline
+            modeNames = []      // al volver, se vuelve a preguntar
         }
     }
 

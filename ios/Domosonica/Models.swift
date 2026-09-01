@@ -70,6 +70,19 @@ struct DSMode: Identifiable {
 }
 
 enum DSModes {
+    /// Etiquetas CURADAS para la app: nombre corto y una línea de contexto.
+    ///
+    /// Esto **ya no es la lista de modos** — la lista la da el nodo (`GET /modes`,
+    /// que sale de `ui_states[]` del STM32; issue #20). Acá quedan sólo los
+    /// nombres cortos y las descripciones, que son información de la app: el
+    /// firmware llama al 17 "BARRIDO VERTICAL 800Hz arriba<->abajo @1m" y en un
+    /// botón entra "Barrido Y".
+    ///
+    /// Un índice sin entrada acá no desaparece: se muestra con el nombre que
+    /// mandó el firmware. Ese es el punto — que la app nunca pueda esconder un
+    /// modo que el equipo tiene.
+    static let curated: [DSMode] = [
+
     /// Espejo de `ui_states[]` (firmware/Core/Src/main.c) y de `MODE_NAMES[]`
     /// (firmware_esp32c3). Es la CUARTA copia de la misma lista, y la
     /// duplicación ya causó un bug silencioso: el modo 21 se agregó al STM32,
@@ -81,7 +94,7 @@ enum DSModes {
     /// tiene más modos de los que la app conoce, aparecen igual con su índice
     /// en vez de desaparecer sin aviso. La solución de fondo es que el
     /// firmware publique la lista — issue #20.
-    static let all: [DSMode] = [
+
         DSMode(id: 0,  short: "Monitor",     detail: "ADC→DAC +30dB",        kind: .monitor),
         DSMode(id: 1,  short: "Walker",      detail: "tono 1s por canal",    kind: .walker),
         DSMode(id: 2,  short: "RX 0°",       detail: "escucha frontal",      kind: .rx),
@@ -107,18 +120,27 @@ enum DSModes {
     ]
     static let autofocusIndex = 11
 
-    /// La grilla que hay que dibujar para un nodo que informa `numModes`.
+    /// La grilla a dibujar: **la lista del nodo**, decorada con lo curado.
     ///
-    /// Si el firmware tiene más modos de los que esta lista conoce, se
-    /// completan con su índice: un modo sin nombre bonito es infinitamente
-    /// mejor que un modo al que no se puede llegar.
-    static func grid(for numModes: Int?) -> [DSMode] {
-        let n = numModes ?? all.count
-        guard n > all.count else { return Array(all.prefix(max(n, 1))) }
-        return all + (all.count..<n).map {
-            DSMode(id: $0, short: "Modo \($0)",
-                   detail: "el firmware lo tiene, la app todavía no", kind: .diag)
+    /// - `names`: lo que devolvió `GET /modes`. Manda esto.
+    /// - `numModes`: respaldo si `/modes` todavía no contestó — el `/status` ya
+    ///   trae el número, así que al menos la cantidad de botones es correcta.
+    ///
+    /// Cuando no hay nombre curado se usa el del firmware, acortado. Feo pero
+    /// alcanzable, que es lo único que no se negocia.
+    static func grid(names: [String], numModes: Int? = nil) -> [DSMode] {
+        let n = names.isEmpty ? (numModes ?? curated.count) : names.count
+        return (0..<max(n, 1)).map { i in
+            if i < curated.count { return curated[i] }
+            let raw = i < names.count ? names[i] : "Modo \(i)"
+            return DSMode(id: i, short: shorten(raw), detail: raw, kind: .diag)
         }
+    }
+
+    /// El firmware nombra para el cable serie, no para un botón. 14 caracteres
+    /// es lo que entra sin que la grilla se rompa.
+    private static func shorten(_ s: String) -> String {
+        s.count <= 14 ? s : String(s.prefix(13)) + "…"
     }
 }
 

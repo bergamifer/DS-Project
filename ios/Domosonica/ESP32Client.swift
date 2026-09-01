@@ -42,6 +42,20 @@ struct ESP32Client {
         return try Self.decoder.decode(DSStatus.self, from: data)
     }
 
+    /// GET /modes — la lista de modos **del nodo**, que sale de `ui_states[]` del STM32.
+    ///
+    /// Existe para que la app deje de llevar su propia copia. Tener una lista
+    /// escrita a mano acá ya costó caro tres veces en el firmware: un modo nuevo
+    /// quedaba sin botón, o con botón pero inalcanzable, y sin ningún error
+    /// visible. La app no tiene por qué repetir esa historia.
+    func modes() async throws -> [String] {
+        let (data, _) = try await session.data(from: base.appendingPathComponent("modes"))
+        struct R: Decodable { let ok: Bool; let modes: [String]? }
+        let r = try JSONDecoder().decode(R.self, from: data)
+        guard r.ok, let m = r.modes else { return [] }
+        return m
+    }
+
     /// POST /mode {"mode": idx} — el ESP32 reenvía CMD_SET_MODE por UART y espera ACK.
     func setMode(_ idx: Int) async throws -> AckResponse {
         try await post(path: "mode", body: ["mode": idx])
