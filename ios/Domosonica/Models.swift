@@ -43,6 +43,12 @@ struct DSStatus: Decodable, Equatable {
     let calSaved: Bool?
     let adcOvf: Int?
     let outClip: Int?
+    /// El nodo enciende sus amplificadores solo al arrancar, sin red.
+    let autostart: Bool?
+    /// ...pero está SUSPENDIDO: ya falló tres veces y no va a volver a intentar.
+    /// Es el estado peligroso, y por eso viaja separado: "apagado" se ve venir,
+    /// "creías que iba a encender solo y no va a pasar" no.
+    let autostartHeld: Bool?
 
     struct Focus: Decodable, Equatable {
         let fx: Int; let fy: Int; let fz: Int   // mm, marco del oyente

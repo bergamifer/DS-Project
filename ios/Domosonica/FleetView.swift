@@ -226,8 +226,19 @@ private struct NodeRow: View {
                     if let u = s.stm32UptimeMs { metric("uptime", uptime(u)) }
                     Spacer()
                 }
-                if let fw = s.fwId {
-                    Text("fw \(fw)").font(Theme.mono(9)).foregroundStyle(Theme.muted)
+                HStack(spacing: 8) {
+                    if let fw = s.fwId {
+                        Text("fw \(fw)").font(Theme.mono(9)).foregroundStyle(Theme.muted)
+                    }
+                    /* Sólo se dice algo cuando hay algo que decir. "Arranca
+                     * solo" en verde es información; repetirlo en los quince
+                     * nodos es ruido, así que el caso normal no imprime nada. */
+                    if s.autostartHeld == true {
+                        Text("AUTOARRANQUE SUSPENDIDO")
+                            .font(Theme.mono(9)).foregroundStyle(Theme.alert)
+                    } else if s.autostart == true {
+                        Text("arranca solo").font(Theme.mono(9)).foregroundStyle(Theme.wave)
+                    }
                 }
             } else if let e = state.lastError {
                 Text(e).font(Theme.mono(10)).foregroundStyle(Theme.alert)

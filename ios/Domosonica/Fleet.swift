@@ -120,6 +120,13 @@ final class FleetController: ObservableObject {
         if let a = s.amps, let b = r.amps, a != b { d.append(a ? "amps ON" : "amps OFF") }
         if let a = s.fwId, let b = r.fwId, a != b { d.append("firmware \(a)") }
         if let a = s.numModes, let b = r.numModes, a != b { d.append("\(a) modos") }
+        /* El autoarranque es una divergencia de FLOTA, no de un nodo: en una
+         * instalación lo que importa es que los quince vuelvan solos después de
+         * un corte de luz. Uno que no lo tenga se descubre recién al próximo
+         * corte, que es el peor momento. */
+        if let a = s.autostart, let b = r.autostart, a != b {
+            d.append(a ? "arranca solo" : "NO arranca solo")
+        }
         return d
     }
 
