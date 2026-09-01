@@ -56,6 +56,14 @@ static volatile uint16_t cap_start_n = 0;
 static volatile uint8_t  cap_read_flag = 0;
 static volatile uint32_t cap_read_off = 0;
 static volatile uint8_t  cal_req_flag = 0;   /* CMD_GET_CAL: la trama la arma el main loop */
+static volatile uint8_t  modes_req_flag = 0; /* CMD_GET_MODES: idem */
+/* Cuantos modos existen de verdad. Lo dice la capa de aplicacion al arrancar
+ * (UART_Protocol_SetModeCount) porque ui_states[] vive en main.c. Sirve para NO
+ * ACKear un modo que no existe: el parser ACKeaba siempre y el main loop
+ * descartaba el indice fuera de rango en silencio, asi que POST /mode devolvia
+ * {"status":"ok"} y no pasaba nada (issue #20). 0 = todavia no lo dijeron. */
+static volatile uint8_t  mode_count_known = 0;
+static volatile uint8_t  modes_req_first = 0;
 static volatile uint8_t  cal_req_first = 0;
 
 /* IP del ESP32 (CMD_ESP_INFO). Escrita en contexto ISR, leída en el main loop:
@@ -268,10 +276,15 @@ static void process_byte(uint8_t byte)
              * Frame activity is visible via rx_frame_count in the heartbeat. */
             send_ack();
         } else if (rx_command == CMD_SET_MODE && rx_payload_len == 1) {
-            mode_req_idx = rx_payload[0];
-            mode_req_flag = 1;
-            rx_frame_count++;
-            send_ack();
+            if (mode_count_known && rx_payload[0] >= mode_count_known) {
+                rx_frame_count++;
+                send_nack();          /* un modo que no existe se dice, no se calla */
+            } else {
+                mode_req_idx = rx_payload[0];
+                mode_req_flag = 1;
+                rx_frame_count++;
+                send_ack();
+            }
         } else if (rx_command == CMD_SET_BEAM && rx_payload_len == sizeof(ds_beam_req_t)) {
             memcpy(&beam_req, rx_payload, sizeof(ds_beam_req_t));
             beam_req_flag = 1;
@@ -288,6 +301,11 @@ static void process_byte(uint8_t byte)
                          | ((uint32_t)rx_payload[2] << 16) | ((uint32_t)rx_payload[3] << 24);
             cap_read_flag = 1;
             rx_frame_count++;
+        } else if (rx_command == CMD_GET_MODES && rx_payload_len == 1) {
+            modes_req_first = rx_payload[0];
+            modes_req_flag = 1;
+            rx_frame_count++;
+            /* Sin ACK: la trama CMD_MODES_DATA es la respuesta, igual que el status */
         } else if (rx_command == CMD_GET_CAL && rx_payload_len == 1) {
             cal_req_first = rx_payload[0];
             cal_req_flag = 1;
@@ -660,6 +678,28 @@ uint8_t UART_Protocol_GetCalReq(uint8_t *first)
     cal_req_flag = 0;
     *first = cal_req_first;
     return 1;
+}
+
+void UART_Protocol_SetModeCount(uint8_t n) { mode_count_known = n; }
+
+uint8_t UART_Protocol_GetModesReq(uint8_t *first)
+{
+    if (!modes_req_flag) return 0;
+    modes_req_flag = 0;
+    *first = modes_req_first;
+    return 1;
+}
+
+void UART_Protocol_SendModesData(const ds_modes_hdr_t *hdr, const char *names)
+{
+    uint8_t pl[PROTO_MAX_PAYLOAD];
+    uint16_t n = hdr->bytes;
+    if (n > PROTO_MAX_PAYLOAD - sizeof(ds_modes_hdr_t))
+        n = PROTO_MAX_PAYLOAD - sizeof(ds_modes_hdr_t);
+    memcpy(pl, hdr, sizeof(ds_modes_hdr_t));
+    if (n) memcpy(&pl[sizeof(ds_modes_hdr_t)], names, n);
+    send_frame_yielding(CMD_MODES_DATA, pl,
+                        (uint16_t)(sizeof(ds_modes_hdr_t) + n));
 }
 
 void UART_Protocol_SendCalData(const ds_cal_hdr_t *hdr, const ds_cal_ch_t *chs)

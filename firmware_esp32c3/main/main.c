@@ -117,6 +117,8 @@ static void device_identity_init(void)
 // Resultado del AUTOFOCUS. NO dispara un scan: devuelve lo que midio el ultimo.
 // Los 32 canales no entran en una trama (32x7 = 224 contra 128 de payload), asi
 // que se lee por tramos como la captura.
+#define CMD_GET_MODES    0x16   // payload: uint8 indice del primer modo
+#define CMD_MODES_DATA   0x17   // STM32 -> ESP32: ds_modes_hdr_t + nombres NUL
 #define CMD_GET_CAL      0x13   // payload: uint8 indice del primer canal
 #define CMD_CAL_DATA     0x14   // STM32 -> ESP32: ds_cal_hdr_t + N x ds_cal_ch_t
 #define CAL_CHUNK_CH     16
@@ -143,7 +145,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    11
+#define PROTO_VERSION    12
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -246,41 +248,45 @@ _Static_assert(sizeof(ds_status_t) == 85, "ds_status_t debe ser 85 bytes");
 
 // Espejo de ui_states[] del STM32 — actualizar junto con el firmware STM32.
 // El indice es lo que viaja en CMD_SET_MODE; el nombre es solo para la UI.
-/* ⚠️ ESTA LISTA ESPEJA ui_states[] DEL STM32 Y HAY QUE MANTENERLAS IGUALES.
+/* ===== La lista de modos ya NO se copia: se le pregunta al STM32 =====
  *
- * No es sólo cosmético: POST /mode valida el índice contra NUM_MODES de ACÁ
- * (ver mode_handler), así que un modo que exista en el STM32 y falte acá
- * queda inalcanzable por HTTP — y el síntoma es mudo, porque /status informa
- * `num_modes` del STM32, o sea que la API dice tener más modos de los que
- * acepta. Pasó el 2026-08-28 al agregar el modo de tono fijo: el STM32
- * informaba 22 y el ESP32 rechazaba el 21 sin decir por qué.
+ * Aca vivia MODE_NAMES[], un espejo a mano de ui_states[] del STM32, y la pagina
+ * web tenia un tercer espejo propio. No era cosmetico: POST /mode validaba el
+ * indice contra ESTA copia, asi que un modo agregado en el STM32 y olvidado aca
+ * quedaba inalcanzable por HTTP — y el sintoma era mudo, porque /status informa
+ * el num_modes del STM32 y la API decia tener mas modos de los que aceptaba.
+ * Paso dos veces (issue #20): la ultima al agregar el TONO FIJO, con el STM32
+ * informando 22 y el ESP32 rechazando el 21 sin decir por que.
  *
- * Al agregar un modo en `ui_states[]`, agregarlo también acá. */
-static const char *MODE_NAMES[] = {
-    "ADC monitor",
-    "Channel walker (1s/ch)",
-    "RX beam az=0 (broadside)",
-    "RX beam az=+30",
-    "RX beam az=-30",
-    "RX beam az=+60",
-    "RX beam az=-60",
-    "TX 2k ondulante LEJOS 2m",
-    "TX 2k ondulante izq 0.5m @1m",
-    "TX 2k ondulante der 0.5m @1m",
-    "TX 2k ondulante CERCA 0.3m",
-    "AUTOFOCUS scan (mic->c0)",
-    "TX 2k ondulante centro @1m",
-    "TX 1k ondulante centro @1m (spot 2x)",
-    "MULTIFOCUS 4 tonos @1m",
-    "MULTIFOCUS 8 entradas @1m",
-    "TX 2k BARRIDO izq<->der @1m",
-    "BARRIDO VERTICAL 800Hz arriba<->abajo @1m",
-    "TX foco CALIBRADO (AUTOFOCUS guardado)",
-    "LOOPBACK electrico (par e impar de cada banco -> ADC)",
-    "BARRIDO DE FRECUENCIA por el lazo (20 Hz - 20 kHz)",
-    "TONO FIJO 500 Hz por el lazo (medicion con tester)",
-};
-#define NUM_MODES (sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]))
+ * Ahora hay una sola fuente. La cache se llena la primera vez que alguien
+ * pregunta y sobrevive hasta el reinicio; si el STM32 no contesta se queda
+ * vacia y se vuelve a intentar en el pedido siguiente, que es lo que hay que
+ * hacer cuando el otro chip todavia esta arrancando. */
+#define MAX_MODES        40
+#define MODE_NAME_MAX    64
+
+typedef struct __attribute__((packed)) {
+    uint8_t first, count, total, bytes;
+} ds_modes_hdr_t;
+
+static char        modes_store[MAX_MODES * 32];       // nombres, uno tras otro
+static const char *modes_name[MAX_MODES];
+static uint8_t     modes_count = 0;                   // 0 = cache vacia
+static ds_modes_hdr_t    last_modes_hdr;
+static uint8_t           last_modes_buf[PROTO_MAX_PAYLOAD];
+static uint16_t          last_modes_len = 0;
+static SemaphoreHandle_t modes_sem;
+
+/** Llena la cache si hace falta. Definida mas abajo, donde estan los pedidos. */
+static bool modes_ensure(void);
+
+/** Nombre de un modo, o "?" si la cache no lo tiene. Nunca devuelve NULL: se usa
+ *  dentro de un %s de JSON y un NULL ahi es una pagina rota, no un dato faltante. */
+static const char *mode_name_of(int idx)
+{
+    if (idx < 0 || idx >= modes_count || !modes_name[idx]) return "?";
+    return modes_name[idx];
+}
 
 // Sincronizacion request/response con el STM32
 static SemaphoreHandle_t ack_sem;      // ACK/NACK recibido
@@ -465,6 +471,22 @@ static bool frame_feed(uint8_t b)
                 last_cap_len = (uint16_t)(fr_len - 4);
                 if (last_cap_len) memcpy(last_cap_data, &fr_payload[4], last_cap_len);
                 xSemaphoreGive(cap_data_sem);
+            }
+        } else if (fr_cmd == CMD_MODES_DATA && fr_len >= sizeof(ds_modes_hdr_t) &&
+                   fr_len <= PROTO_MAX_PAYLOAD) {
+            uint8_t x = 0;
+            for (uint16_t i = 0; i < fr_len; i++) x ^= fr_payload[i];
+            if (x == fr_cksum) {
+                memcpy(&last_modes_hdr, fr_payload, sizeof(ds_modes_hdr_t));
+                last_modes_len = (uint16_t)(fr_len - sizeof(ds_modes_hdr_t));
+                /* El largo real manda sobre lo que dice la cabecera: una trama
+                 * truncada con `bytes` alto haria leer basura del buffer. */
+                if (last_modes_hdr.bytes > last_modes_len)
+                    last_modes_hdr.bytes = (uint8_t)last_modes_len;
+                if (last_modes_len)
+                    memcpy(last_modes_buf, &fr_payload[sizeof(ds_modes_hdr_t)],
+                           last_modes_len);
+                xSemaphoreGive(modes_sem);
             }
         } else if (fr_cmd == CMD_CAL_DATA && fr_len >= sizeof(ds_cal_hdr_t) &&
                    fr_len <= PROTO_MAX_PAYLOAD) {
@@ -874,8 +896,8 @@ static esp_err_t status_handler(httpd_req_t *req)
      * espera. Sigue entrando en el poll de 1 s de la pagina. */
     if (xSemaphoreTake(status_sem, 800 / portTICK_PERIOD_MS) == pdTRUE) {
         const ds_status_t *s = &last_status;
-        const char *mname = (s->mode_idx < NUM_MODES)
-                          ? MODE_NAMES[s->mode_idx] : "?";
+        modes_ensure();
+        const char *mname = mode_name_of(s->mode_idx);
         snprintf(buf, sizeof(buf),
             "{\"stm32\":\"ok\",\"device_id\":\"%s\","
             "\"proto_ver\":%u,\"mode\":%u,\"mode_name\":\"%s\",\"num_modes\":%u,"
@@ -945,18 +967,23 @@ static esp_err_t mode_handler(httpd_req_t *req)
     if (root) cJSON_Delete(root);
 
     char resp[192];
-    if (idx < 0 || idx >= (int)NUM_MODES) {
+    /* El limite sale de la cache, que sale del STM32. Si la cache no se pudo
+     * llenar NO se inventa un limite: se manda igual y decide el STM32, que es
+     * el unico que sabe. Desde la v12 contesta NACK a un modo que no existe, asi
+     * que un indice de mas se ve como "nack" y no como un "ok" que no hace nada. */
+    bool have = modes_ensure();
+    if (idx < 0 || (have && idx >= (int)modes_count)) {
         snprintf(resp, sizeof(resp),
                  "{\"status\":\"error\",\"message\":\"mode 0-%d\"}",
-                 (int)NUM_MODES - 1);
+                 (int)modes_count - 1);
     } else {
         uint8_t payload = (uint8_t)idx;
         int ack = uart_send_and_wait_ack(CMD_SET_MODE, &payload, 1, 300);
         snprintf(resp, sizeof(resp),
                  "{\"status\":\"%s\",\"mode\":%d,\"mode_name\":\"%s\"}",
                  ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"),
-                 idx, MODE_NAMES[idx]);
-        printf("[ESP32] POST /mode %d (%s) -> %s\n", idx, MODE_NAMES[idx],
+                 idx, mode_name_of(idx));
+        printf("[ESP32] POST /mode %d (%s) -> %s\n", idx, mode_name_of(idx),
                ack == 1 ? "ACK" : "sin ACK");
     }
     httpd_resp_set_type(req, "application/json");
@@ -1274,6 +1301,82 @@ static int hchk(char *o, size_t n, int *first, const char *name, int st,
  * despues le reste la geometria. La conversion a microsegundos se hace afuera:
  *     us = tof_q8 / 256 / 48000 * 1e6
  */
+/** @brief Llena la cache de nombres de modo preguntandole al STM32.
+ *
+ * Idempotente: si ya esta llena no hace nada. Devuelve true si quedo utilizable.
+ *
+ * Corta por tres lados —tramo vacio, cobertura completa, o tope del arreglo— y
+ * no por "hasta que total sea multiplo del tramo". Un `count == 0` con modos
+ * pendientes significa que un nombre no entra en una trama; se corta igual, y la
+ * cache queda con lo que se pudo, en vez de pedir el mismo indice para siempre.
+ */
+static bool modes_ensure(void)
+{
+    if (modes_count) return true;
+
+    uint16_t used = 0;
+    uint8_t  n = 0;
+    uint8_t  first = 0;
+
+    for (int guard = 0; guard < MAX_MODES; guard++) {
+        xSemaphoreTake(modes_sem, 0);               // drenar respuesta vieja
+        uart_send_frame(CMD_GET_MODES, &first, 1);
+        if (xSemaphoreTake(modes_sem, 800 / portTICK_PERIOD_MS) != pdTRUE) {
+            return false;                            // el STM32 no contesto
+        }
+        ds_modes_hdr_t h = last_modes_hdr;
+        if (h.count == 0) break;
+
+        for (uint8_t i = 0, off = 0; i < h.count && n < MAX_MODES; i++) {
+            const char *src = (const char *)&last_modes_buf[off];
+            /* Largo acotado al tramo: si el STM32 mandara un nombre sin NUL,
+             * strlen se saldria del buffer. */
+            size_t len = strnlen(src, (size_t)(h.bytes - off));
+            if (off + len >= h.bytes && src[len] != '\0') break;   // truncado
+            if (used + len + 1 > sizeof(modes_store)) break;
+            memcpy(&modes_store[used], src, len);
+            modes_store[used + len] = '\0';
+            modes_name[n++] = &modes_store[used];
+            used += (uint16_t)(len + 1);
+            off  += (uint8_t)(len + 1);
+        }
+
+        first = (uint8_t)(h.first + h.count);
+        if (first >= h.total || n >= MAX_MODES) break;
+    }
+
+    modes_count = n;
+    return n > 0;
+}
+
+/** GET /modes — la lista, tal como la informa el STM32.
+ *
+ * Existe para que la pagina web y la app no tengan que llevar su propia copia:
+ * era el tercer espejo de ui_states[] y el que mas seguido quedaba viejo. */
+static esp_err_t modes_handler(httpd_req_t *req)
+{
+    char buf[2048];
+    int  p = 0;
+    httpd_resp_set_type(req, "application/json");
+
+    if (!modes_ensure()) {
+        p = snprintf(buf, sizeof(buf),
+                     "{\"ok\":false,\"message\":\"el STM32 no contesto la lista de modos\"}");
+        httpd_resp_send(req, buf, p);
+        return ESP_OK;
+    }
+
+    p += snprintf(buf + p, sizeof(buf) - p, "{\"ok\":true,\"modes\":[");
+    for (int i = 0; i < modes_count; i++) {
+        p += snprintf(buf + p, sizeof(buf) - p, "%s\"%s\"", i ? "," : "",
+                      mode_name_of(i));
+        if (p >= (int)sizeof(buf) - 8) break;
+    }
+    p += snprintf(buf + p, sizeof(buf) - p, "]}");
+    httpd_resp_send(req, buf, p);
+    return ESP_OK;
+}
+
 static esp_err_t cal_handler(httpd_req_t *req)
 {
     char buf[3600];
@@ -1902,17 +2005,25 @@ static const char INDEX_HTML[] =
 "nueva no logra conectarse al WiFi en 90 s, vuelve sola a la anterior.</b> "
 "Perd&eacute;s la p&aacute;gina unos 15 s mientras rearranca.</div></div>"
 "<script>"
-/* ⚠️ N y names[] son el ESPEJO de ui_states[] del STM32 y de MODE_NAMES de
- * arriba. Agregar un modo y olvidarse de esta linea deja el modo SIN BOTON: el
- * 17 quedo invisible en la pagina hasta que se noto. Al agregar un modo se
- * tocan TRES lugares. */
-"const N=22,names=['ADC monitor','Walker 1s/ch','RX az=0','RX az=+30','RX az=-30','RX az=+60','RX az=-60','TX 2k ondul. LEJOS 2m','TX 2k ondul. izq','TX 2k ondul. der','TX 2k ondul. cerca','AUTOFOCUS mic','TX 2k ondul. centro','1k ondul. (spot 2x)','MULTIFOCUS 4t','MULTIFOCUS 8in','TX 2k BARRIDO izq-der','BARRIDO VERTICAL 800Hz','TX foco CALIBRADO','LOOPBACK electrico','BARRIDO DE FRECUENCIA','TONO FIJO 500 Hz'];"
+/* Los botones se construyen con la lista que da GET /modes, que sale del STM32.
+ *
+ * Aca habia un tercer espejo de ui_states[] escrito a mano —`const N=22` y un
+ * names[] literal— y era el que mas seguido quedaba viejo: el modo 17 estuvo sin
+ * boton hasta que alguien lo noto, y despues el 20 y el 21 con N=20. Agregar un
+ * modo tocaba TRES lugares; ahora toca uno.
+ *
+ * Si el pedido falla no se dibuja nada y se dice por que, en vez de dejar una
+ * fila de botones vacia que parece un problema de la placa. */
 "const md=document.getElementById('modes');"
+"fetch('/modes').then(r=>r.json()).then(j=>{"
+"if(!j.ok||!j.modes){md.textContent='No pude leer la lista de modos del STM32.';return;}"
 /* El numero adelante: es lo que se usa para referenciar el modo en los comandos
  * (POST /mode {"mode":N}), en los logs y al hablar del equipo. */
-"for(let i=0;i<N;i++){const b=document.createElement('button');"
-"b.innerHTML='<b style=opacity:.55>'+i+'</b> '+names[i];b.id='m'+i;"
-"b.onclick=()=>fetch('/mode',{method:'POST',body:JSON.stringify({mode:i})}).then(poll);md.appendChild(b);}"
+"j.modes.forEach((nm,i)=>{const b=document.createElement('button');"
+"b.innerHTML='<b style=opacity:.55>'+i+'</b> '+nm;b.id='m'+i;"
+"b.onclick=()=>fetch('/mode',{method:'POST',body:JSON.stringify({mode:i})}).then(poll);"
+"md.appendChild(b);});})"
+".catch(()=>{md.textContent='No pude leer la lista de modos.';});"
 "const mt=document.getElementById('meter');"
 "for(let i=0;i<8;i++){const d=document.createElement('div');d.className='bar';d.id='b'+i;mt.appendChild(d);}"
 "['az','fx','fy','fz'].forEach(id=>{const e=document.getElementById(id);"
@@ -2123,7 +2234,10 @@ static const char INDEX_HTML[] =
 "<b>Falta actualizar el ESP32</b> \\u2014 el bot\\u00f3n de abajo.';}}"
 "if(s.stm32!='ok')return;"
 "curMode=s.mode;"
-"for(let i=0;i<N;i++)document.getElementById('m'+i).className=(i==s.mode)?'on':'';"
+/* Se recorren los botones QUE EXISTEN y no un contador fijo: la lista la trae
+ * /modes, asi que la pagina no sabe de antemano cuantos son —que es justamente
+ * el punto—. */
+"md.querySelectorAll('button').forEach((b,i)=>{b.className=(i==s.mode)?'on':'';});"
 "if(s.vol_db!=null&&s.vol_db>-64&&Date.now()-volTouch>3000){vol.value=s.vol_db;volv.textContent=s.vol_db+' dB';}"
 "if(s.ingain_db!=null&&Date.now()-igTouch>3000){ig.value=s.ingain_db;igv.textContent=s.ingain_db+' dB';}"
 /* El estado de los amps y el "custom" vienen del STM32, no de lo que la pagina
@@ -2229,6 +2343,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/health",  .method = HTTP_GET,  .handler = health_handler  },
             { .uri = "/capture", .method = HTTP_GET,  .handler = capture_handler },
             { .uri = "/cal",     .method = HTTP_GET,  .handler = cal_handler     },
+            { .uri = "/modes",   .method = HTTP_GET,  .handler = modes_handler   },
         };
         for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
             esp_err_t e = httpd_register_uri_handler(server, &uris[i]);
@@ -2240,7 +2355,7 @@ static httpd_handle_t start_webserver(void)
         printf("[ESP32] HTTP server listo\n");
         printf("[ESP32]   GET  /         — UI web (control de modos + beam)\n");
         printf("[ESP32]   POST /command  — config JSON → STM32\n");
-        printf("[ESP32]   POST /mode     — {\"mode\":0-%d}\n", (int)NUM_MODES - 1);
+        printf("[ESP32]   POST /mode     — {\"mode\":N} (GET /modes lista los validos)\n");
         printf("[ESP32]   POST /beam     — {\"type\":\"rx\",\"az\":30} | {\"type\":\"tx\",\"fx\":0,\"fy\":0,\"fz\":1000}\n");
         printf("[ESP32]   POST /amps     — {\"on\":true|false} enable de los 32 amps\n");
         printf("[ESP32]   GET  /status   — telemetria real del STM32\n");
@@ -2463,6 +2578,7 @@ void app_main(void)
     cap_info_sem = xSemaphoreCreateBinary();
     cap_data_sem = xSemaphoreCreateBinary();
     cal_sem = xSemaphoreCreateBinary();
+    modes_sem = xSemaphoreCreateBinary();
     status_sem = xSemaphoreCreateBinary();
     uart_tx_mutex = xSemaphoreCreateRecursiveMutex();
 

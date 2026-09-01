@@ -507,6 +507,11 @@ static const ui_state_t ui_states[] = {
     .fsweep = 1, .fhold = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
+/* Un nombre mas largo que un tramo entero no se podria mandar NUNCA: el lazo de
+ * CMD_GET_MODES cortaria sin avanzar y el ESP32 pediria el mismo indice para
+ * siempre. Se verifica en compilacion en vez de descubrirlo colgado. */
+_Static_assert(MODE_NAME_MAX <= PROTO_MAX_PAYLOAD - sizeof(ds_modes_hdr_t),
+               "un nombre de modo no entra en un tramo de CMD_MODES_DATA");
 static volatile uint8_t ui_state_idx = 0;
 
 /* ===== Channel walker state ===== */
@@ -2222,6 +2227,9 @@ int main(void)
 
   // === ESP32 UART protocol init ===
   UART_Protocol_Init(&huart4, &huart7);
+  /* El parser necesita saber cuántos modos hay para poder rechazar los que no
+   * existen. ui_states[] vive acá, así que se lo decimos. */
+  UART_Protocol_SetModeCount((uint8_t)UI_NUM_STATES);
   /* D6 (PB0/TIM3_CH3) brightness will ramp via dimmer — no separate GPIO toggle needed */
 
   // Reset counters + flags (underruns during init are expected)
@@ -2521,6 +2529,36 @@ int main(void)
        * Un `first` fuera de rango contesta igual, con count=0. Un pedido que se
        * queda sin respuesta es peor que uno que responde "no hay nada": el
        * lector no puede distinguir "fuera de rango" de "se colgo el enlace". */
+      /* ===== La lista de modos (CMD_GET_MODES) =====
+       *
+       * `ui_states[]` es la fuente y esto la publica. Antes estaba copiada a
+       * mano en el ESP32 y en la pagina web, y un modo agregado aca y olvidado
+       * alla quedaba inalcanzable por HTTP sin ningun error visible (issue #20).
+       *
+       * Se mandan tantos nombres como entren en la trama y la cabecera dice
+       * cuantos fueron; el que pregunta sigue desde `first + count`. Un `first`
+       * fuera de rango contesta igual con count=0, por el mismo motivo que
+       * CMD_GET_CAL: "no hay nada" tiene que ser distinguible de "se colgo". */
+      uint8_t modes_first;
+      if (UART_Protocol_GetModesReq(&modes_first)) {
+        char names[PROTO_MAX_PAYLOAD - sizeof(ds_modes_hdr_t)];
+        ds_modes_hdr_t mh;
+        uint8_t n = 0;
+        uint16_t used = 0;
+        for (uint8_t k = modes_first; k < UI_NUM_STATES; k++) {
+          size_t len = strlen(ui_states[k].name) + 1;      /* con el NUL */
+          if (used + len > sizeof(names)) break;
+          memcpy(&names[used], ui_states[k].name, len);
+          used += (uint16_t)len;
+          n++;
+        }
+        mh.first = modes_first;
+        mh.count = n;
+        mh.total = (uint8_t)UI_NUM_STATES;
+        mh.bytes = (uint8_t)used;
+        UART_Protocol_SendModesData(&mh, names);
+      }
+
       uint8_t cal_first;
       if (UART_Protocol_GetCalReq(&cal_first)) {
         ds_cal_hdr_t hdr;

@@ -104,6 +104,24 @@
 /* Canales por trama. 6 + 16×7 = 118 ≤ PROTO_MAX_PAYLOAD. */
 #define CAL_CHUNK_CH        16
 
+/* ===== La lista de modos, pedida en vez de copiada =====
+ *
+ * `ui_states[]` del STM32 estaba duplicada a mano en DOS lugares mas: MODE_NAMES
+ * del ESP32 y names[] de la pagina web. No era cosmetico: POST /mode validaba el
+ * indice contra la copia del ESP32, asi que un modo agregado en el STM32 y
+ * olvidado alla quedaba inalcanzable por HTTP — y el sintoma era mudo, porque
+ * /status informaba el num_modes del STM32 y la API decia tener mas modos de los
+ * que aceptaba. Paso dos veces (issue #20).
+ *
+ * Ahora el STM32 es la unica fuente y las otras dos la piden al arrancar. Los
+ * nombres no entran en una trama, asi que el pedido trae el indice del primero y
+ * la respuesta dice cuantos manda, igual que CMD_GET_CAL.
+ *
+ * ⚠️ 0x15 NO se puede usar: es CMD_NACK. */
+#define CMD_GET_MODES       0x16    /* payload: uint8 indice del primer modo */
+#define CMD_MODES_DATA      0x17    /* STM32 → ESP32: ds_modes_hdr_t + nombres
+                                     * NUL-terminados, uno detras del otro */
+
 /* ===== Actualización de firmware por WiFi (0x20-0x23) =====
  *
  * Los tres primeros NO se contestan desde el parser: el ACK lo manda el MAIN
@@ -116,6 +134,7 @@
  * Por eso también los tiempos de espera del ESP32 son distintos por comando:
  * FW_BEGIN puede tardar segundos (borra), FW_DATA milisegundos, FW_END otra vez
  * segundos (relee toda la imagen para el CRC). */
+
 #define CMD_FW_BEGIN        0x20    /* payload: ds_fw_begin_t */
 #define CMD_FW_DATA         0x21    /* payload: [seq:2 LE][datos:1..FW_CHUNK_MAX] */
 #define CMD_FW_END          0x22    /* payload: uint32 LE = CRC32 de la imagen */
@@ -132,13 +151,25 @@
 #define PROTO_MAX_PAYLOAD   128
 /* Los 32 canales de DS11. Era 16 —la mitad del array— así que gains/mutes/delays
  * de las filas 3 y 4 no se podían tocar desde el ESP32. */
+/* Nombre de modo mas largo hoy: "BARRIDO VERTICAL 800Hz arriba<->abajo @1m" =
+ * 41. Se deja margen y se verifica en compilacion del lado del STM32. */
+#define MODE_NAME_MAX       64
+
 #define CFG_PAYLOAD_SIZE    102
 #define CFG_NUM_CHANNELS    32
+
+/** @brief Cabecera de CMD_MODES_DATA. */
+typedef struct __attribute__((packed)) {
+    uint8_t first;   /* indice del primer nombre de este tramo */
+    uint8_t count;   /* cuantos nombres van en este tramo */
+    uint8_t total;   /* cuantos modos tiene el STM32 en total */
+    uint8_t bytes;   /* bytes de nombres que siguen a esta cabecera */
+} ds_modes_hdr_t;
 /* Datos de la imagen en CMD_FW_DATA. Son 126 y no 128 porque los dos primeros
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      11   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      12   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -160,7 +191,10 @@
                                  * resultado del AUTOFOCUS deja de vivir sólo en
                                  * el serie. Es lo que habilita separar el
                                  * retardo propio de cada parlante del camino
-                                 * geométrico (issue #21). */
+                                 * geométrico (issue #21).
+                                 * v12: + CMD_GET_MODES/CMD_MODES_DATA — la
+                                 * lista de modos deja de estar copiada a mano
+                                 * en el ESP32 y en la página (issue #20). */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -572,5 +606,14 @@ uint8_t UART_Protocol_GetCalReq(uint8_t *first);
 
 /** @brief Manda un tramo CMD_CAL_DATA. Sólo desde el main loop, como SendStatus. */
 void UART_Protocol_SendCalData(const ds_cal_hdr_t *hdr, const ds_cal_ch_t *chs);
+
+/** @brief Le dice al parser cuántos modos existen, para que pueda NACKear un
+ *         CMD_SET_MODE fuera de rango en vez de ACKearlo y descartarlo. */
+void UART_Protocol_SetModeCount(uint8_t n);
+/** @brief ¿Llegó un CMD_GET_MODES? Devuelve 1 y el índice del primer modo. */
+uint8_t UART_Protocol_GetModesReq(uint8_t *first);
+/** @brief Contesta CMD_MODES_DATA. `names` son `hdr->count` cadenas contiguas
+ *         NUL-terminadas cuyo largo total es `hdr->bytes`. */
+void UART_Protocol_SendModesData(const ds_modes_hdr_t *hdr, const char *names);
 
 #endif /* UART_PROTOCOL_H */
