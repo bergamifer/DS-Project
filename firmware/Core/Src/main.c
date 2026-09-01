@@ -1098,35 +1098,92 @@ static const uint32_t dimmer_channels[DIMMER_NUM_PHASES] = {
  * desfasados. Justo el error que el modo 19 existe para medir. */
 static volatile uint32_t dbl_fill[4] = {0,0,0,0};
 
-/* ¿El fill lee un bloque FRESCO del ADC, o repite el anterior?
+/* ===== El cursor de lectura: consumir las ventanas EN ORDEN =====
  *
- * Los modos que salen del ADC (0 monitor, 2-6 RX beam) leen la ventana de 240
- * muestras que Process_ADC_Half acaba de escribir: `delay_write_pos - 240`. Si
- * en una pasada hay un fill de TX pero la mitad del RX todavia no llego, el fill
- * vuelve a leer LA MISMA ventana — 5 ms de audio repetidos en los 32 canales. Si
- * llegan dos mitades entre dos fills, una ventana no sale nunca. Repetir y
- * saltear suenan igual: rotura.
+ * Los modos que salen del ADC leen una ventana de 240 muestras del delay_line.
+ * Hasta ahora esa ventana era siempre "la más nueva": `delay_write_pos - 240`.
+ * Eso parece lo correcto —mínima latencia— pero tiene una consecuencia: si el
+ * lazo principal se traba más de una ventana, el RX escribe dos y el fill lee
+ * sólo la última. **La del medio no la lee nadie.** Y si se traba de forma que
+ * el fill corre antes de que llegue la ventana nueva, lee dos veces la misma.
  *
- * Ninguno de los contadores que ya existen lo ve. Un underrun es otra cosa (la
- * bandera puesta y no servida); dbl_fill es otra (dos mitades del MISMO banco en
- * una pasada). Este mide la relacion RX->TX, que es la que gobierna si el audio
- * del ADC sale continuo.
+ * Medido en la DS11 DS_1E77C4: con la fase de los DMA pegada al borde eso pasaba
+ * 25 veces por segundo (12,6% del audio). Alinear a media ventana bajó las
+ * repeticiones a cero y los salteos a ~2/s, pero no los eliminó: el salteo no
+ * viene de la fase sino de que el fill SALTA a la más nueva en vez de avanzar de
+ * a una. Las pasadas dobles (dbl_fill) quedaron en 7 —sólo del arranque—
+ * mientras los salteos seguían subiendo, que es la prueba de que son cosas
+ * distintas.
  *
- * Sano = el avance es exactamente AUDIO_BUFFER_SAMPLES en cada fill. */
-static volatile uint32_t fill_repeat = 0;   /* wp no avanzo: ventana repetida */
-static volatile uint32_t fill_skip   = 0;   /* wp avanzo de mas: ventana perdida */
-static volatile uint32_t fill_fresh  = 0;   /* avance normal */
-static uint32_t dwp_prev = 0;
-static uint8_t  dwp_init = 0;
+ * Con un cursor, un trabón deja al lector una ventana atrás y la recupera en el
+ * siguiente fill doble, sin perder ni repetir nada. RX y TX cuelgan del mismo
+ * reloj (PLL3, SAI1_A genera todo), así que las tasas son exactamente iguales:
+ * el atraso no crece, se absorbe. La latencia sólo sube mientras dura el atraso.
+ *
+ * Los dos guardas existen para que un desastre no se vuelva permanente:
+ * hambre (no llegó la ventana) repite la anterior, y atraso excesivo resincroniza
+ * a la más nueva. Los dos cuentan. Sanos = 0. */
+/* Cuánto atraso del cursor se ABSORBE antes de resincronizar tirando audio.
+ *
+ * El punto de operación normal es 240 (una ventana lista al llegar el fill).
+ * Un hipo del sistema deja 480 o 720. Resincronizar a 480 —lo primero que
+ * probé— tira una ventana cada vez que eso pasa: ~1,2 por segundo, o sea el
+ * chasquido que se quería eliminar. El techo real lo pone el buffer: el
+ * delay_line son 1024 muestras y las lecturas miran hasta 128 hacia atrás
+ * (TX_MAX_DELAY_SAMPLES), así que 720 + 128 = 848 entra con margen y 960 no.
+ *
+ * El precio de absorber es latencia: el cursor queda hasta 3 ventanas (15 ms)
+ * atrás hasta el próximo reinicio. Se elige eso sobre el chasquido. */
+#define FILL_MAX_LAG   (AUDIO_BUFFER_SAMPLES * 3)   /* 720 + 128 de lookback < 1024 */
 
-static inline void Fill_CheckFreshness(void) {
-  uint32_t now = delay_write_pos;
-  if (!dwp_init) { dwp_init = 1; dwp_prev = now; return; }
-  uint32_t d = (now - dwp_prev) & DELAY_LINE_MASK;
-  if (d == 0)                          fill_repeat++;
-  else if (d == AUDIO_BUFFER_SAMPLES)  fill_fresh++;
-  else                                 fill_skip++;
-  dwp_prev = now;
+static volatile uint32_t fill_fresh   = 0;  /* ventanas consumidas en orden */
+static volatile uint32_t fill_repeat  = 0;  /* hambre: se repitió la anterior */
+static volatile uint32_t fill_skip    = 0;  /* atraso: se resincronizó, se perdió */
+static volatile uint32_t fill_max_lag = 0;  /* atraso máximo visto, en muestras */
+static uint32_t delay_read_pos = 0;
+static uint8_t  drp_init = 0;
+
+/** @brief Base de la(s) ventana(s) que este pase tiene que emitir.
+ *
+ * @param nwin  1 o 2 ventanas (una por mitad de TX pendiente).
+ * @param rd0   base de la primera mitad; rd1 = rd0 + 240.
+ *
+ * Devuelve las bases y deja el cursor listo para el pase siguiente.
+ */
+static void Fill_NextWindows(uint8_t nwin, uint32_t *rd0, uint32_t *rd1)
+{
+  uint32_t wp = delay_write_pos;
+  if (!drp_init) {
+    drp_init = 1;
+    delay_read_pos = (wp - AUDIO_BUFFER_SAMPLES) & DELAY_LINE_MASK;
+  }
+
+  uint32_t avail = (wp - delay_read_pos) & DELAY_LINE_MASK;
+
+  if (avail > fill_max_lag) fill_max_lag = avail;
+
+  if (avail > FILL_MAX_LAG) {
+    /* Quedamos MUY atrás — un trabón largo, o el arranque. Volver a la ventana
+     * más nueva: se pierde audio, pero la latencia no queda cargada para siempre. */
+    delay_read_pos = (wp - AUDIO_BUFFER_SAMPLES) & DELAY_LINE_MASK;
+    avail = AUDIO_BUFFER_SAMPLES;
+    fill_skip++;
+  }
+
+  if (avail < (uint32_t)nwin * AUDIO_BUFFER_SAMPLES) {
+    /* Hambre: el RX todavía no escribió lo que hace falta. Emitir la ventana
+     * anterior otra vez y NO mover el cursor — cuando llegue, se sigue en orden. */
+    fill_repeat++;
+    *rd0 = (delay_read_pos - AUDIO_BUFFER_SAMPLES) & DELAY_LINE_MASK;
+    *rd1 = delay_read_pos;
+    return;
+  }
+
+  *rd0 = delay_read_pos;
+  *rd1 = (delay_read_pos + AUDIO_BUFFER_SAMPLES) & DELAY_LINE_MASK;
+  delay_read_pos = (delay_read_pos + (uint32_t)nwin * AUDIO_BUFFER_SAMPLES)
+                   & DELAY_LINE_MASK;
+  fill_fresh += nwin;
 }
 static volatile uint8_t need_fill_first_half = 0;
 static volatile uint8_t need_fill_second_half = 0;
@@ -1225,7 +1282,8 @@ static void MX_ADC3_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 static int32_t Read_CPU_Temperature(void);
-static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset);
+static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset,
+                                uint32_t rd);
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void Service_Fills(void);
 static void Set_In_Gain(uint8_t db);
@@ -1503,17 +1561,49 @@ static void Service_Fills(void) {
     Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
   }
 
+  /* Qué ventana del ADC emite este pase. Se decide UNA VEZ, antes de los cuatro
+   * bancos, por la misma razón por la que el RX se procesa arriba: los 32
+   * canales tienen que salir de la misma ventana de tiempo o hay skew entre
+   * bancos. Ver Fill_NextWindows. */
+  /* ⚠️ ESTÁTICAS a propósito. La decisión se toma con las banderas del banco 0,
+   * pero los cuatro bancos no siempre llegan en la MISMA pasada: sus callbacks
+   * son cuatro ISR distintas y el main loop puede colarse entre dos. Un banco
+   * que llega tarde tiene que emitir LA MISMA ventana que emitieron los otros
+   * —si no, hay 240 muestras de skew entre filas del array, que es justo lo que
+   * el beamforming no puede tener—. Con variables locales ese banco leía la
+   * posición 0 del delay_line, que es basura. */
+  static uint32_t rd0 = 0, rd1 = 0;
+  /* Las banderas del banco 0 se leen y se limpian UNA VEZ, con las
+   * interrupciones apagadas, y todo lo que sigue usa esa instantánea.
+   *
+   * Por qué: antes se decidía la ventana mirando las banderas y DESPUÉS se
+   * volvían a mirar para hacer el fill. Entre las dos lecturas cabe una ISR. Si
+   * la bandera aparecía en el medio, el fill corría con la ventana anterior y el
+   * cursor NO avanzaba: una ventana emitida sin contar. Medido: 200 ventanas de
+   * TX por segundo contra 197 avances de cursor — 3 por segundo de déficit, que
+   * es lo que hacía crecer el atraso hasta forzar una resincronización (y esa
+   * resincronización sí tira audio). Con la instantánea, emitidas y contadas son
+   * el mismo número por construcción. */
+  uint8_t f0, f1;
+  {
+    uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    f0 = need_fill_first_half;  need_fill_first_half  = 0;
+    f1 = need_fill_second_half; need_fill_second_half = 0;
+    __set_PRIMASK(pm);
+  }
+  {
+    uint8_t nwin = (uint8_t)((f0 ? 1 : 0) + (f1 ? 1 : 0));
+    if (nwin) Fill_NextWindows(nwin, &rd0, &rd1);
+  }
+
   // SAI1_A: channels 0-7
-  /* Una medicion por ventana de TX producida: si el RX no avanzo, esta ventana
-   * repite la anterior. Ver Fill_CheckFreshness. */
-  if (need_fill_first_half || need_fill_second_half) Fill_CheckFreshness();
   uint8_t did_first_0 = 0;
-  if (need_fill_first_half) {
-    need_fill_first_half = 0;
+  if (f0) {
     did_first_0 = 1;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
-    Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0);
+    Fill_Audio_Beamform(&audio_buffer[0], AUDIO_BUFFER_SAMPLES, 0, rd0);
     __DSB();
     uint32_t dt = DWT->CYCCNT - t0;
     if (dt < fill_min_cycles) fill_min_cycles = dt;
@@ -1522,12 +1612,11 @@ static void Service_Fills(void) {
     fill_all_cycles += dt;
     fill_sample_count++;
   }
-  if (need_fill_second_half && did_first_0) dbl_fill[0]++;
-  if (need_fill_second_half) {
-    need_fill_second_half = 0;
+  if (f1 && did_first_0) dbl_fill[0]++;
+  if (f1) {
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
-    Fill_Audio_Beamform(&audio_buffer[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 0);
+    Fill_Audio_Beamform(&audio_buffer[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 0, rd1);
     __DSB();
     uint32_t dt = DWT->CYCCNT - t0;
     if (dt < fill_min_cycles) fill_min_cycles = dt;
@@ -1544,7 +1633,7 @@ static void Service_Fills(void) {
     did_first_1 = 1;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
-    Fill_Audio_Beamform(&audio_buffer_1b[0], AUDIO_BUFFER_SAMPLES, 8);
+    Fill_Audio_Beamform(&audio_buffer_1b[0], AUDIO_BUFFER_SAMPLES, 8, rd0);
     __DSB();
     fill_all_cycles += DWT->CYCCNT - t0;
   }
@@ -1553,7 +1642,7 @@ static void Service_Fills(void) {
     need_fill_1b_second_half = 0;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
-    Fill_Audio_Beamform(&audio_buffer_1b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 8);
+    Fill_Audio_Beamform(&audio_buffer_1b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 8, rd1);
     __DSB();
     fill_all_cycles += DWT->CYCCNT - t0;
   }
@@ -1565,7 +1654,7 @@ static void Service_Fills(void) {
     did_first_2 = 1;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
-    Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16);
+    Fill_Audio_Beamform(&audio_buffer_2a[0], AUDIO_BUFFER_SAMPLES, 16, rd0);
     __DSB();
     fill_all_cycles += DWT->CYCCNT - t0;
   }
@@ -1574,7 +1663,7 @@ static void Service_Fills(void) {
     need_fill_2a_second_half = 0;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
-    Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16);
+    Fill_Audio_Beamform(&audio_buffer_2a[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 16, rd1);
     __DSB();
     fill_all_cycles += DWT->CYCCNT - t0;
   }
@@ -1586,7 +1675,7 @@ static void Service_Fills(void) {
     did_first_3 = 1;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
-    Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24);
+    Fill_Audio_Beamform(&audio_buffer_2b[0], AUDIO_BUFFER_SAMPLES, 24, rd0);
     __DSB();
     fill_all_cycles += DWT->CYCCNT - t0;
   }
@@ -1595,7 +1684,7 @@ static void Service_Fills(void) {
     need_fill_2b_second_half = 0;
     __DSB();
     uint32_t t0 = DWT->CYCCNT;
-    Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24);
+    Fill_Audio_Beamform(&audio_buffer_2b[AUDIO_BUFFER_SIZE], AUDIO_BUFFER_SAMPLES, 24, rd1);
     __DSB();
     fill_all_cycles += DWT->CYCCNT - t0;
   }
@@ -2717,9 +2806,12 @@ int main(void)
              (unsigned long)dbl_fill[2], (unsigned long)dbl_fill[3]);
     UART_Print(db);
     /* Frescura del bloque que leen los modos del ADC — ver Fill_CheckFreshness. */
-    snprintf(db, sizeof(db), "     fill ADC: fresco=%lu repetido=%lu salteado=%lu\r\n",
+    snprintf(db, sizeof(db),
+             "     fill ADC: fresco=%lu repetido=%lu salteado=%lu atrasomax=%lu \r\n",
              (unsigned long)fill_fresh, (unsigned long)fill_repeat,
-             (unsigned long)fill_skip);
+             (unsigned long)fill_skip, (unsigned long)fill_max_lag);
+    /* El máximo se limpia al imprimirlo: interesa el peor caso DE ESTE segundo. */
+    fill_max_lag = 0;
     UART_Print(db);
   }
         UART_Print(uart_buf);
@@ -4989,7 +5081,10 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
  * For each of the 8 channels in this SAI block, reads the delay line at the
  * per-channel delay offset, applies gain and mute. Single beam (L only) for now.
  */
-static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset) {
+/* @param rd  Base de la ventana del delay_line a emitir — la asigna
+ *           Fill_NextWindows, que es quien lleva el orden. */
+static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset,
+                                uint32_t rd) {
   /* Channel walker: 1kHz tone on ONE output channel at a time, advancing every
    * WALKER_SECONDS_PER_CH. Verifies channel→speaker mapping (and, with a scope
    * or mic, polarity) one channel per second. Frame counter advances only in
@@ -5289,7 +5384,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
    * (mismo esquema que el TX steering sobre beam_line), así vale para
    * señal arbitraria (voz, música), no solo senos. */
   if (mfocus_in_enabled) {
-    uint32_t wp = delay_write_pos;
+    uint32_t wp = rd + samples;   /* fin de la ventana asignada */
     uint8_t unmuted = !beam_config.mute_global;
     /* DS11: 8 fuentes × 32 salidas es el fill más caro del firmware. El
      * delay entero y su fracción son constantes en toda la ventana, así que
@@ -5348,7 +5443,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
   /* Beam modes: output derived from beam_line (the RX delay-and-sum beam,
    * 24-bit scale, written by Process_ADC_Half). */
   if (beam_enabled) {
-    uint32_t wp = delay_write_pos;
+    uint32_t wp = rd + samples;   /* fin de la ventana asignada */
 
     /* TX steered (Phase 2): each output channel plays the beam delayed by
      * its focal delay (farthest speaker fires first) with per-channel
@@ -5404,7 +5499,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
    * DAC channel ch ← ADC channel (ch_offset+ch), most recent samples, boosted
    * so the low-level capture is audible, then clamped to 24-bit full scale. */
   if (adc_monitor_enabled) {
-    uint32_t wp = delay_write_pos;
+    uint32_t wp = rd + samples;   /* fin de la ventana asignada */
     for (uint32_t i = 0; i < samples; i++) {
       uint32_t read_pos = (wp - samples + i) & DELAY_LINE_MASK;
       for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
@@ -5447,7 +5542,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
     return;
   }
 
-  uint32_t wp = delay_write_pos;
+  uint32_t wp = rd + samples;   /* fin de la ventana asignada */
   uint8_t master = beam_config.mute_global ? 0 : beam_config.master_gain;
 
   for (uint32_t i = 0; i < samples; i++) {

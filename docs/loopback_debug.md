@@ -638,6 +638,40 @@ Verificado: fase −120 en 4 de 5 arranques y −121 en uno, la misma dispersió
 > de §8 y §13 se midieron con fase 0 y no son comparables con los de ahora sin
 > corregir por eso.
 
+#### El resto: el fill saltaba a la ventana más nueva
+
+Mover la fase no alcanzó. Quedaban ~2 ventanas por segundo perdidas, y la causa
+era otra: el fill leía siempre `delay_write_pos - 240`, o sea **la más nueva**.
+Si el sistema se demoraba una ventana, el RX escribía dos y el fill leía sólo la
+última — la del medio no la leía nadie.
+
+El arreglo es un **cursor de lectura** que avanza de a una ventana en vez de
+saltar. RX y TX cuelgan del mismo reloj —verificado: **18.801 contra 18.800
+ventanas en 94 segundos**, o sea que no hay deriva de frecuencia y el atraso no
+puede crecer solo— así que consumir en orden es estable.
+
+Con el cursor puesto seguían faltando ~3 ventanas por segundo, y ahí apareció el
+último: la ventana se decidía mirando las banderas de fill, y **después** se las
+volvía a mirar para hacer el trabajo. Entre las dos lecturas cabe una ISR. Si la
+bandera aparecía en el medio, se emitía una ventana que el cursor no contaba, y
+el atraso crecía hasta forzar una resincronización —que sí tira audio—. Se
+resolvió leyendo y limpiando las banderas **una sola vez**, con las
+interrupciones apagadas.
+
+| | repetidas/s | salteadas/s | roto |
+|---|---|---|---|
+| fase 0, sin cursor | 11 | 14 | 12,6 % |
+| fase 120, sin cursor | 0 | ~2 | ~1,1 % |
+| fase 120 + cursor + instantánea | **0** | **0** | **0** |
+
+Verificado sobre **30.000 ventanas seguidas (150 s)**: ni una repetida ni una
+salteada. Las 4 y 2 que informa el contador son del arranque.
+
+> Dato que quedó del camino, sin resolver: el bloque del heartbeat tarda **37 ms**
+> una vez por segundo. No rompe el audio —`UART_Print` cede el control byte a
+> byte y el cursor absorbe el resto— pero es un tercio de un ciclo de buffer
+> gastado en imprimir.
+
 Queda una sospecha, sin cerrar: el artefacto de "1 de 25 arranques, exactamente
 240 muestras menos" de acá abajo es **medio buffer**, la misma unidad. El
 mecanismo que se conjeturó ahí es otro (el armado de la captura, que no pasa por
