@@ -185,9 +185,10 @@ void UART_Protocol_PrintConfig(const ds_config_t *cfg)
     }
     pos += sprintf(&print_buf[pos], "=====================================\r\n\r\n");
 
-    /* Non-blocking: TX via interrupts, main loop continues immediately.
-     * If previous IT transmission still in progress, HAL returns BUSY — acceptable. */
-    HAL_UART_Transmit_IT(huart_dbg, (uint8_t*)print_buf, (uint16_t)pos);
+    /* Por la cola del UART7 (main.c). Antes era un HAL_UART_Transmit_IT propio,
+     * y eso hacia de este archivo un segundo dueño de la interrupcion de TX:
+     * con la cola instalada los dos se pisarian. */
+    UART_Debug_Write(print_buf);
 }
 
 /* ============================================================
@@ -386,6 +387,11 @@ static void process_byte(uint8_t byte)
 /* Default no-op; main.c la redefine para servir los fills de audio mientras
  * SendStatus espera al UART. Ver el comentario en UART_Protocol_SendStatus. */
 __weak void UART_Protocol_Yield(void) { }
+/* Por defecto, bloqueante. main.c la redefine para encolar. */
+__weak void UART_Debug_Write(const char *str)
+{
+    if (huart_dbg) HAL_UART_Transmit(huart_dbg, (const uint8_t *)str, strlen(str), 100);
+}
 
 /* ===== Serialización del TX hacia el ESP32 =====
  *
@@ -438,7 +444,7 @@ static void send_nack(void)
 
 static void dbg_print(const char *str)
 {
-    HAL_UART_Transmit(huart_dbg, (uint8_t*)str, strlen(str), 100);
+    UART_Debug_Write(str);
 }
 
 void UART_Protocol_CopyEspIp(char *dst, uint32_t dst_size)

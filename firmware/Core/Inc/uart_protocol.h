@@ -497,6 +497,9 @@ uint8_t UART_Protocol_StatusRequested(void);
  * (deadline 10 ms), inadmisible si se baja a 240 (deadline 5 ms).
  */
 void UART_Protocol_Yield(void);
+/** @brief Escribe en el serie de debug. main.c la redefine para encolar en vez
+ *         de bloquear; la definición __weak es bloqueante. */
+void UART_Debug_Write(const char *str);
 
 /**
  * @brief Send a CMD_STATUS frame to the ESP32.

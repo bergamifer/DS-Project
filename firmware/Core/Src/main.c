@@ -3851,26 +3851,63 @@ static void MX_GPIO_Init(void)
  * @note  DS10 debug goes out UART7 (PE7/PE8) → J7 header pins 7/8 → ST-Link VCP.
  *        UART4 (PA0/PA1) stays reserved for the ESP32 binary protocol.
  */
-static void UART_Print(const char *str) {
-  /* TX byte a byte, atendiendo los fills pendientes mientras se espera el TXE.
-   *
-   * Antes esto era un HAL_UART_Transmit bloqueante. A 115200 cada carácter son
-   * ~87 µs, así que el heartbeat (~238 chars) bloqueaba el main loop ~20 ms —
-   * el DOBLE del deadline de 10 ms del fill. Cada deadline perdido hace que el
-   * DMA reemita medio buffer viejo en los 32 canales a la vez: un salto de fase
-   * audible como un "pop", una vez por segundo, y más fuerte cada 10 s cuando
-   * sale el bloque verbose. Medido en el modo 12 (tono enfocado) el 2026-08-14.
-   *
-   * Ahora el tiempo muerto entre carácter y carácter se usa para servir los
-   * fills. La consola se ve igual: que la UART quede idle unos µs de más entre
-   * bytes no corrompe nada, sólo espacia los caracteres. */
-  while (*str) {
-    while (!(huart7.Instance->ISR & USART_ISR_TXE_TXFNF)) {
-      Service_Fills();
-    }
-    huart7.Instance->TDR = (uint8_t)*str++;
+/* ===== El serie de debug sale por interrupción, no bloqueando el lazo =====
+ *
+ * Antes esto escribía TDR byte a byte y, mientras esperaba el TXE, llamaba a
+ * Service_Fills. Eso protegía el audio —y de hecho lo protegía bien— pero dejaba
+ * al main loop 37 ms por segundo adentro de un print (medido perfilando por
+ * regiones, issue #26). Peor: la protección dependía de que TODO lo que bloquee
+ * ceda el control, así que cualquier línea nueva que no lo hiciera caía directo
+ * en el camino del audio.
+ *
+ * Con una cola drenada por la interrupción del UART7, el que imprime encola y
+ * sigue. El hardware manda en segundo plano y el main loop no espera a nadie.
+ *
+ * 4 kB porque el heartbeat verboso ronda los 900 y el volcado de configuración
+ * de uart_protocol.c llega a ~2,5 kB; entra entero sin tocar el caso lento.
+ * Potencia de dos para enmascarar en vez de comparar.
+ *
+ * El caso "la cola se llenó" NO se descarta en silencio: se drena
+ * cooperativamente, que es exactamente lo que hacía antes. O sea que el peor
+ * caso de ahora es el caso normal de antes. */
+#define DBG_TX_SIZE   4096u
+#define DBG_TX_MASK   (DBG_TX_SIZE - 1u)
+static uint8_t dbg_tx[DBG_TX_SIZE];
+static volatile uint16_t dbg_head = 0;   /* escribe el que imprime */
+static volatile uint16_t dbg_tail = 0;   /* lee la ISR */
+
+/** @brief Drena un byte hacia el UART7. La llama UART7_IRQHandler. */
+void UART7_TxDrain(void)
+{
+  if (!(huart7.Instance->ISR & USART_ISR_TXE_TXFNF)) return;
+  if (dbg_tail == dbg_head) {
+    /* Cola vacía: apagar la interrupción, si no vuelve a entrar para siempre. */
+    huart7.Instance->CR1 &= ~USART_CR1_TXEIE_TXFNFIE;
+    return;
   }
+  huart7.Instance->TDR = dbg_tx[dbg_tail];
+  dbg_tail = (uint16_t)((dbg_tail + 1u) & DBG_TX_MASK);
 }
+
+static void UART_Print(const char *str) {
+  while (*str) {
+    uint16_t next = (uint16_t)((dbg_head + 1u) & DBG_TX_MASK);
+    if (next == dbg_tail) {
+      /* Llena. Servir los fills mientras la ISR hace lugar — el comportamiento
+       * viejo, ahora sólo en el caso excepcional. */
+      Service_Fills();
+      continue;
+    }
+    dbg_tx[dbg_head] = (uint8_t)*str++;
+    dbg_head = next;
+  }
+  huart7.Instance->CR1 |= USART_CR1_TXEIE_TXFNFIE;
+}
+
+/* uart_protocol.c imprime por acá en vez de hablarle al UART: era el único otro
+ * dueño del TX de UART7 (un HAL_UART_Transmit_IT para el volcado de config), y
+ * dos dueños de la misma interrupción se pisan. */
+void UART_Debug_Write(const char *str) { UART_Print(str); }
 
 /**
  * @brief Verifica que cada estructura crítica esté en la memoria que le toca.

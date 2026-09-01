@@ -67,6 +67,7 @@ extern SAI_HandleTypeDef hsai_BlockA2;
 extern SAI_HandleTypeDef hsai_BlockB2;
 extern SAI_HandleTypeDef hsai_BlockB3;
 extern UART_HandleTypeDef huart7;
+extern void UART7_TxDrain(void);
 extern UART_HandleTypeDef huart4;
 /* USER CODE BEGIN EV */
 
@@ -307,6 +308,9 @@ void UART7_IRQHandler(void)
   /* USER CODE BEGIN UART7_IRQn 0 */
 
   /* USER CODE END UART7_IRQn 0 */
+  /* La cola de debug primero: es la dueña del TX de UART7. HAL_UART_IRQHandler
+   * queda para los flags de error — con TxISR en NULL no toca el TXE. */
+  UART7_TxDrain();
   HAL_UART_IRQHandler(&huart7);
   /* USER CODE BEGIN UART7_IRQn 1 */
 
