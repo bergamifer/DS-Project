@@ -3,6 +3,12 @@
 > Fecha de contexto: 2026-08-19  
 > Uso: entregar este documento completo a Claude junto con el repositorio DS-Firmware.  
 > Esta primera revisión es de viabilidad. No implementar firmware ni modificar PCB todavía.
+>
+> **➜ Este documento es la PREGUNTA. La respuesta está en
+> [`bypass_digital_veredicto.md`](bypass_digital_veredicto.md) (2026-08-24),
+> verificada contra el netlist, el firmware, RM0433 Rev 8 y la errata ES0392.**
+> Los dos se conservan a propósito: leer sólo el veredicto esconde qué se preguntó
+> y con qué criterio, que es la mitad del valor.
 
 ## Rol y criterio de revisión
 

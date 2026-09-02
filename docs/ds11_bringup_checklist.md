@@ -70,14 +70,32 @@ prefijo `[STM32]`.
       states por muestra). Ninguna da error de compilación.
 - [ ] `INGAIN: +N dB al boot` — 0 = línea. Si dice 30, lo que entre por J9 va a
       recortar; ver "Las DOS ganancias" en `manual_modos.md`.
-- [ ] `PAM8302A: SD HIGH — 32 amplifiers enabled`
+- [ ] `PAM8302A: SD LOW — 32 amps APAGADOS`. Es lo correcto: arranca mudo a
+      propósito. Si en cambio dice `AUTOARRANQUE: armado`, este nodo tiene el
+      arranque autónomo activado y va a encender solo a los 15 s — ver
+      `guia_operacion.md`.
+- [ ] `Modos: 22, todos con rama en el fill`. Si en vez de eso lista un modo por
+      nombre, ese modo no prende ninguna rama del fill y **sonaría en silencio**;
+      el chequeo existe porque agregar un modo y olvidarse de la bandera no da
+      ningún error.
+- [ ] `EEPROM: Config loaded OK`, o `config vN migrada a vM` si el firmware es más
+      nuevo que lo guardado. Lo que **no** tiene que aparecer en una placa con
+      calibración guardada es `no se pudo migrar — defaults`: eso significa que se
+      perdió el AUTOFOCUS. Ver `ds11_errata.md`.
 
 ## 3. Heartbeat — las dos métricas nuevas
 
 ```
-[Ns] Half: 50/s, Full: 50/s, Err: 0, Undr: 0, ...
-     SYNC bancos: <n> us | CPU fills: <n>%
+[Ns] Half: 100/s, Full: 100/s, Err: 0, Undr: 0, ...
+     SYNC bancos: <n> us | CPU fills: <n>% | fase RX-TX: <n>
+     fill ADC: fresco=<n> repetido=<n> salteado=<n> atrasomax=<n>
 ```
+
+> **`fill ADC` sano = +200 / 0 / 0 por segundo, atraso 240.** `repetido` y
+> `salteado` son ventanas de 5 ms que salieron dos veces o no salieron nunca, y
+> suenan igual: rotura. ⚠️ Es condición **necesaria y no suficiente** — el
+> contador mide que la ventana avance, no que sea la correcta. Ver
+> `loopback_debug.md` §9, donde eso costó una noche.
 
 - [ ] **`Half: 50/s` y `Full: 50/s`**, `Err: 0`.
 - [x] **`SYNC bancos`** — ✅ **medido 2026-08-13: 4 µs (2038 ciclos)**, estable

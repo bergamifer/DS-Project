@@ -235,3 +235,43 @@ colapsa y se apaga su LED.
 programar alcanza con SWDIO (2), SWCLK (3), GND (4), NRST (6) y —opcional—
 UART7 (7, 8). **Para DS12**: poner un Schottky en serie en el pin 1, igual que
 el D11 del pin 10.
+
+
+---
+
+## Actualizar el firmware ya no borra lo guardado (2026-09-01)
+
+Hasta la config **v6**, subir `EEPROM_CFG_VERSION` **descartaba todo lo guardado**
+y volvía a los defaults. Para el volumen y el modo es una molestia; para la
+**calibración del AUTOFOCUS es caro de verdad**, porque se persiste justamente
+por la razón de que rehacerla en una instalación —con el micrófono en su lugar—
+no se le puede pedir a nadie.
+
+Ahora migra: si la versión guardada no es la actual, se lee con el tamaño que
+tenía **esa** versión, se copia sobre los defaults ya cargados —los campos nuevos
+quedan en su default— y se reescribe con el layout actual, así la migración pasa
+una sola vez. `beam_config_t` crece **sólo por el final**, o sea que los bytes
+viejos siguen significando lo mismo.
+
+El registro de la EEPROM **no guarda su tamaño**, así que hay una tabla
+(`cfg_layouts[]` en `main.c`) con el tamaño de cada versión vieja.
+
+> ### ⚠️ Los tamaños van como números, no como `sizeof(...) - N`
+>
+> La primera versión de esto decía `sizeof(beam_config_t) - 2` —los dos `uint8_t`
+> que agregó la v6— y **estaba mal**. `beam_config_t` se alinea a 4, así que esos
+> dos bytes entraron en el relleno que ya existía y **`sizeof` no cambió**: 208 en
+> la v5 y 208 en la v6. Habría leído 206 bytes, con el CRC en la dirección
+> equivocada, y la migración fallaría **siempre**, en silencio.
+>
+> No se ve leyendo el código; se vio probándolo. Un `_Static_assert` fija el 208
+> para que el día que el struct crezca de verdad, la tabla se revise en vez de
+> romperse sola.
+
+**Al agregar un campo a `beam_config_t`:** subir `EEPROM_CFG_VERSION` **y**
+agregar a `cfg_layouts[]` la entrada de la versión que queda vieja, con el tamaño
+que tenía. Sin eso vuelve a descartar en silencio.
+
+Verificado contra la placa con un cambio de layout que sí mueve el tamaño
+(208 → 212): `config v6 migrada a v7 — se conserva lo guardado`, con el volumen
+intacto y reescrita con el layout nuevo.

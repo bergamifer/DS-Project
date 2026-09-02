@@ -260,6 +260,34 @@ Está así porque los 32 amplificadores encendiéndose todos juntos daban un tir
 corriente que reiniciaba la placa. También sirve como **botón de pánico**: para
 silenciar todo al instante, el mismo comando con `false`.
 
+### Para instalación: que se encienda solo
+
+Arrancar mudo es lo correcto en la mesa de trabajo, pero **ata el sonido a que
+haya red**: un nodo que pierde el WiFi queda mudo toda la función y no hay forma
+de encenderlo sin ir hasta la placa.
+
+Para eso está el **arranque autónomo**. Con esto activado, el nodo enciende sus
+amplificadores **solo, 15 s después de arrancar, sin red y sin que nadie mande
+nada**:
+
+```bash
+curl -X POST http://LA_IP/autostart -d '{"on":true}'
+```
+
+También está como casilla en la página web, al lado de los botones de
+amplificadores. **Se guarda en la placa**, así que sobrevive a un corte de luz —
+que es justamente el caso que cubre.
+
+**El freno.** Si lo que reinicia el equipo es la corriente de los amplificadores,
+encender solo cada vez sería un nodo rebotando toda la noche. Así que el nodo
+cuenta sus intentos: si tres arranques seguidos no llegan a estabilizarse, **deja
+de intentar y lo dice** (la página muestra `SUSPENDIDO` en rojo, y `/status`
+informa `autostart_held`). Encender los amplificadores a mano —por red o con el
+K2 largo— rearma la cuenta: si una persona los prendió y el equipo aguantó, la
+sospecha quedó desmentida.
+
+**De fábrica está apagado.** Se activa a propósito, para instalación.
+
 ### ⚠️ El volumen
 
 **Empezar bajo siempre.** Son 32 parlantes: al mismo ajuste suenan bastante más
@@ -616,7 +644,7 @@ la respalda**:
 ✓ DAC2               FORMAT ok, atenuacion -24.0 dB
 ✓ DAC3               FORMAT ok, atenuacion -24.0 dB
 ✓ ADC AK5538VN       TDM256 y group delay corto confirmados
-✓ EEPROM             presente, layout v5
+✓ EEPROM             presente, layout v6
 ✓ SYNC entre bancos  1 us
 ```
 

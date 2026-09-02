@@ -218,6 +218,12 @@ sincronizar relojes), ALPS (CMU — posicionamiento acústico indoor, códigos o
 3. ~~`CMD_GET_CAL_RESULT`~~ — hecho: `GET /cal` devuelve los 32 TOF, signos y
    calidades. Ver `docs/calibracion_fase.md` y `tools/calfase.py`.
 4. ~~**mDNS en el ESP32**~~ — hecho: el ESP32 anuncia `_domosonica._tcp` y la app lo descubre (v1.6).
+5. ~~**La lista de modos, del nodo**~~ — hecho: `GET /modes` la sirve desde
+   `ui_states[]` del STM32. La app ya no lleva su propia copia; lo que conserva
+   son las etiquetas cortas (el firmware nombra para el cable serie, y
+   «BARRIDO VERTICAL 800Hz arriba<->abajo @1m» no entra en un botón). Un modo sin
+   etiqueta curada aparece igual, con el nombre del firmware: la app no puede
+   esconder un modo que el equipo tiene.
 5. `CMD_EVENT` push STM32→ESP32 (cambios de estado sin polling).
 
 ---

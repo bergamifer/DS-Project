@@ -352,7 +352,7 @@ no lo era.
 
 | operación | bloqueo | ¿entraba en 10 ms? | ¿en 5 ms? | estado |
 |---|---|---|---|---|
-| `UART_Print` (heartbeat) | ~20 ms | ❌ | ❌ | ✅ resuelto 2026-08-14 |
+| `UART_Print` (heartbeat) | ~20 ms | ❌ | ❌ | ✅ resuelto 2026-08-14; **eliminado** 2026-09-01 (ver abajo) |
 | `EEPROM_SaveConfig` | ~12 ms | ❌ | ❌ | ✅ resuelto 2026-08-14 |
 | `UART_Protocol_SendStatus` | ~5,2 ms | ✅ justo | ❌ | ✅ **resuelto ahora** |
 | **`Apply_Master_Volume`** | **~9,6 ms** | ⚠️ **al borde** | ❌ | ✅ **resuelto ahora** |
@@ -806,3 +806,34 @@ Los 16 modos, amps apagados, sin señal de entrada, **0 underruns en todos**:
 El techo real no es 100 %: el main loop también atiende el protocolo, la EEPROM,
 el botón y los prints. Los dos MULTIFOCUS a ~64 % son los que hay que vigilar si
 se agrega trabajo por muestra — y ahora se puede vigilar sin cable.
+
+
+---
+
+## El heartbeat dejó de ocupar el main loop (2026-09-01)
+
+La solución de agosto —`UART_Print` cede el control a `Service_Fills` mientras
+espera el TXE— protegía el audio, y bien. Lo que no arreglaba era el **tiempo
+del main loop**: perfilando por regiones apareció que el bloque del heartbeat se
+llevaba **37.419 µs una vez por segundo**, contra 3-4 µs de todo el resto del
+lazo.
+
+Y la protección tenía una dependencia frágil: valía **mientras todo lo que
+bloquee ceda el control**. Cualquier línea nueva que no lo hiciera caía directo en
+el camino del audio, sin aviso.
+
+El debug sale ahora por una **cola de 4 kB drenada por la ISR del UART7**: el que
+imprime encola y sigue.
+
+| | agosto (cooperativo) | ahora (por interrupción) |
+|---|---|---|
+| bloque del heartbeat | 37.419 µs | **87 µs** |
+| el verboso de cada 10 s | — | 338 µs |
+
+**430×.** El caso «la cola se llenó» no se descarta: se drena cooperativamente,
+o sea que el peor caso de ahora es el caso normal de antes.
+
+Efecto colateral medible en el arranque, donde los prints eran densos:
+`dbl_fill` 7 → 1, `repetido` 4 → 1, `salteado` 2 → 0.
+
+Detalle y el porqué del dueño único de la interrupción: `loopback_debug.md` §29.

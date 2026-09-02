@@ -168086,6 +168086,32 @@
 			(justify left bottom)
 		)
 	)
+	(gr_text "+"
+		(at 191.933 135.044 0)
+		(layer "F.SilkS")
+		(uuid "2a89a047-e86d-45df-ba57-b4eb714fb060")
+		(effects
+			(font
+				(size 1.5 1.5)
+				(thickness 0.3)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "-"
+		(at 222.032 134.536 0)
+		(layer "F.SilkS")
+		(uuid "fe853c64-51c6-41b2-90d9-6c6ec32aafd0")
+		(effects
+			(font
+				(size 1.5 1.5)
+				(thickness 0.3)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+	)
 	(gr_text "5-8\n"
 		(at 154.341 117.264 0)
 		(layer "F.SilkS")

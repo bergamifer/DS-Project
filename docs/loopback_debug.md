@@ -638,39 +638,57 @@ Verificado: fase −120 en 4 de 5 arranques y −121 en uno, la misma dispersió
 > de §8 y §13 se midieron con fase 0 y no son comparables con los de ahora sin
 > corregir por eso.
 
-#### El resto: el fill saltaba a la ventana más nueva
+#### El resto, y un arreglo que hubo que deshacer
 
-Mover la fase no alcanzó. Quedaban ~2 ventanas por segundo perdidas, y la causa
-era otra: el fill leía siempre `delay_write_pos - 240`, o sea **la más nueva**.
-Si el sistema se demoraba una ventana, el RX escribía dos y el fill leía sólo la
-última — la del medio no la leía nadie.
+Mover la fase no alcanzó del todo: quedaban ~2 ventanas por segundo perdidas.
+La causa parecía clara —el fill leía siempre `delay_write_pos - 240`, o sea **la
+más nueva**, así que si el sistema se demoraba una ventana el RX escribía dos y
+la del medio no la leía nadie— y el arreglo también: un **cursor de lectura** que
+avanzara de a una ventana en vez de saltar.
 
-El arreglo es un **cursor de lectura** que avanza de a una ventana en vez de
-saltar. RX y TX cuelgan del mismo reloj —verificado: **18.801 contra 18.800
-ventanas en 94 segundos**, o sea que no hay deriva de frecuencia y el atraso no
-puede crecer solo— así que consumir en orden es estable.
+**Estaba mal, y hubo que revertirlo (`3811c74`).** Vale la pena dejar escrito por
+qué, porque el error no fue la idea sino dónde se apoyó.
 
-Con el cursor puesto seguían faltando ~3 ventanas por segundo, y ahí apareció el
-último: la ventana se decidía mirando las banderas de fill, y **después** se las
-volvía a mirar para hacer el trabajo. Entre las dos lecturas cabe una ISR. Si la
-bandera aparecía en el medio, se emitía una ventana que el cursor no contaba, y
-el atraso crecía hasta forzar una resincronización —que sí tira audio—. Se
-resolvió leyendo y limpiando las banderas **una sola vez**, con las
-interrupciones apagadas.
+El cursor decidía la ventana **con las banderas del banco 0** y se la pasaba a
+los otros tres. Los cuatro bancos no siempre caen en la misma pasada del main
+loop: son cuatro ISR distintas y el lazo se cuela entre ellas. Medido con un
+contador escrito para esto: **~20 veces por segundo el banco 0 no tiene bandera y
+los otros sí**, y esos tres se llenaban con la ventana que ya habían emitido.
+**Diez por ciento de repeticiones en 24 de los 32 canales** — peor que el
+problema original, que estaba repartido.
+
+El síntoma, reportado a oído, fue la mejor pista del día: roto en los modos
+**0, 2-6, 7-10, 12, 13, 15, 16, 17 y 18**, sano en **1, 11, 14, 19, 20 y 21**.
+Esa partición es exactamente «lee del `delay_line`» contra «genera su señal
+adentro del fill», y señala el código culpable sin abrir el osciloscopio.
+
+> #### El instrumento no puede fallar en la misma dirección que el código
+>
+> Los contadores `fill ADC` decían **200 / 0 / 0** mientras sonaba roto, y esa
+> lectura se había usado como prueba de que el arreglo andaba. Miden que el
+> cursor **avance** bien, no que **apunte** bien — y el modo de falla que el
+> cursor introdujo vive justo en ese hueco.
+>
+> O sea que el contador y el código compartían el supuesto de que la ventana era
+> la correcta. Un instrumento que puede equivocarse por el mismo motivo que su
+> objeto no sirve para vigilarlo. `200 / 0 / 0` **sigue siendo válido** para lo
+> que fue escrito —detectar repeticiones y salteos por fase— y **no alcanza**
+> como prueba de que el audio esté bien.
+
+Lo que quedó, y que sí resolvió el problema original:
 
 | | repetidas/s | salteadas/s | roto |
 |---|---|---|---|
-| fase 0, sin cursor | 11 | 14 | 12,6 % |
-| fase 120, sin cursor | 0 | ~2 | ~1,1 % |
-| fase 120 + cursor + instantánea | **0** | **0** | **0** |
+| fase 0 (como estaba) | 11 | 14 | **12,6 %** |
+| fase 0 + cursor | — | — | **peor**: 10 % en 24 canales |
+| **fase 120, sin cursor** | **0** | **0** | **0** |
 
-Verificado sobre **30.000 ventanas seguidas (150 s)**: ni una repetida ni una
-salteada. Las 4 y 2 que informa el contador son del arranque.
-
-> Dato que quedó del camino, sin resolver: el bloque del heartbeat tarda **37 ms**
-> una vez por segundo. No rompe el audio —`UART_Print` cede el control byte a
-> byte y el cursor absorbe el resto— pero es un tercio de un ciclo de buffer
-> gastado en imprimir.
+Cada banco vuelve a derivar su ventana de `delay_write_pos`, como el código
+original, que no acopla los bancos entre sí. Lo que hace que eso **alcance ahora
+y no alcanzara antes** son las otras dos correcciones del mismo día: la fase a
+media ventana del borde, y el heartbeat que dejó de trabar el lazo (§29). Sin
+trabones del main loop el RX no se adelanta dos ventanas, que era el único
+motivo por el que el cursor parecía hacer falta.
 
 Queda una sospecha, sin cerrar: el artefacto de "1 de 25 arranques, exactamente
 240 muestras menos" de acá abajo es **medio buffer**, la misma unidad. El
@@ -2807,3 +2825,61 @@ importancia:
 > mismo instrumento que en §24 produjo una conclusión falsa: la diferencia no
 > fue el aparato sino saber dónde vale y contra qué comparar.
 
+
+---
+
+## 29. El main loop imprimía 37 ms por segundo (2026-09-01)
+
+Buscando el origen de la rotura del audio apareció, de paso, un número que nadie
+había mirado. Perfilando el main loop por regiones con `DWT->CYCCNT` (máximo por
+segundo, marcas en seis puntos del lazo):
+
+```
+region us: 1=250  2=3  3=4  4=3  5=3  6=37419
+```
+
+La región 6 es el bloque del heartbeat. **Todo el resto del lazo son 3-4 µs**, y
+`Service_Fills` son 250 µs. El heartbeat era **37 ms**, una vez por segundo: más
+de tres ciclos completos del doble buffer.
+
+### Por qué no rompía el audio, y por qué igual había que arreglarlo
+
+`UART_Print` escribía TDR byte a byte y, mientras esperaba el TXE, llamaba a
+`Service_Fills`. O sea que el audio estaba protegido —y bien—. Pero esa
+protección **dependía de que todo lo que bloquee ceda el control**: cualquier
+línea nueva que no lo hiciera caía directo en el camino del audio, sin aviso.
+
+Se comprobó que espaciar el heartbeat a 5 s **no** eliminaba los salteos que se
+estaban persiguiendo, así que no era la causa de nada conocido. Pero 37 ms/s de
+presupuesto gastado en imprimir, en un equipo que va a correr en 15 nodos, no es
+gratis.
+
+### El arreglo: una cola drenada por la interrupción
+
+El debug sale ahora por una cola de 4 kB que drena la ISR del UART7. El que
+imprime encola y sigue; el hardware manda en segundo plano.
+
+| | antes | ahora |
+|---|---|---|
+| bloque del heartbeat | **37.419 µs** | **87 µs** |
+| el verboso de cada 10 s | — | 338 µs |
+
+**430×.** El caso «la cola se llenó» no se descarta en silencio: se drena
+cooperativamente, que es exactamente lo que hacía antes — el peor caso de ahora
+es el caso normal de antes. Con 4 kB entran el heartbeat verboso (~900 B) y el
+volcado de configuración (~2,5 kB) sin llegar nunca ahí.
+
+⚠️ `uart_protocol.c` tenía su propio `HAL_UART_Transmit_IT` sobre el mismo UART:
+eran **dos dueños de la misma interrupción** y con la cola instalada se pisarían.
+Pasa a imprimir por `UART_Debug_Write`, que `main.c` redefine para encolar (misma
+mecánica que los hooks de `Yield`). El handler de HardFault sigue escribiendo TDR
+directo: ahí las interrupciones están muertas y la cola no la drenaría nadie.
+
+### Efecto colateral, medido en el arranque
+
+Los prints del boot dejaron de trabar el lazo, así que los cortes de arranque
+casi desaparecen:
+
+```
+dbl_fill:  7 → 1        repetido: 4 → 1        salteado: 2 → 0
+```
