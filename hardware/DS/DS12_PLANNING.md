@@ -196,6 +196,35 @@ pasaalto de entrada de 723 Hz a 36 Hz**: hoy el modo 17 (barrido vertical,
 > amplificador **12 dB dentro del recorte** con los modos de tono. Debería ser
 > −40 dB.
 
+#### 🔴 CORRECCIÓN 2026-09-02 — subir R_I sin tocar el condensador ROMPE los agudos
+
+Los designadores, verificados en el netlist: **R_I = R38, R39, R40 … R101** (1 kΩ,
+**64 unidades**, un par diferencial por amplificador). La topología por canal es:
+
+```
+PCM1690  →  R_I 1k  →  ┬─ C_shunt 4.7nF → GND        ←  pasabajos de reconstrucción
+                       └─ C_i 220nF → PAM8302A IN     ←  acople + pasaaltos
+```
+
+**R_I hace DOS trabajos a la vez**, y el ítem sólo contemplaba uno:
+
+| | con R_I = 1k | con R_I = 20k, C sin tocar | con R_I = 20k **y C_shunt 220pF** |
+|---|---|---|---|
+| pasaaltos (con C_i 220nF) | 723 Hz | **36 Hz** ✅ | **36 Hz** ✅ |
+| **pasabajos (con C_shunt)** | 33,9 kHz ✅ | **1,69 kHz** 🔴 | **36,2 kHz** ✅ |
+| ganancia | +49 dB | +23 dB ✅ | +23 dB ✅ |
+
+Subir sólo la resistencia deja el pasabajos en **1,7 kHz**: se llevaría puestos
+los agudos y, de paso, el modo 17 (barrido vertical a 800 Hz) quedaría otra vez
+sobre un borde de banda, que es exactamente lo que este ítem quería evitar.
+
+**El cambio va de a pares: R38…R101 → 20 kΩ (64) y C81…C_n de 4,7 nF → 220 pF
+(64).** Son 128 posiciones de BOM, ningún cambio de topología ni de ruteo.
+
+⚠️ Los 4,7 nF actuales son **C0G** (confirmado en las sustituciones de BOM de la
+DS11). Los 220 pF también tienen que serlo: un X7R de 220 pF tiene coeficiente de
+tensión y distorsiona justo en el camino de señal.
+
 ## 🔴 Prioridad alta
 
 ### 1. Margen del buck a 24V — el TVS NO protege al MP2315S
