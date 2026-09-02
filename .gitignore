@@ -84,7 +84,13 @@ firmware/build_*/
 *.lck
 
 ### Mecenazgo ###
+# La carpeta del Mecenazgo son ~320 MB de comprobantes escaneados: fuera de git.
+#
+# ⚠️ Van las DOS lineas. `mecenazgo/` con barra final sólo ignora DIRECTORIOS, y
+# si algun dia la carpeta se muda a la nube y queda un enlace simbolico en su
+# lugar, git trata ese enlace como un ARCHIVO y lo querria versionar. Verificado.
 mecenazgo/
+mecenazgo
 
 ### ESP32-IDF build ###
 firmware_esp32c3/build/
