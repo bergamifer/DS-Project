@@ -21,6 +21,33 @@ el brown-out de agosto mejor que la falta de bulk**: no es energía almacenada, 
 margen de dropout en serie. Y de paso mete el riel del ADC aguas abajo de 32 amps
 class-D. **Solución: buck propio para el riel digital**, desde la entrada.
 
+#### ⚠️ 2026-09-02 — deja de ser teoría: medido en campo
+
+Primera vez que una DS11 corrió **sin ningún USB conectado** (ST-Link y USB del
+ESP32 fuera). Resultado: el STM32 se reinicia cada ~10 s en frío, y siempre al
+encender los amplificadores. Reconectar el ST-Link lo hace desaparecer.
+
+No es magia: **J7 alimenta la placa**. El pin 10 entra por D11 al `+5V`, o sea
+**aguas abajo de FB2 y D9** — le da al AP1117-33 el margen de dropout que la
+cadena propia de la placa no tiene. (El pin 1 va directo a `+3V3`, ítem 2b.)
+
+**Consecuencia práctica: las cinco DS11 fabricadas no funcionan solas.** Todos los
+bring-ups corrieron con esa muleta puesta sin que figurara como tal.
+
+Firma para reconocerlo por red, sin instrumental: **el ESP32 sigue vivo mientras
+el STM32 se reinicia** (uptime 500 s contra 10 s). El ESP32 aguanta hasta ~2,7 V
+y el MAX809T corta a 3,08 V. Desde proto v14 `/status` publica `reset`: **POR =
+riel**, PIN = NRST.
+
+El amperímetro de la fuente **no lo ve**: promedia a la tensión de entrada
+(0,25 A, normal) mientras el evento son centenas de mV durante µs, dos
+conversiones aguas abajo. No sirve para descartar esto.
+
+> **Mitigación para las placas que ya existen** — vale la pena probarla antes que
+> DS12: puentear FB2 y D9 con hilo (⚠️ **sólo** con ST-Link y USB desconectados;
+> D9 es lo que impide el backfeed). Si los reinicios desaparecen, no es sólo el
+> diagnóstico cerrado: es el arreglo de las cinco DS11.
+
 ### 0.2. El TVS: con 19-20 V y un buck de 26 V no existe solución
 El ítem 1 propone "TVS de standoff más bajo (SMBJ18/20A)". **No funciona**: lo que
 importa es el **VC (clamping)**, que en la familia SMBJ es ~1,6× el VRWM.
