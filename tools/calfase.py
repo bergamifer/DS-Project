@@ -150,18 +150,26 @@ def ajustar(p_mm, tof_smp, usar, c_ms, iters=60):
     return m, t0, resid, it + 1
 
 
-def analizar(d, c_ms):
+def n_mics(d):
+    """Cuantos microfonos trae la respuesta. El firmware >= v15 devuelve los dos
+    del banco en la misma lista, marcados con "mic"."""
+    return max((c.get("mic", 1) for c in d["channels"]), default=1)
+
+
+def analizar(d, c_ms, mic=1):
     p = geometria()
-    n = len(d["channels"])
+    canales = [c for c in d["channels"] if c.get("mic", 1) == mic]
+    n = len(canales)
     if n != SPK_ROWS * SPK_COLS:
-        print(f"aviso: la placa devolvio {n} canales y la geometria tiene "
-              f"{SPK_ROWS * SPK_COLS}. Se usan los primeros {min(n, len(p))}.")
+        print(f"aviso: la placa devolvio {n} canales para el microfono {mic} y "
+              f"la geometria tiene {SPK_ROWS * SPK_COLS}. Se usan los primeros "
+              f"{min(n, len(p))}.")
 
     tof = np.zeros(len(p))
     qual = np.zeros(len(p), dtype=int)
     sign = np.zeros(len(p), dtype=int)
     visto = np.zeros(len(p), dtype=bool)
-    for c in d["channels"]:
+    for c in canales:
         k = c["ch"]
         if k < len(p):
             tof[k] = c["tof_q8"] / Q8
@@ -183,10 +191,10 @@ def analizar(d, c_ms):
     rms_us = float(np.sqrt(np.mean(us[usar] ** 2)))
     return dict(p=p, tof=tof, qual=qual, sign=sign, usar=usar, visto=visto,
                 m=m, t0=t0, resid=resid, us=us, mm=mm, rms_us=rms_us, nit=nit,
-                estado=d.get("state", "?"), ok_count=d.get("ok_count", 0))
+                mic=mic, estado=d.get("state", "?"), ok_count=d.get("ok_count", 0))
 
 
-def informe(a, c_ms):
+def informe(a, c_ms, con_cola=True):
     m = a["m"]
     print()
     print(f"estado del scan: {a['estado']}   canales solidos: {int(a['usar'].sum())}"
@@ -214,13 +222,43 @@ def informe(a, c_ms):
     print("  tau es el residuo del ajuste: lo que le sobra o le falta a ese")
     print("  parlante DESPUES de restarle el camino geometrico.")
     print()
-    print("  UNA SOLA CORRIDA NO PRUEBA NADA. Repetir con el microfono en otro")
-    print("  lugar y comparar:   python3 tools/calfase.py --comparar A.json B.json")
+    if con_cola:
+        print("  UNA SOLA CORRIDA NO PRUEBA NADA. Repetir con el microfono en otro")
+        print("  lugar y comparar:   python3 tools/calfase.py --comparar A.json B.json")
 
 
 def comparar(fa, fb, c_ms):
+    """Dos corridas SEPARADAS, con el microfono movido a mano entre una y otra."""
     a = analizar(json.load(open(fa)), c_ms)
     b = analizar(json.load(open(fb)), c_ms)
+    _veredicto(a, b, fa, fb, c_ms)
+
+
+def comparar_mics(d, c_ms, sep_esperada_mm=None):
+    """Los DOS microfonos del banco, de la MISMA corrida.
+
+    Es la misma prueba que --comparar y es mejor por tres motivos, todos por
+    construccion y ninguno por cuidado del operador:
+
+      - Mismo t0. Los dos microfonos oyen los MISMOS chirps, asi que el instante
+        de disparo no es una incognita que cada corrida estima por su cuenta.
+      - Misma sala y misma temperatura. Entre dos corridas separadas por minutos
+        cambia la velocidad del sonido y, si alguien entro a mover el microfono,
+        tambien las reflexiones.
+      - Nadie toca nada. El banco es fijo; mover el microfono ERA la prueba, y
+        era tambien la principal fuente de error de la prueba.
+
+    Y trae una comprobacion que la version secuencial no puede tener: la
+    separacion entre los dos microfonos se conoce con una cinta metrica. El
+    ajuste la estima sin saberla, asi que comparar las dos es una prueba de
+    respuesta conocida sobre TODA la cadena — geometria, Q8, mapeo y arnes.
+    """
+    _veredicto(analizar(d, c_ms, mic=1), analizar(d, c_ms, mic=2),
+               "microfono 1 (c0)", "microfono 2 (c1)", c_ms,
+               sep_esperada_mm=sep_esperada_mm, misma_corrida=True)
+
+
+def _veredicto(a, b, fa, fb, c_ms, sep_esperada_mm=None, misma_corrida=False):
     amb = a["usar"] & b["usar"]
     if amb.sum() < 6:
         sys.exit("las dos corridas comparten menos de 6 canales solidos.")
@@ -228,15 +266,43 @@ def comparar(fa, fb, c_ms):
     da, db = np.linalg.norm(a["m"]), np.linalg.norm(b["m"])
     print()
     print("=" * 66)
-    print("  LA PRUEBA: los mismos parlantes, desde dos posiciones de microfono")
+    if misma_corrida:
+        print("  LA PRUEBA: los mismos chirps, oidos por los dos microfonos")
+    else:
+        print("  LA PRUEBA: los mismos parlantes, desde dos posiciones de microfono")
     print("=" * 66)
     print(f"  A: {fa}   microfono a {da:.0f} mm   RMS {a['rms_us']:.2f} us")
     print(f"  B: {fb}   microfono a {db:.0f} mm   RMS {b['rms_us']:.2f} us")
     sep = np.linalg.norm(a["m"] - b["m"])
     print(f"  separacion entre las dos posiciones: {sep:.0f} mm")
+
+    # --- prueba de respuesta conocida ---
+    if sep_esperada_mm:
+        err = sep - sep_esperada_mm
+        tol = max(25.0, 0.10 * sep_esperada_mm)
+        print(f"  medida con cinta:                    {sep_esperada_mm:.0f} mm"
+              f"   error {err:+.0f} mm")
+        if abs(err) <= tol:
+            print("  -> el ajuste RECUPERA la separacion real. La geometria del")
+            print("     firmware, los Q8 y el mapeo de canales quedan validados.")
+        else:
+            print(f"  -> !! FUERA DE TOLERANCIA (+-{tol:.0f} mm). El ajuste no")
+            print("     recupera una distancia que se conoce, asi que tampoco hay")
+            print("     por que creerle los tau. Revisar, en este orden: que los")
+            print("     microfonos esten en c0 y c1 y no al reves; la separacion")
+            print("     real; y que SPK_*_PITCH_MM de este script coincida con")
+            print("     Beam_InitTxGeometry() del firmware.")
     if sep < 300:
-        print("  aviso: menos de 300 mm entre posiciones. La prueba es debil —")
-        print("         dos puntos cercanos ven casi las mismas reflexiones.")
+        print("  AVISO: menos de 300 mm entre los dos puntos. La prueba es DEBIL,")
+        print("         y conviene entender por que: dos microfonos cercanos ven")
+        print("         casi la MISMA reflexion, asi que la reflexion aparece")
+        print("         igual en los dos y el criterio la confunde con el")
+        print("         parlante. O sea: a poca separacion, 'COINCIDEN' es facil")
+        print("         de conseguir y significa menos.")
+        print("         Separar los microfonos 500 mm en vez de 250 arregla esto")
+        print("         y ademas hace medible el contraste por debajo de 1,2 kHz,")
+        print("         donde a 250 mm el segundo microfono todavia cae DENTRO")
+        print("         del lobulo principal. Ver docs/banco_dos_microfonos.md.")
     print()
     print("  ch   tau A(us)  tau B(us)   diferencia")
     print("  --   ---------  ---------   ----------")
@@ -336,11 +402,42 @@ def autoprueba():
             fallos += 1
         print(f"  {nombre:30s} {disp:6.2f}   {rms_dif:7.2f}  {rms_dif / disp if disp else 0:5.2f}"
               f"  {got:14s} {esperado:14s} {ok}")
+    # --- el banco de dos microfonos, sintetico ---
+    # Se arma UNA respuesta con los dos microfonos, como la que devuelve el
+    # firmware >= v15, y se verifica que el ajuste recupere la separacion que se
+    # uso para generarla. Es la prueba de respuesta conocida del banco, corrida
+    # sobre datos donde la respuesta se conoce de veras.
     print()
-    if fallos:
-        print(f"  {fallos} caso(s) no dieron lo esperado.")
+    print("  banco de dos microfonos (sintetico)")
+    print("  " + "-" * 78)
+    mic_a = [0.0, 0.0, 1000.0]
+    fallos_banco = 0
+    for sep_real in (250.0, 500.0):
+        mic_b = [mic_a[0] - sep_real, mic_a[1], mic_a[2]]
+        tau = np.random.default_rng(11).normal(0, 3, len(p))
+        ra = corrida(mic_a, 500.0, tau, 0.3, 21)
+        rb = corrida(mic_b, 500.0, tau, 0.3, 22)
+        d2 = {"ok": True, "state": "done", "ok_count": len(p),
+              "n_channels": 2 * len(p),
+              "channels": ([dict(c, mic=1) for c in ra["channels"]]
+                           + [dict(c, mic=2) for c in rb["channels"]])}
+        a2 = analizar(d2, C_MS, mic=1)
+        b2 = analizar(d2, C_MS, mic=2)
+        sep_med = float(np.linalg.norm(a2["m"] - b2["m"]))
+        err = sep_med - sep_real
+        ok = abs(err) <= max(25.0, 0.10 * sep_real)
+        if not ok:
+            fallos_banco += 1
+        print(f"  separacion real {sep_real:5.0f} mm  ->  ajustada "
+              f"{sep_med:6.1f} mm   error {err:+6.1f}   "
+              f"{'ok' if ok else 'FALLA'}")
+        assert n_mics(d2) == 2, "n_mics no detecto los dos microfonos"
+
+    print()
+    if fallos or fallos_banco:
+        print(f"  {fallos + fallos_banco} caso(s) no dieron lo esperado.")
         sys.exit(1)
-    print("  Los seis casos dan lo esperado.")
+    print("  Los seis casos dan lo esperado, y el banco recupera la separacion.")
     print("  Nota: el ajuste encoge tau — 6,0 us de dispersion real se leen")
     print("  como ~4,3. El veredicto no depende de eso, pero el valor si.")
 
@@ -357,6 +454,13 @@ def main():
                     help=f"velocidad del sonido en m/s (default {C_MS})")
     ap.add_argument("--autoprueba", action="store_true",
                     help="verifica la logica del veredicto con datos sinteticos")
+    ap.add_argument("--mic", type=int, default=None,
+                    help="informar SOLO este microfono (1 o 2) en vez de "
+                         "comparar los dos")
+    ap.add_argument("--sep", type=float, default=250.0,
+                    help="separacion FISICA entre los dos microfonos del banco, "
+                         "en mm (default 250). Es la prueba de respuesta "
+                         "conocida: el ajuste tiene que recuperarla.")
     args = ap.parse_args()
 
     if args.autoprueba:
@@ -377,7 +481,23 @@ def main():
     else:
         ap.error("hace falta --host, un archivo, o --comparar")
 
-    informe(analizar(d, args.c), args.c)
+    nm = n_mics(d)
+    if args.mic:
+        informe(analizar(d, args.c, mic=args.mic), args.c)
+    elif nm >= 2:
+        # Los dos microfonos del banco: se informa cada uno y se compara.
+        # Comparar es el punto — un solo informe no valida nada, y con dos
+        # entradas la comparacion sale gratis en la misma corrida.
+        for k in (1, 2):
+            print(f"\n########## microfono {k} ##########")
+            informe(analizar(d, args.c, mic=k), args.c, con_cola=False)
+        comparar_mics(d, args.c, sep_esperada_mm=args.sep)
+    else:
+        informe(analizar(d, args.c), args.c)
+        print()
+        print("  Esta corrida trae UN solo microfono. Con firmware >= v15 y el")
+        print("  segundo microfono en c1, la prueba de dos posiciones sale sola")
+        print("  en la misma corrida: ver docs/banco_dos_microfonos.md")
 
 
 if __name__ == "__main__":

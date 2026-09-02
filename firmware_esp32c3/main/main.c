@@ -118,6 +118,7 @@ static void device_identity_init(void)
 // Los 32 canales no entran en una trama (32x7 = 224 contra 128 de payload), asi
 // que se lee por tramos como la captura.
 #define CMD_SET_AUTOSTART 0x18  // payload: uint8 (1=on, 0=off), persistido
+#define CMD_SET_TONE      0x19  // payload: [hz:2 LE][dither:1] — tono de medicion
 #define CMD_GET_MODES    0x16   // payload: uint8 indice del primer modo
 #define CMD_MODES_DATA   0x17   // STM32 -> ESP32: ds_modes_hdr_t + nombres NUL
 #define CMD_GET_CAL      0x13   // payload: uint8 indice del primer canal
@@ -146,7 +147,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    14
+#define PROTO_VERSION    15
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -1116,6 +1117,53 @@ static esp_err_t autostart_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* POST /tone {"hz":2000,"dither":0}
+ *
+ * Frecuencia del emisor y dither, para MEDIR. Sin esto una medicion automatica
+ * no repite: la captura son 170 ms contra el LFO de 333 ms de los modos
+ * "ondulante", asi que cada corrida cae en otra fase del dither.
+ *
+ * Vale solo mientras dure el modo: elegir un modo vuelve a poner la frecuencia
+ * de la tabla y re-enciende el dither. Es a proposito — ver el comentario de
+ * CMD_SET_TONE en uart_protocol.h. */
+static esp_err_t tone_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"bad json\"}");
+        return ESP_OK;
+    }
+    cJSON *jhz  = cJSON_GetObjectItem(root, "hz");
+    cJSON *jdit = cJSON_GetObjectItem(root, "dither");
+    int hz = jhz ? jhz->valueint : 2000;
+    /* El clamp REAL lo hace el STM32 (20..8000) y lo avisa por el serie. Aca
+     * solo se acota a lo que entra en 16 bits, para no mandar basura. */
+    if (hz < 0) hz = 0;
+    if (hz > 65535) hz = 65535;
+    uint8_t dit = (jdit && (cJSON_IsTrue(jdit) || jdit->valueint)) ? 1 : 0;
+    cJSON_Delete(root);
+
+    uint8_t p[3] = { (uint8_t)(hz & 0xFF), (uint8_t)((hz >> 8) & 0xFF), dit };
+    int ack = uart_send_and_wait_ack(CMD_SET_TONE, p, sizeof(p), 500);
+
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"%s\",\"hz\":%d,\"dither\":%s}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"), hz,
+             dit ? "true" : "false");
+    printf("[ESP32] POST /tone %d Hz dither=%u -> %s\n", hz, (unsigned)dit,
+           ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 static esp_err_t amps_handler(httpd_req_t *req)
 {
     char buf[128];
@@ -1442,7 +1490,11 @@ static esp_err_t modes_handler(httpd_req_t *req)
 
 static esp_err_t cal_handler(httpd_req_t *req)
 {
-    char buf[3600];
+    /* 64 entradas (32 parlantes x 2 microfonos) de ~50 caracteres = ~3,2 kB,
+     * mas la cola. Con 3600 entraba justo y snprintf habria TRUNCADO el JSON en
+     * silencio: la pagina veria un objeto sin cerrar y no una lista incompleta.
+     * 4608 deja mas de un kilobyte de aire. */
+    char buf[4608];
     int  p = 0;
     httpd_resp_set_type(req, "application/json");
 
@@ -1452,7 +1504,10 @@ static esp_err_t cal_handler(httpd_req_t *req)
 
     p += snprintf(buf + p, sizeof(buf) - p, "{\"ok\":true,\"channels\":[");
 
-    for (int first = 0; first < 64; first += CAL_CHUNK_CH) {
+    /* 2 microfonos x 32 parlantes. El tope del lazo es un techo de seguridad;
+     * quien manda es h.n_channels, que llega en cada trama. */
+    const int CAL_NUM_MIC = 2;
+    for (int first = 0; first < 32 * CAL_NUM_MIC; first += CAL_CHUNK_CH) {
         uint8_t r1 = (uint8_t)first;
         xSemaphoreTake(cal_sem, 0);                 // drenar respuesta vieja
         uart_send_frame(CMD_GET_CAL, &r1, 1);
@@ -1471,8 +1526,11 @@ static esp_err_t cal_handler(httpd_req_t *req)
         for (int i = 0; i < h.count; i++) {
             const ds_cal_ch_t *c = &last_cal_ch[i];
             p += snprintf(buf + p, sizeof(buf) - p,
-                          "%s{\"ch\":%d,\"tof_q8\":%ld,\"sign\":%d,\"quality\":%u}",
-                          total ? "," : "", h.first + i,
+                          "%s{\"ch\":%d,\"mic\":%d,\"tof_q8\":%ld,"
+                          "\"sign\":%d,\"quality\":%u}",
+                          total ? "," : "",
+                          (h.first + i) % (h.n_channels / CAL_NUM_MIC),
+                          (h.first + i) / (h.n_channels / CAL_NUM_MIC) + 1,
                           (long)c->tof_q8, (int)c->sign, (unsigned)c->quality);
             total++;
         }
@@ -2392,24 +2450,26 @@ static esp_err_t ping_handler(httpd_req_t *req)
 
 static httpd_handle_t start_webserver(void)
 {
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;
-    /* HTTPD_DEFAULT_CONFIG deja max_uri_handlers en 8 y el registro que se pasa
+    /* La tabla va ANTES de httpd_start, y el limite sale de ella.
+     *
+     * HTTPD_DEFAULT_CONFIG deja max_uri_handlers en 8 y el registro que se pasa
      * FALLA EN SILENCIO: el endpoint simplemente no existe y el server contesta
      * "Nothing matches the given URI". Con 9 endpoints /ping ya estaba caido sin
      * que nadie lo notara, y agregar /reset tiro /status — o sea la telemetria
-     * entera— sin un solo mensaje de error. Margen de sobra y chequeo abajo. */
-    config.max_uri_handlers = 16;
-    /* 10 s, no los 5 de fabrica. POST /firmware consume el cuerpo al ritmo al
-     * que el STM32 puede grabar la flash (~15 s para 80 kB), asi que el socket
-     * pasa mucho tiempo sin que se lo lea; con el timeout corto una pausa del
-     * navegador cortaba la subida a mitad de camino. */
-    config.recv_wait_timeout = 10;
-
-    printf("[ESP32] Iniciando HTTP server en puerto %d...\n", config.server_port);
-
-    if (httpd_start(&server, &config) == ESP_OK) {
-        httpd_uri_t uris[] = {
+     * entera— sin un solo mensaje de error.
+     *
+     * Poner un numero fijo "con margen de sobra" NO alcanzo: el margen se
+     * consumio solo. El 2026-09-02, con el limite en 16 y 17 rutas en la tabla,
+     * la ruta /modes estaba CAIDA en la placa: GET /modes contestaba "Nothing
+     * matches the given URI" y nadie lo noto, que es exactamente el modo de
+     * falla que el comentario de arriba describia. El aviso del bucle de
+     * registro sale por el UART del ESP32, o sea por el cable que casi nunca
+     * esta puesto.
+     *
+     * Derivar el limite de la tabla saca la posibilidad de raiz: agregar una
+     * ruta agranda el limite en la misma linea. +2 de colchon para los
+     * handlers internos que el httpd registra por su cuenta. */
+    httpd_uri_t uris[] = {
             { .uri = "/",        .method = HTTP_GET,  .handler = root_handler    },
             { .uri = "/command", .method = HTTP_POST, .handler = command_handler },
             { .uri = "/mode",    .method = HTTP_POST, .handler = mode_handler    },
@@ -2417,6 +2477,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/volume",  .method = HTTP_POST, .handler = volume_handler  },
             { .uri = "/amps",    .method = HTTP_POST, .handler = amps_handler    },
             { .uri = "/autostart", .method = HTTP_POST, .handler = autostart_handler },
+            { .uri = "/tone",    .method = HTTP_POST, .handler = tone_handler    },
             { .uri = "/reset",   .method = HTTP_POST, .handler = reset_handler   },
             { .uri = "/ingain",  .method = HTTP_POST, .handler = ingain_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
@@ -2427,7 +2488,21 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/capture", .method = HTTP_GET,  .handler = capture_handler },
             { .uri = "/cal",     .method = HTTP_GET,  .handler = cal_handler     },
             { .uri = "/modes",   .method = HTTP_GET,  .handler = modes_handler   },
-        };
+    };
+
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = 8192;
+    config.max_uri_handlers = sizeof(uris) / sizeof(uris[0]) + 2;
+    /* 10 s, no los 5 de fabrica. POST /firmware consume el cuerpo al ritmo al
+     * que el STM32 puede grabar la flash (~15 s para 80 kB), asi que el socket
+     * pasa mucho tiempo sin que se lo lea; con el timeout corto una pausa del
+     * navegador cortaba la subida a mitad de camino. */
+    config.recv_wait_timeout = 10;
+
+    printf("[ESP32] Iniciando HTTP server en puerto %d (%u rutas)...\n",
+           config.server_port, (unsigned)(sizeof(uris) / sizeof(uris[0])));
+
+    if (httpd_start(&server, &config) == ESP_OK) {
         for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
             esp_err_t e = httpd_register_uri_handler(server, &uris[i]);
             if (e != ESP_OK)

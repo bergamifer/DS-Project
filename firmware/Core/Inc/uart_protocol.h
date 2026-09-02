@@ -128,6 +128,22 @@
 #define CMD_MODES_DATA      0x17    /* STM32 → ESP32: ds_modes_hdr_t + nombres
                                      * NUL-terminados, uno detras del otro */
 
+/* El tono de medicion: [hz:2 LE][dither:1].
+ *
+ * Los modos de tono traen la frecuencia clavada en ui_states[] y todos llevan
+ * el LFO triangular de ±5% en 3 Hz (TONE_DITHER_PERIOD). Eso es DELIBERADO para
+ * escuchar —decorrela los modos de la sala, si no lo que se oye es la onda
+ * estacionaria y no el foco— y es exactamente lo que arruina una medicion: la
+ * captura remota son 170 ms contra un LFO de 333 ms, asi que cada corrida cae
+ * en una fase distinta del dither y el nivel no repite.
+ *
+ * Con esto el que mide fija la frecuencia y apaga el dither, y la emision pasa
+ * a ser determinista. NO se persiste: es un estado de banco, y que sobreviva a
+ * un reinicio seria una trampa. Cambiar de modo lo devuelve al valor de la
+ * tabla, tambien a proposito — el que escucha nunca se queda con un tono puro
+ * puesto por una medicion de hace tres dias. */
+#define CMD_SET_TONE        0x19
+
 /* ===== Actualización de firmware por WiFi (0x20-0x23) =====
  *
  * Los tres primeros NO se contestan desde el parser: el ACK lo manda el MAIN
@@ -175,7 +191,7 @@ typedef struct __attribute__((packed)) {
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      14   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      15   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -209,7 +225,12 @@ typedef struct __attribute__((packed)) {
                                  * por red. Sin esto la causa de un reset solo
                                  * se ve con el cable serie puesto, y los resets
                                  * por alimentacion aparecen justo cuando el
-                                 * cable no esta. */
+                                 * cable no esta.
+                                 * v15: + CMD_SET_TONE — frecuencia del tono y
+                                 * dither, por red. Es lo que habilita medir con
+                                 * el banco de dos microfonos sin nadie delante
+                                 * de la placa: el host barre foco y frecuencia
+                                 * y baja las capturas. ds_status_t NO cambio. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -647,6 +668,8 @@ void UART_Protocol_SendCalData(const ds_cal_hdr_t *hdr, const ds_cal_ch_t *chs);
 void UART_Protocol_SetModeCount(uint8_t n);
 /** @brief ¿Llegó un CMD_SET_AUTOSTART? Devuelve 1 y el valor pedido. */
 uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on);
+/** @brief ¿Llegó un CMD_SET_TONE? Devuelve 1, la frecuencia y si va con dither. */
+uint8_t UART_Protocol_GetToneRequest(uint16_t *hz, uint8_t *dither);
 /** @brief ¿Llegó un CMD_GET_MODES? Devuelve 1 y el índice del primer modo. */
 uint8_t UART_Protocol_GetModesReq(uint8_t *first);
 /** @brief Contesta CMD_MODES_DATA. `names` son `hdr->count` cadenas contiguas

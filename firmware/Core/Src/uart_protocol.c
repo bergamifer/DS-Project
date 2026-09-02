@@ -65,6 +65,9 @@ static volatile uint8_t  modes_req_flag = 0; /* CMD_GET_MODES: idem */
 static volatile uint8_t  mode_count_known = 0;
 static volatile uint8_t  autostart_req_flag = 0;
 static volatile uint8_t  autostart_req_on = 0;
+static volatile uint8_t  tone_req_flag = 0;
+static volatile uint16_t tone_req_hz = 0;
+static volatile uint8_t  tone_req_dither = 0;
 static volatile uint8_t  modes_req_first = 0;
 static volatile uint8_t  cal_req_first = 0;
 
@@ -304,6 +307,12 @@ static void process_byte(uint8_t byte)
                          | ((uint32_t)rx_payload[2] << 16) | ((uint32_t)rx_payload[3] << 24);
             cap_read_flag = 1;
             rx_frame_count++;
+        } else if (rx_command == CMD_SET_TONE && rx_payload_len == 3) {
+            tone_req_hz     = (uint16_t)rx_payload[0] | ((uint16_t)rx_payload[1] << 8);
+            tone_req_dither = rx_payload[2] ? 1 : 0;
+            tone_req_flag   = 1;
+            rx_frame_count++;
+            send_ack();
         } else if (rx_command == CMD_SET_AUTOSTART && rx_payload_len == 1) {
             autostart_req_on = rx_payload[0] ? 1 : 0;
             autostart_req_flag = 1;
@@ -700,6 +709,15 @@ uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on)
     if (!autostart_req_flag) return 0;
     autostart_req_flag = 0;
     *on = autostart_req_on;
+    return 1;
+}
+
+uint8_t UART_Protocol_GetToneRequest(uint16_t *hz, uint8_t *dither)
+{
+    if (!tone_req_flag) return 0;
+    tone_req_flag = 0;
+    *hz     = tone_req_hz;
+    *dither = tone_req_dither;
     return 1;
 }
 

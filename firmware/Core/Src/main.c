@@ -111,6 +111,41 @@
 // All fixed pipeline latencies (TX buffer wait, DAC/ADC group delay) are
 // identical for every speaker, so they cancel in the relative delays.
 #define CAL_MIC_CH        0                       // measurement mic = ADC ch0
+/* ===== El SEGUNDO microfono del banco (docs/banco_dos_microfonos.md) =====
+ *
+ * El scan mide, parlante por parlante, TOF = t0 + tau_k + |p_k - m|/c: instante
+ * de disparo, retardo propio del parlante y camino geometrico, los tres
+ * sumados. Separar tau_k de lo demas es un ajuste por minimos cuadrados que se
+ * hace afuera (tools/calfase.py, issue #21), y ese ajuste SIEMPRE devuelve
+ * residuos: que existan no prueba que sean del parlante. Pueden ser una
+ * reflexion de la sala o un error de geometria que el ajuste no supo absorber.
+ *
+ * La unica forma de distinguirlos es medir desde DOS posiciones y comparar: si
+ * los tau_k coinciden, son del parlante y generalizan; si no, no hay
+ * calibracion. Hasta ahora eso pedia correr el scan, MOVER el microfono y
+ * correrlo de nuevo — dos corridas separadas por minutos, con otro t0, otra
+ * temperatura y la mano de alguien dentro del campo.
+ *
+ * Con dos entradas se mide en la MISMA pasada, con los MISMOS chirps: t0, sala
+ * y temperatura son identicos por construccion, asi que cualquier diferencia
+ * entre los dos juegos de tau_k es de la sala o de la geometria y nada mas. Y
+ * lo hace posible un banco FIJO, que es justamente el que no se puede mover.
+ *
+ * Memoria: la captura pasa de int32 a int16 y gana una dimension, o sea que
+ * ocupa EXACTAMENTE lo mismo (2 x 4800 x 2 = 19.200 B). No es un ahorro
+ * forzado: el LOOPBACK ya captura en 16 bits desde siempre y correlaciona
+ * igual. 16 bits son 96 dB de rango contra los ~60 dB que da un microfono de
+ * medicion en una sala, asi que la precision la sigue poniendo el aire.
+ * Quedaban 17,9 kB libres de DTCM: duplicar en int32 no entraba. */
+#define CAL_MIC2_CH       1                       // segundo microfono = ADC ch1
+#define CAL_NUM_MIC       2
+/* Ventana de busqueda del segundo microfono alrededor del pico del primero.
+ * +-128 muestras son +-2,7 ms = +-91 cm de diferencia de camino, contra los
+ * 25 cm que separan los microfonos del banco: 3,6x de margen. Acotarla no es
+ * solo velocidad (257 lags en vez de 4320, o sea +6% en vez de +100%): tambien
+ * RECHAZA un maximo espurio lejano, que en el segundo microfono no tendria
+ * ningun otro filtro. Si el pico real cayera fuera, la calidad lo delata. */
+#define CAL_MIC2_WIN      128
 #define CAL_CHIRP_LEN     480                     // 10ms 500Hz→6kHz linear chirp
 #define CAL_CAPTURE_LEN   4800                    // 100ms capture window
 #define CAL_MAX_LAG       (CAL_CAPTURE_LEN - CAL_CHIRP_LEN)
@@ -589,6 +624,10 @@ static uint32_t tone_phase_q16 = 0;
 #define TONE_DITHER_PERIOD 16000   /* samples @48kHz → LFO de 3 Hz */
 static volatile uint16_t tone_base_hz = 2000;
 static uint32_t tone_dither_pos = 0;
+/* El dither se apaga SOLO para medir (CMD_SET_TONE). Por defecto va prendido en
+ * todos los modos de tono, y volver a elegir un modo lo re-enciende: el que
+ * escucha nunca hereda un tono puro que dejó puesto una medición. */
+static volatile uint8_t tone_dither_en = 1;
 // Input/mic X positions in mm (linear placeholder — see MIC_SPACING_MM note)
 static float mic_pos_x_mm[MIC_COUNT] = {
   0.0f * MIC_SPACING_MM, 1.0f * MIC_SPACING_MM, 2.0f * MIC_SPACING_MM,
@@ -710,9 +749,13 @@ static volatile uint8_t  cal_capturing = 0;
 static volatile uint16_t cal_chirp_pos = 0;
 static volatile uint16_t cal_cap_count = 0;
 static int32_t cal_chirp[CAL_CHIRP_LEN];        // 24-bit chirp ref (Cal_Init)
-static int32_t cal_capture[CAL_CAPTURE_LEN];    // mic capture, 24-bit
+/* [microfono][muestra], 16 bits — ver el comentario de CAL_MIC2_CH */
+static int16_t cal_capture[CAL_NUM_MIC][CAL_CAPTURE_LEN];
+static volatile uint8_t cal_mic = 0;            // microfono que se esta correlacionando
 // Correlation scratch (persist across chunked passes)
 static uint32_t cal_corr_lag = 0;
+static uint32_t cal_corr_end = 0;               // fin del barrido en curso
+static uint32_t cal_n_lags = 1;                 // lags recorridos, para el peak/avg
 static int64_t  cal_best_mag = 0;
 static int32_t  cal_best_lag = 0;
 static int8_t   cal_best_sign = 1;
@@ -721,6 +764,14 @@ static int64_t  cal_mag_sum = 0;                // for the peak/avg quality rati
 static int32_t  cal_tof_q8[BEAM_NUM_CHANNELS];  // time of flight, Q8 samples
 static int8_t   cal_meas_sign[BEAM_NUM_CHANNELS];
 static uint16_t cal_quality[BEAM_NUM_CHANNELS]; // peak/avg ×10 (≥CAL_Q_MIN = solid)
+/* Lo mismo, medido por el segundo microfono. Deliberadamente SEPARADO de
+ * cal_tof_q8[]: el foco y las polaridades que se aplican y se guardan en la
+ * EEPROM siguen saliendo del microfono 1 y de nadie mas. El segundo esta para
+ * VALIDAR, no para participar — mezclar los dos convertiria una comprobacion
+ * independiente en parte de lo que se quiere comprobar. */
+static int32_t  cal_tof2_q8[BEAM_NUM_CHANNELS];
+static int8_t   cal_sign2[BEAM_NUM_CHANNELS];
+static uint16_t cal_quality2[BEAM_NUM_CHANNELS];
 /* Umbral de calidad = peak/avg de la correlación ×10, o sea "cuánto sobresale
  * el eco del parlante por encima del resto de la ventana".
  *
@@ -744,7 +795,8 @@ static uint16_t cal_quality[BEAM_NUM_CHANNELS]; // peak/avg ×10 (≥CAL_Q_MIN =
 /* Pico absoluto de la captura, porque peak/avg es un cociente y NO distingue
  * "señal" de "ruido fuerte": si al micrófono le subís el preamp, el ruido crece
  * arriba y abajo y el cociente no se entera. Este gate sí. */
-static volatile int32_t cal_cap_peak = 0;
+static volatile int32_t cal_cap_peak = 0;        // microfono 1 (el que decide)
+static volatile int32_t cal_cap_peak2 = 0;      // microfono 2
 /* Progreso y resultado del scan, publicados en /status (v7). Sin esto, correr
  * el AUTOFOCUS exigía tener el cable serie enchufado para saber si sirvió. */
 static volatile uint8_t cal_progress = 0;   // parlantes medidos, 0..CAL_NUM_CH
@@ -2555,6 +2607,37 @@ int main(void)
         Set_Amps(amps_on);
       }
 
+      /* ===== Tono de medición (CMD_SET_TONE) =====
+       *
+       * Fija la frecuencia del emisor y apaga el dither, para que una captura
+       * remota de 170 ms mida siempre lo mismo. El banco de dos micrófonos
+       * (docs/banco_dos_microfonos.md) barre foco y frecuencia desde el host
+       * con esto más POST /beam y GET /capture, sin nadie delante de la placa.
+       *
+       * Los dos techos, dichos acá y no en el host: por encima de 2140 Hz el
+       * paso de 80 mm entre columnas pasa λ/2 y aparecen lóbulos de rejilla —
+       * el número que salga es real pero ya no es UN foco; y por encima de
+       * ~6 kHz la tabla de 48 puntos deja de ser un seno limpio (8 muestras por
+       * ciclo). Se permite igual: medir el aliasing es justamente uno de los
+       * experimentos. Lo que no se permite es que el clamp lo decida en
+       * silencio, así que el aviso sale por el serie. */
+      {
+        uint16_t t_hz; uint8_t t_dit;
+        if (UART_Protocol_GetToneRequest(&t_hz, &t_dit)) {
+          if (t_hz < 20)   t_hz = 20;
+          if (t_hz > 8000) t_hz = 8000;
+          tone_base_hz   = t_hz;
+          tone_dither_en = t_dit;
+          if (!t_dit) { tone_freq_hz = t_hz; tone_dither_pos = 0; }
+          snprintf(uart_buf, sizeof(uart_buf),
+                   "TONO: %u Hz, dither %s%s%s\r\n",
+                   (unsigned)t_hz, t_dit ? "ON" : "OFF",
+                   (t_hz > 2140) ? "  (>2140: lobulos de rejilla en X)" : "",
+                   tone_enabled ? "" : "  (el modo actual NO emite tono)");
+          UART_Print(uart_buf);
+        }
+      }
+
       if (UART_Protocol_GetFactoryResetRequest()) Config_FactoryReset();
 
       OTA_ServiceRequests();
@@ -2679,22 +2762,36 @@ int main(void)
 
       uint8_t cal_first;
       if (UART_Protocol_GetCalReq(&cal_first)) {
+        /* Los DOS micrófonos en la MISMA lista: 0..31 son el micrófono 1 y
+         * 32..63 el 2. La trama no cambió de forma —sigue siendo ds_cal_ch_t de
+         * 7 bytes y CAL_CHUNK_CH por tramo—, sólo creció `n_channels`, y el
+         * lector del ESP32 ya recorría hasta `n_channels` en vez de hasta un
+         * número fijo. O sea: dos micrófonos sin tocar el formato de cable ni
+         * el troceado, que era la alternativa (14 bytes por canal obligaban a
+         * bajar el tramo a 8 y a reescribir las dos puntas). */
         ds_cal_hdr_t hdr;
         ds_cal_ch_t  chs[CAL_CHUNK_CH];
         uint8_t n = 0;
-        if (cal_first < CAL_NUM_CH) {
-          uint8_t left = (uint8_t)(CAL_NUM_CH - cal_first);
+        if (cal_first < CAL_NUM_CH * CAL_NUM_MIC) {
+          uint8_t left = (uint8_t)(CAL_NUM_CH * CAL_NUM_MIC - cal_first);
           n = (left > CAL_CHUNK_CH) ? CAL_CHUNK_CH : left;
           for (uint8_t i = 0; i < n; i++) {
-            uint8_t k = (uint8_t)(cal_first + i);
-            chs[i].tof_q8  = cal_tof_q8[k];
-            chs[i].sign    = cal_meas_sign[k];
-            chs[i].quality = cal_quality[k];
+            uint8_t g = (uint8_t)(cal_first + i);
+            uint8_t k = (uint8_t)(g % CAL_NUM_CH);
+            if (g < CAL_NUM_CH) {
+              chs[i].tof_q8  = cal_tof_q8[k];
+              chs[i].sign    = cal_meas_sign[k];
+              chs[i].quality = cal_quality[k];
+            } else {
+              chs[i].tof_q8  = cal_tof2_q8[k];
+              chs[i].sign    = cal_sign2[k];
+              chs[i].quality = cal_quality2[k];
+            }
           }
         }
         hdr.first      = cal_first;
         hdr.count      = n;
-        hdr.n_channels = CAL_NUM_CH;
+        hdr.n_channels = CAL_NUM_CH * CAL_NUM_MIC;
         hdr.state      = (uint8_t)cal_state;
         hdr.progress   = cal_progress;
         hdr.ok_count   = cal_ok_count;
@@ -4291,6 +4388,9 @@ static void Cal_StartScan(void) {
     cal_tof_q8[i] = 0;
     cal_meas_sign[i] = 1;
     cal_quality[i] = 0;
+    cal_tof2_q8[i] = 0;
+    cal_sign2[i] = 1;
+    cal_quality2[i] = 0;
   }
   cal_ch = 0;
   cal_capturing = 0;
@@ -4300,7 +4400,8 @@ static void Cal_StartScan(void) {
   cal_ok_count = 0;
   cal_settle = CAL_SETTLE_HALVES;
   cal_state = CAL_SETTLE;
-  UART_Print("AUTOFOCUS: mic at the focal point -> ADC input 1 (c0). Scanning...\r\n");
+  UART_Print("AUTOFOCUS: mic 1 en el punto focal -> entrada c0. "
+             "Mic 2 (c1) mide en paralelo y NO participa del foco. Scanning...\r\n");
   /* Las dos formas de tirar 8 segundos de scan a la basura, dichas ANTES y no
    * después. Sin amplificadores no sale sonido y la correlación mide ruido; sin
    * señal en c0 no hay nada que correlacionar. En los dos casos el scan
@@ -4311,21 +4412,23 @@ static void Cal_StartScan(void) {
   if (!(mic_live_mask & (1u << CAL_MIC_CH))) {
     UART_Print("  !! SIN SENAL en la entrada 1 (c0) — revisa el microfono y su preamp.\r\n");
   }
+  /* El segundo NO aborta nada: el scan de siempre sigue funcionando con un solo
+   * microfono, y lo unico que se pierde es la validacion cruzada. Decirlo igual,
+   * porque descubrirlo despues —cuando calfase.py no encuentra el segundo juego
+   * de tau_k— cuesta un scan entero. */
+  if (!(mic_live_mask & (1u << CAL_MIC2_CH))) {
+    UART_Print("  (sin senal en la entrada 2 (c1): el scan corre igual, pero no "
+               "va a haber con que validar los tau_k)\r\n");
+  }
 }
 
 /** Correlación cruzada de una captura contra la referencia del chirp, a un lag.
  *  Compartida por el AUTOFOCUS y el LOOPBACK: es la misma cuenta sobre buffers
- *  distintos, y duplicarla sería duplicar también cualquier corrección futura. */
-static int64_t Corr_At(const int32_t *cap_base, uint32_t lag) {
-  int64_t acc = 0;
-  const int32_t *cap = &cap_base[lag];
-  for (uint32_t n = 0; n < CAL_CHIRP_LEN; n++) {
-    acc += (int64_t)cap[n] * (int64_t)cal_chirp[n];
-  }
-  return acc;
-}
-static int64_t Cal_CorrAt(uint32_t lag) { return Corr_At(cal_capture, lag); }
-/** Igual que Corr_At pero sobre las capturas de 16 bits del LOOPBACK. */
+ *  distintos, y duplicarla sería duplicar también cualquier corrección futura.
+ *
+ *  Desde el banco de dos micrófonos quedó UNA sola versión. Antes había dos
+ *  —una de 32 bits para el AUTOFOCUS y otra de 16 para el LOOPBACK— y al pasar
+ *  la captura del scan a 16 bits la de 32 se quedó sin ningún llamador. */
 static int64_t Corr_At16(const int16_t *cap_base, uint32_t lag) {
   int64_t acc = 0;
   const int16_t *cap = &cap_base[lag];
@@ -4333,6 +4436,21 @@ static int64_t Corr_At16(const int16_t *cap_base, uint32_t lag) {
     acc += (int64_t)cap[n] * (int64_t)cal_chirp[n];
   }
   return acc;
+}
+static int64_t Cal_CorrAt(uint32_t lag) {
+  return Corr_At16(cal_capture[cal_mic], lag);
+}
+
+/** Abre un barrido de correlación sobre `mic`, entre `lo` y `hi` (lags). */
+static void Cal_StartSweep(uint8_t mic, uint32_t lo, uint32_t hi) {
+  cal_mic       = mic;
+  cal_corr_lag  = lo;
+  cal_corr_end  = hi;
+  cal_best_mag  = 0;
+  cal_best_lag  = (int32_t)lo;
+  cal_best_sign = 1;
+  cal_mag_sum   = 0;
+  cal_n_lags    = (hi > lo) ? (hi - lo) : 1;
 }
 
 /**
@@ -4344,21 +4462,22 @@ static int64_t Corr_At16(const int16_t *cap_base, uint32_t lag) {
  * from the peak's sign, quality = peak/avg magnitude (×10). After the last
  * speaker: delays = max(tof) − tof_k → tx_delay_q8 + speaker_sign, and the
  * mode switches to playing a steered tone focused at the mic (CAL_DONE).
+ *
+ * Por cada parlante corre DOS barridos, uno por micrófono: el primero sobre
+ * todo el rango de lags, el segundo acotado a ±CAL_MIC2_WIN alrededor del pico
+ * del primero. Ver el comentario de CAL_MIC2_CH para por qué el segundo existe
+ * y por qué su resultado se guarda aparte en vez de promediarse con el primero.
  */
 static void Cal_Process(void) {
   if (cal_state == CAL_CAPT && !cal_capturing && cal_cap_count >= CAL_CAPTURE_LEN) {
-    cal_corr_lag = 0;
-    cal_best_mag = 0;
-    cal_best_lag = 0;
-    cal_best_sign = 1;
-    cal_mag_sum = 0;
+    Cal_StartSweep(0, 0, CAL_MAX_LAG);
     cal_state = CAL_CORR;
     return;
   }
   if (cal_state != CAL_CORR) return;
 
   uint32_t end = cal_corr_lag + CAL_CORR_CHUNK;
-  if (end > CAL_MAX_LAG) end = CAL_MAX_LAG;
+  if (end > cal_corr_end) end = cal_corr_end;
   for (; cal_corr_lag < end; cal_corr_lag++) {
     int64_t c = Cal_CorrAt(cal_corr_lag);
     int64_t m = (c < 0) ? -c : c;
@@ -4369,7 +4488,7 @@ static void Cal_Process(void) {
       cal_best_sign = (c < 0) ? -1 : 1;
     }
   }
-  if (cal_corr_lag < CAL_MAX_LAG) return;   // continue next pass
+  if (cal_corr_lag < cal_corr_end) return;   // continue next pass
 
   // Sweep done — sub-sample refinement via parabola on |corr| at peak±1
   float frac = 0.0f;
@@ -4386,28 +4505,63 @@ static void Cal_Process(void) {
       else if (frac < -0.5f) frac = -0.5f;
     }
   }
-  int64_t avg = cal_mag_sum / (int64_t)CAL_MAX_LAG;
+  /* El promedio va sobre los lags REALMENTE recorridos, no sobre CAL_MAX_LAG.
+   * El segundo micrófono barre 257 lags de 4320: dividir por 4320 le inflaría
+   * el peak/avg ~17× y sus calidades serían incomparables con las del primero
+   * — que es justamente la comparación para la que existe. */
+  int64_t avg = cal_mag_sum / (int64_t)cal_n_lags;
   uint32_t q10 = (avg > 0) ? (uint32_t)(cal_best_mag * 10 / avg) : 0;
   if (q10 > 9999) q10 = 9999;
   /* Gate absoluto ANTES del cociente: si en 100 ms el micrófono no pasó del
    * piso de ruido, no hubo chirp que medir y el peak/avg da igual — hay un
    * máximo en cualquier ventana de ruido, siempre. Anular la calidad acá es lo
    * que hace que "sin micrófono" dé 0/32 y no la lotería de 4-7/32. */
-  uint8_t no_signal = (cal_cap_peak < MIC_LIVE_THRESH);
+  int32_t pk_mic = (cal_mic == 0) ? cal_cap_peak : cal_cap_peak2;
+  uint8_t no_signal = (pk_mic < MIC_LIVE_THRESH);
   if (no_signal) q10 = 0;
 
-  cal_tof_q8[cal_ch] = (cal_best_lag << 8) + (int32_t)(frac * 256.0f);
-  cal_meas_sign[cal_ch] = cal_best_sign;
-  cal_quality[cal_ch] = (uint16_t)q10;
+  int32_t tq = (cal_best_lag << 8) + (int32_t)(frac * 256.0f);
 
-  int32_t tq = cal_tof_q8[cal_ch];
-  sprintf(uart_buf, "  CAL ch%u: tof=%ld.%02ld smp sign=%c q=%lu cap=%ld%s\r\n",
-          (unsigned)cal_ch, (long)(tq >> 8), (long)((tq & 0xFF) * 100 / 256),
+  if (cal_mic == 0) {
+    cal_tof_q8[cal_ch]    = tq;
+    cal_meas_sign[cal_ch] = cal_best_sign;
+    cal_quality[cal_ch]   = (uint16_t)q10;
+  } else {
+    cal_tof2_q8[cal_ch]  = tq;
+    cal_sign2[cal_ch]    = cal_best_sign;
+    cal_quality2[cal_ch] = (uint16_t)q10;
+  }
+
+  sprintf(uart_buf, "  CAL ch%u m%u: tof=%ld.%02ld smp sign=%c q=%lu cap=%ld%s\r\n",
+          (unsigned)cal_ch, (unsigned)(cal_mic + 1),
+          (long)(tq >> 8), (long)((tq & 0xFF) * 100 / 256),
           (cal_best_sign < 0) ? '-' : '+', (unsigned long)q10,
-          (long)cal_cap_peak,
+          (long)pk_mic,
           no_signal ? "  (SIN SENAL en el mic)"
                     : ((q10 < CAL_Q_MIN) ? "  (BAJA — ruido de sala?)" : ""));
   UART_Print(uart_buf);
+
+  /* Segundo micrófono: mismo parlante, misma captura, ventana acotada al pico
+   * que acaba de encontrar el primero. Si el primero no vio nada, no tiene
+   * sentido buscar alrededor de un pico de ruido: se anota vacío y se sigue. */
+  if (cal_mic == 0) {
+    if (no_signal) {
+      cal_tof2_q8[cal_ch]  = 0;
+      cal_sign2[cal_ch]    = 1;
+      cal_quality2[cal_ch] = 0;
+    } else {
+      int32_t lo = cal_best_lag - CAL_MIC2_WIN;
+      int32_t hi = cal_best_lag + CAL_MIC2_WIN;
+      if (lo < 1) lo = 1;
+      if (hi > (int32_t)CAL_MAX_LAG - 1) hi = (int32_t)CAL_MAX_LAG - 1;
+      Cal_StartSweep(1, (uint32_t)lo, (uint32_t)hi);
+      return;                                /* sigue en CAL_CORR */
+    }
+  }
+
+  /* Los dos micrófonos ya midieron este parlante. El que cuenta para el foco
+   * y para el veredicto del scan es el PRIMERO, siempre. */
+  q10 = cal_quality[cal_ch];
 
   if (q10 >= CAL_Q_MIN) cal_ok_count++;
   cal_ch++;
@@ -5112,6 +5266,7 @@ static void UI_ApplyState(uint8_t idx) {
     tone_freq_hz = st->tone_hz;
     tone_phase_q16 = 0;
     tone_dither_pos = 0;
+    tone_dither_en = 1;            // ver el comentario de tone_dither_en
   }
   tone_enabled = st->tone;
   mfocus_enabled = st->mf;
@@ -5306,14 +5461,25 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
    * emission→capture offset is constant for every speaker and cancels in
    * the relative TOFs. */
   if (cal_capturing) {
-    int32_t cpk = cal_cap_peak;
+    /* Los DOS microfonos, de la MISMA trama TDM. Que compartan trama es lo que
+     * hace valida la comparacion: el lado del ADC no aporta desfase entre
+     * ellos, igual que en el LOOPBACK. */
+    int32_t cpk = cal_cap_peak, cpk2 = cal_cap_peak2;
     for (uint32_t i = 0; i < samples && cal_cap_count < CAL_CAPTURE_LEN; i++) {
-      int32_t v = rx_buf[i * ADC_CHANNELS + CAL_MIC_CH] >> 8;
-      cal_capture[cal_cap_count++] = v;
-      if (v < 0) v = -v;
-      if (v > cpk) cpk = v;          /* gate absoluto: ¿hubo ALGO en el mic? */
+      int32_t r1 = rx_buf[i * ADC_CHANNELS + CAL_MIC_CH];
+      int32_t r2 = rx_buf[i * ADC_CHANNELS + CAL_MIC2_CH];
+      cal_capture[0][cal_cap_count] = (int16_t)(r1 >> 16);
+      cal_capture[1][cal_cap_count] = (int16_t)(r2 >> 16);
+      cal_cap_count++;
+      /* El gate absoluto se sigue midiendo en escala de 24 bits, que es la de
+       * MIC_LIVE_THRESH y la del resto del proyecto. Guardar en 16 y juzgar en
+       * 24 no es incoherencia: son dos cosas distintas —lo que se correlaciona
+       * y lo que decide si hubo senal— y mezclarlas moveria el umbral 48 dB. */
+      int32_t v1 = r1 >> 8; if (v1 < 0) v1 = -v1; if (v1 > cpk)  cpk  = v1;
+      int32_t v2 = r2 >> 8; if (v2 < 0) v2 = -v2; if (v2 > cpk2) cpk2 = v2;
     }
     cal_cap_peak = cpk;
+    cal_cap_peak2 = cpk2;
     if (cal_cap_count >= CAL_CAPTURE_LEN) cal_capturing = 0;
   }
 
@@ -5325,13 +5491,19 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
   if (tone_enabled) {
     /* Internal source: fill beam_line exactly where the RX beam would write
      * it — the TX fills read it back with their focal delays untouched. */
-    /* Fase B: dither de frecuencia — triángulo 0→peak→0 sobre la base. */
-    uint32_t tri = (tone_dither_pos < TONE_DITHER_PERIOD / 2)
-                   ? tone_dither_pos : (TONE_DITHER_PERIOD - tone_dither_pos);
-    uint32_t base = tone_base_hz;
-    tone_freq_hz = (uint16_t)(base - base / 20
-                              + (base / 10) * tri / (TONE_DITHER_PERIOD / 2));
-    tone_dither_pos = (tone_dither_pos + samples) % TONE_DITHER_PERIOD;
+    /* Fase B: dither de frecuencia — triángulo 0→peak→0 sobre la base.
+     * Con el dither apagado (banco de medición) la frecuencia es la base, a
+     * secas: la rama se resuelve una vez por ventana, no por muestra. */
+    if (tone_dither_en) {
+      uint32_t tri = (tone_dither_pos < TONE_DITHER_PERIOD / 2)
+                     ? tone_dither_pos : (TONE_DITHER_PERIOD - tone_dither_pos);
+      uint32_t base = tone_base_hz;
+      tone_freq_hz = (uint16_t)(base - base / 20
+                                + (base / 10) * tri / (TONE_DITHER_PERIOD / 2));
+      tone_dither_pos = (tone_dither_pos + samples) % TONE_DITHER_PERIOD;
+    } else {
+      tone_freq_hz = tone_base_hz;
+    }
     for (uint32_t i = 0; i < samples; i++) {
       beam_line[(wp + i) & DELAY_LINE_MASK] = Tone_NextSample();
     }
@@ -5583,6 +5755,7 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
       if (cal_chirp_pos == 0) {          // arrancar la captura con la 1ª ventana
         cal_cap_count = 0;
         cal_cap_peak = 0;
+        cal_cap_peak2 = 0;
         cal_capturing = 1;
       }
       cal_chirp_pos += samples;
