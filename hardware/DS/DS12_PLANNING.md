@@ -178,52 +178,83 @@ exactamente la señal que uno querría medir.
    fraccionales y el mapeo de canales en "enchufar un cable plano".
    Fundamento y valores en `docs/loopback_debug.md`.
 
-### 0.7. 🔴 La ganancia del PAM8302A obliga a tirar 42 dB de rango dinámico
+### 0.7. ⚠️ RETIRADO — se apoyaba en números que ya estaban corregidos
 
-`R_I = 1 kΩ` da `A_V = 2·(142k/1k) = 284` = **+49 dB**. Para que el amplificador
-no recorte, la entrada tiene que quedar en ~11 mV<sub>rms</sub>, y como el
-PCM1690 entrega ~1,4 V<sub>rms</sub> a fondo de escala, hay que atenuar
-**≈ −42 dB en digital**. Son 42 dB de rango dinámico del DAC que se tiran.
+> **Estado 2026-09-02: este ítem NO se hace como estaba escrito.** Fernando
+> preguntó si los 723 Hz eran ciertos y si no lo habíamos descartado ya. Lo
+> habíamos descartado: `loopback_debug.md` **§19.3**, medido. Este ítem se
+> escribió desde §2.1, que §19.3 corrige, y la corrección nunca llegó hasta acá.
 
-Corroboración independiente: Fernando venía operando a **−46 dB por oído**.
+**Lo que decía (desde §2.1, derivado del esquemático):** `R_I = 1 kΩ` da
+`A_V = 2·(142k/1k)` = **+49 dB**, obliga a atenuar −42 dB en digital, y deja el
+pasaalto de entrada en **723 Hz**. Propuesta: subir R_I a 20 kΩ.
 
-Subir `R_I` a 20 kΩ (ganancia +23 dB) subiría el punto de operación digital
-~26 dB, con la mejora de señal-ruido correspondiente. **Y de paso corre el
-pasaalto de entrada de 723 Hz a 36 Hz**: hoy el modo 17 (barrido vertical,
-800 Hz) trabaja a media octava del borde de la banda, con −2,6 dB y 42° de fase.
+**Lo que dice la medición (§19.3, respuesta del amplificador solo contra J13):**
 
-> Mientras tanto, en la DS11: el default de fábrica de −24 dB deja el
-> amplificador **12 dB dentro del recorte** con los modos de tono. Debería ser
-> −40 dB.
+| Hz | 20 | 30 | 45 | **63** | 90 | 125 | 250 | 500 | **723** | **800** |
+|---|---|---|---|---|---|---|---|---|---|---|
+| dB | −10,8 | −7,9 | −5,2 | **−3,5** | −2,1 | −1,1 | −0,3 | 0,0 | **0,0** | **0,0** |
 
-#### 🔴 CORRECCIÓN 2026-09-02 — subir R_I sin tocar el condensador ROMPE los agudos
+**El −3 dB cae en ~70 Hz. En 723 Hz la respuesta es plana.** No hay ningún
+pasaalto de 723 Hz en el camino real.
 
-Los designadores, verificados en el netlist: **R_I = R38, R39, R40 … R101** (1 kΩ,
-**64 unidades**, un par diferencial por amplificador). La topología por canal es:
+#### El mecanismo, y de paso cierra la ganancia (§20)
 
-```
-PCM1690  →  R_I 1k  →  ┬─ C_shunt 4.7nF → GND        ←  pasabajos de reconstrucción
-                       └─ C_i 220nF → PAM8302A IN     ←  acople + pasaaltos
-```
+§19.3 conjeturaba que el PAM8302A tiene **resistencia de entrada interna en
+serie** con la externa, y que la fórmula del datasheet pide el total. La
+aritmética lo confirma: **un solo valor de ~9-10 kΩ interna explica las DOS
+mediciones a la vez.**
 
-**R_I hace DOS trabajos a la vez**, y el ítem sólo contemplaba uno:
-
-| | con R_I = 1k | con R_I = 20k, C sin tocar | con R_I = 20k **y C_shunt 220pF** |
+| R interna | R total | pasaalto | ganancia |
 |---|---|---|---|
-| pasaaltos (con C_i 220nF) | 723 Hz | **36 Hz** ✅ | **36 Hz** ✅ |
-| **pasabajos (con C_shunt)** | 33,9 kHz ✅ | **1,69 kHz** 🔴 | **36,2 kHz** ✅ |
-| ganancia | +49 dB | +23 dB ✅ | +23 dB ✅ |
+| 0 (lo que suponía §2.1) | 1 k | 723 Hz | +49,1 dB |
+| **~9 k** | **10 k** | **72 Hz** ✅ | **+29,1 dB** ✅ |
+| medido | | **68 Hz** | +17 a +29 dB (sin cerrar) |
 
-Subir sólo la resistencia deja el pasabajos en **1,7 kHz**: se llevaría puestos
-los agudos y, de paso, el modo 17 (barrido vertical a 800 Hz) quedaría otra vez
-sobre un borde de banda, que es exactamente lo que este ítem quería evitar.
+> **Y esto cierra la duda de §20.** Si la ganancia fuera **+17 dB**, la R total
+> tendría que ser 40 kΩ, y entonces el pasaalto caería en **18 Hz** — contra los
+> 68 Hz medidos. Las dos cosas salen de la MISMA R total, así que no pueden
+> discrepar: **la medición del pasaalto corrobora +29 dB y descarta +17 dB.**
 
-**El cambio va de a pares: R38…R101 → 20 kΩ (64) y C81…C_n de 4,7 nF → 220 pF
-(64).** Son 128 posiciones de BOM, ningún cambio de topología ni de ruteo.
+#### Qué compraría el cambio realmente
 
-⚠️ Los 4,7 nF actuales son **C0G** (confirmado en las sustituciones de BOM de la
-DS11). Los 220 pF también tienen que serlo: un X7R de 220 pF tiene coeficiente de
-tensión y distorsiona justo en el camino de señal.
+Con R interna ≈ 9 kΩ, subir la externa de 1 k a 20 k lleva el total de 10 k a
+30 k, no de 1 k a 20 k:
+
+| | ganancia | pasaalto | pasabajos (con C 4,7 nF) |
+|---|---|---|---|
+| hoy | +28,2 dB | 66 Hz | 33,9 kHz |
+| R_ext 20 k | +19,5 dB | 24 Hz | **1,69 kHz** 🔴 |
+
+- **Gana 8,7 dB de margen digital, no 26.**
+- **Mejora un pasaalto que ya es irrelevante**: 68 Hz está muy por debajo de la
+  resonancia de 125-180 Hz de los parlantes (`loopback_debug.md` §28). La banda
+  grave la limita el driver, no el amplificador.
+- **Y sigue en pie la trampa del filtro**: R_ext forma el pasabajos de
+  reconstrucción con el capacitor de 4,7 nF a masa. Subirla sin bajar ese
+  capacitor a 220 pF deja el pasabajos en 1,7 kHz y se lleva los agudos.
+
+#### Veredicto
+
+**No hacerlo.** Se cambian 128 componentes y se altera el sonido de forma
+audible —8,7 dB de ganancia y otra respuesta en graves— a cambio de un margen
+que §19.4 ya dice que sobra: *"con +29 dB sobran ~20 dB de margen; el equipo
+viene corriendo muy por debajo de lo que puede"*. Y **crea una diferencia de
+timbre entre las DS11 y las DS12** en una instalación pensada para que 15 nodos
+suenen igual.
+
+Si en algún momento hiciera falta más margen digital, el camino barato es el
+volumen maestro del PCM1690, que ya es ajustable y no cuesta un rediseño.
+
+**Lo único que queda vivo de este ítem**: los designadores, por si alguna vez se
+tocan — **R_I = R38 … R101** (1 kΩ, 64 unidades) y los shunt de 4,7 nF C0G (64).
+
+> **Lección de método, que es lo que hay que llevarse:** §2.1 quedó marcada como
+> corregida en su propio archivo, pero este documento se había escrito desde
+> ella y nadie propagó la corrección. Un número derivado del esquemático
+> sobrevivió tres semanas a la medición que lo desmentía. **Al citar un número
+> de `loopback_debug.md`, chequear si tiene una sección de corrección más
+> abajo.**
 
 ## 🔴 Prioridad alta
 
