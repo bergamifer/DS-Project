@@ -2725,6 +2725,7 @@ int main(void)
           int32_t half = (int32_t)(LB_DMA_WORDS / AUDIO_CHANNELS) / 2;
           if (ph > half) ph -= (int32_t)(LB_DMA_WORDS / AUDIO_CHANNELS);
           st.dma_phase = (int16_t)ph;
+        st.reset_rsr = reset_rsr;
         }
         st.master_vol_db = beam_config.master_vol_db;
         st.in_gain_db = in_gain_db;

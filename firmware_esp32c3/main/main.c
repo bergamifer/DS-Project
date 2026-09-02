@@ -146,7 +146,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    13
+#define PROTO_VERSION    14
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -240,9 +240,10 @@ typedef struct __attribute__((packed)) {
     uint32_t fw_build;        // v8: epoch unix de esa compilacion
     uint8_t  ota_state;       // v8: 0 idle, 1 recibiendo, 2 lista, 3 error
     uint8_t  ota_pct;         // v8: avance de la carga, 0..100
-    int16_t  dma_phase;       // v9: fase RX-TX de los DMA en muestras (multinode nivel 2)
+    int16_t  dma_phase;
+    uint32_t reset_rsr;   // v14: por que arranco el STM32       // v9: fase RX-TX de los DMA en muestras (multinode nivel 2)
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 85, "ds_status_t debe ser 85 bytes");
+_Static_assert(sizeof(ds_status_t) == 89, "ds_status_t debe ser 89 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 #define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
@@ -879,6 +880,24 @@ static int esp_self_json(char *out, size_t n)
         r ? r->label : "?", PROTO_VERSION);
 }
 
+/** Por que arranco el STM32, en una palabra.
+ *
+ * Se decodifica ACA y no en el STM32 a proposito: el STM32 manda RCC->RSR crudo,
+ * asi que una captura vieja se puede reinterpretar cuando cambie lo que sabemos
+ * de los flags. Ya paso una vez — BOR y POR no se distinguen con BOR_LEV de
+ * fabrica, y el firmware afirmaba que si. */
+static const char *reset_name(uint32_t rsr)
+{
+    if (rsr & (1u << 19)) return "POR";    /* PORRSTF  */
+    if (rsr & (1u << 21)) return "BOR";    /* BORRSTF  */
+    if (rsr & (1u << 26)) return "IWDG";   /* IWDG1RSTF */
+    if (rsr & (1u << 25)) return "WWDG";   /* WWDG1RSTF */
+    if (rsr & (1u << 30)) return "LPWR";   /* LPWRRSTF */
+    if (rsr & (1u << 24)) return "SFT";    /* SFTRSTF  */
+    if (rsr & (1u << 22)) return "PIN";    /* PINRSTF  */
+    return "?";
+}
+
 static esp_err_t status_handler(httpd_req_t *req)
 {
     char self[192];
@@ -913,6 +932,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"mic_live\":%u,\"cal_prog\":%u,\"cal_ok\":%u,\"cal_saved\":%s,"
             "\"fw_id\":\"%08lX\",\"fw_build\":%lu,\"ota_state\":%u,\"ota_pct\":%u,"
             "\"dma_phase\":%d,\"autostart\":%s,\"autostart_held\":%s,"
+            "\"reset\":\"%s\",\"reset_rsr\":\"%08lX\","
             "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             device_id,
@@ -940,6 +960,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             (last_status_len >= sizeof(ds_status_t)) ? (int)s->dma_phase : -1,
             (s->state_flags & STATE_F_AUTOSTART) ? "true" : "false",
             (s->state_flags & STATE_F_AUTO_HELD) ? "true" : "false",
+            reset_name(s->reset_rsr), (unsigned long)s->reset_rsr,
             self, (unsigned)last_status_len,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));

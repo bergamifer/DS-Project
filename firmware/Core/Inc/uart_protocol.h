@@ -175,7 +175,7 @@ typedef struct __attribute__((packed)) {
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      13   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      14   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -204,7 +204,12 @@ typedef struct __attribute__((packed)) {
                                  * v13: + CMD_SET_AUTOSTART y los flags
                                  * STATE_F_AUTOSTART / STATE_F_AUTO_HELD — el
                                  * nodo puede encender los amplificadores sin
-                                 * red (issue #19). */
+                                 * red (issue #19).
+                                 * v14: + reset_rsr — por que arranco la placa,
+                                 * por red. Sin esto la causa de un reset solo
+                                 * se ve con el cable serie puesto, y los resets
+                                 * por alimentacion aparecen justo cuando el
+                                 * cable no esta. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -400,7 +405,17 @@ typedef struct __attribute__((packed)) {
      * nodo de una instalación puede decir por HTTP en qué estado de fase
      * arrancó — que es lo único que hacía falta para compensarlo. Se imprimía en
      * el heartbeat desde agosto, o sea que hasta ahora pedía un cable serie. */
-    int16_t  dma_phase;      /* v9: fase RX-TX en muestras, 0..479 */
+    int16_t  dma_phase;
+    /* ===== Por que arranco esta placa (v14) =====
+     * RCC->RSR crudo, latcheado antes de HAL_Init(). Se manda entero y no un
+     * codigo: la interpretacion se hace afuera, y asi una lectura vieja sigue
+     * siendo util cuando cambie lo que sabemos de los flags.
+     *
+     * Vivia SOLO en el puerto serie, y esa es exactamente la informacion que
+     * falta cuando hay que sacar el cable — que es cuando aparecen los resets.
+     * El 2026-09-02 la placa se reiniciaba al encender los amplificadores y la
+     * causa estaba a un cable de distancia que ya no estaba. */
+    uint32_t reset_rsr;      /* v9: fase RX-TX en muestras, 0..479 */
 } ds_status_t;               /* 73 + 10 + 2 = 85 bytes */
 
 /* Estado REAL, no el nominal.
@@ -433,7 +448,7 @@ typedef struct __attribute__((packed)) {
  * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18
  * midiendo underruns, cuando el contador BAJÓ de 6 a 0 — un contador monótono
  * que retrocede es un reboot, y no había con qué confirmarlo. */
-_Static_assert(sizeof(ds_status_t) == 85, "ds_status_t must be 85 bytes");
+_Static_assert(sizeof(ds_status_t) == 89, "ds_status_t must be 89 bytes");
 /* ⚠️ Un payload por encima de PROTO_MAX_PAYLOAD hace que el ESP32 descarte la
  * trama por larga y el endpoint quede mudo SIN dar error — de ahí los asserts. */
 _Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,
