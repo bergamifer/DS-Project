@@ -50,6 +50,11 @@ conversiones aguas abajo. No sirve para descartar esto.
 
 #### ✅ 2026-09-02 — la solución: dos bucks desde la entrada, y el 3V3 deja de ser un LDO
 
+> 📄 **La especificación completa, lista para dibujar en KiCad, está en
+> [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md)**: esquemático nodo por nodo, BOM, tabla de
+> modos de operación, análisis de fallas, reglas de layout y procedimiento de verificación.
+> Lo de abajo es el resumen.
+
 Análisis completo del conexionado de alimentación hecho sobre `DS.txt` (netlist de
 producción) + datasheets. Lo que sigue reemplaza al "buck propio para el riel digital"
 genérico de arriba por una topología concreta con part numbers.
@@ -475,6 +480,30 @@ tocan — **R_I = R38 … R101** (1 kΩ, 64 unidades) y los shunt de 4,7 nF C0G 
 > sobrevivió tres semanas a la medición que lo desmentía. **Al citar un número
 > de `loopback_debug.md`, chequear si tiene una sección de corrección más
 > abajo.**
+
+### 0.8. Puerto USB del STM32 — es una decisión de encapsulado, no de firmware
+
+**Abierto 2026-09-03.** Objetivo declarado: que la placa sea una interfaz de audio de
+**8 entradas / 8 salidas** controlable por USB. Análisis completo en
+**[DS12_USB_STM32.md](DS12_USB_STM32.md)**. Lo esencial:
+
+- **PA11 y PA12 (los pines de USB) están físicamente sin conectar en la DS11** ✅
+  (verificado: son nets de un solo nodo en `DS.txt`). PA9 y PA10 también. Un puerto USB
+  Full-Speed **no cuesta ninguna migración de pines**.
+- **Pero 8 ch × 24 bit × 48 kHz = 1152 bytes por trama, y el máximo de un endpoint
+  isócrono Full-Speed son 1023.** No entra ni en una sola dirección. Es un techo del
+  estándar USB 2.0. El techo práctico de FS es **4 in / 4 out a 24 bit/48 kHz**.
+- **8×8 exige High-Speed**, que en el H743 exige un **PHY ULPI externo**, y ULPI exige
+  `ULPI_DIR` y `ULPI_NXT`, que **no existen en LQFP100 ni en LQFP144** ✅ (verificado en la
+  tabla 9 del datasheet). Hace falta **STM32H743IIT6, LQFP176**.
+- Recomendación: **DS12 = arreglo de alimentación + USB Full-Speed** (que además trae DFU
+  por cable, consola CDC y control MIDI, todo gratis en pines muertos), y **la migración a
+  LQFP176 como decisión separada**, tomada una vez que la pila UAC2 esté validada en FS.
+  Meter un cambio de encapsulado del MCU en la misma tirada que el arreglo de alimentación
+  convierte una revisión acotada en un bring-up completo.
+
+---
+
 
 ## 🔴 Prioridad alta
 

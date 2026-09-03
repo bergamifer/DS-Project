@@ -265,7 +265,66 @@ ajustadas tiene que dar la de la cinta métrica. Verificado sobre datos
 sintéticos (`python3 tools/calfase.py --autoprueba`): recupera 250 mm con 0,3 mm
 de error y 500 mm con 0,9 mm.
 
-### 4.5 Lo que sale gratis del mismo barrido
+### 4.5 Fase de cada parlante, frecuencia por frecuencia · 5 min
+
+```
+curl -X POST http://<ip>/mode -d '{"mode":22}'      # ~3,5 minutos de tonos
+# cuando /fase deje de decir "corriendo":
+curl -X POST http://<ip>/mode -d '{"mode":0}'       # el muro se calla
+python3 tools/fase.py --host <ip> --cal cal.json -o fase.json --mapa
+```
+
+El **modo 22** emite un tono puro por **un parlante por vez** y detecta
+coherentemente en las ocho entradas: 32 parlantes × 14 frecuencias (250 Hz a
+5 kHz, tercios de octava). Por cada par quedan amplitud **y fase**.
+
+Ninguno de los modos anteriores podía dar esto:
+
+- El **AUTOFOCUS** también recorre los parlantes de a uno, pero correlaciona un
+  chirp: devuelve **un escalar** por parlante, el retardo de grupo promediado
+  sobre 500 Hz–6 kHz. Si un parlante llega bien en 1 kHz y mal en 3 kHz, ese
+  promedio no describe ninguna de las dos.
+- El **barrido de frecuencia** (modo 20) sí da fase contra frecuencia, pero con
+  los cuatro bancos sonando a la vez: mide **la suma** en el micrófono, y una
+  suma no se puede desarmar — dos parlantes en contrafase dan lo mismo que dos
+  parlantes mudos.
+
+`tools/fase.py` produce cuatro cosas:
+
+1. **Diagnóstico del muro.** Nivel de cada parlante; un mudo da piso en las 14
+   frecuencias, un flojo aparece con su desvío en dB.
+2. **Arribo en fase.** Restándole a cada parlante su fase geométrica
+   (2π·f·d_k/c, y d_k se calcula) y después el promedio circular sobre los 32,
+   queda su desviación. **La dispersión de esa desviación, frecuencia por
+   frecuencia, es literalmente cuánto se desalinean** — y no hay que
+   desenvolver nada, porque es una comparación a f fija. El informe la traduce
+   a milímetros de camino y a costo en dB sobre la suma.
+3. **¿Alcanza un retardo?** Por parlante, busca el τ_k que mejor explica su
+   curva —maximizando la suma coherente sobre una grilla, no por regresión: la
+   fase está envuelta y una regresión sobre ángulos envueltos no significa
+   nada— y reporta lo que queda **después**. Residuo chico: es retardo puro y un
+   solo número por parlante lo corrige. Residuo grande: ninguna calibración por
+   retardos alcanza, y eso hay que saberlo antes de construir encima.
+4. **Polaridad contra retardo, que el chirp no distingue.** Una inversión son
+   π de desfase **a todas las frecuencias**; un retardo mal puesto da un desfase
+   que **crece con f**. En el retardo de grupo del AUTOFOCUS los dos se ven
+   parecidos; acá se separan solos.
+
+Y hay una propiedad que lo hace válido en toda la banda: **con un solo parlante
+emitiendo no hay array, así que no hay lóbulos de rejilla**. El techo de
+2140 Hz que limita a los modos enfocados acá no aplica.
+
+> **Un barrido terminado sobrevive al cambio de modo.** El uso natural es correr
+> los 3 minutos, volver al modo 0 para que el muro se calle, y recién ahí bajar
+> el resultado.
+
+El análisis está verificado contra 22 casos de respuesta conocida
+(`python3 tools/fase.py --autoprueba`): recupera un retardo de +150 µs con
+0,3 µs de error, detecta un parlante invertido sin confundirlo con un retardo,
+distingue «es retardo puro» de «no lo es», y con 10° de ruido de fase encima
+sigue recuperando los retardos con 6,4 µs RMS.
+
+### 4.6 Lo que sale gratis del mismo barrido
 
 - **Nivel por parlante** → trim de ganancia por canal. `gains[]` ya existe.
 - **Ancho del lóbulo en mm**, medido en vez de calculado, a cada frecuencia. Es
@@ -275,6 +334,35 @@ de error y 500 mm con 0,9 mm.
   sabe si una diferencia de 2 dB entre dos configuraciones significa algo.
 
 ---
+
+## 4.7 El orden de la mañana
+
+Los cinco pasos, en orden, con lo que cada uno decide. Total: **menos de una
+hora**, y los tres primeros son de diez minutos.
+
+| | Qué | Comando | Decide |
+|---|---|---|---|
+| **0** | Nivel de los micrófonos | `python3 tools/nivel.py --host <ip>` | si vale la pena seguir. Menos de 20 dB de margen sobre el piso y todo lo demás mide ruido |
+| **1** | Aceptación del banco | `python3 tools/perfil.py --host <ip> --hz 2000 --sep 250 --grafico` | si la cadena entera está bien. Tiene **respuesta conocida** |
+| **2** | Fase por parlante | modo 22, después `tools/fase.py` | si los 32 llegan en fase, y si un retardo por parlante alcanza |
+| **3** | Contraste | `python3 tools/perfil.py --host <ip> --hz 800 1200 2000 3000` | el número del que depende la instalación de 15 nodos |
+| **4** | τ_k con los dos micrófonos | modo 11, después `tools/calfase.py` | si la calibración por retardos es real o es sala |
+
+**Antes de todo**, y a mano, porque ninguna herramienta lo hace sola:
+
+```
+curl -X POST http://<ip>/amps -d '{"on":true}'
+```
+
+**El paso 0 no es burocracia.** Con la ganancia baja, la detección coherente
+mide ruido y los informes salen vacíos; con la ganancia alta, el ADC recorta y
+las fases que salen son las de la distorsión. En el medio hay 40 dB de margen.
+
+**El paso 1 va antes que el 2 por un motivo**: si el foco no se está moviendo
+—si lo que cambia con la posición es el volumen y no la dirección— entonces
+todo lo que diga el paso 2 sobre fases es sobre un array que no está formando
+nada. El paso 1 es el único que puede fallar contra un número que se conoce de
+antemano.
 
 ## 5. Límites, dichos de entrada
 
@@ -305,5 +393,8 @@ de error y 500 mm con 0,9 mm.
 | Firmware | ✅ v15 en la placa `192.168.100.77`, verificado: `/tone`, `/cal` con 64 entradas |
 | `tools/perfil.py` | ✅ probado de punta a punta contra la placa (sin micrófonos: informa correctamente "esto es el piso del ADC") |
 | `tools/calfase.py` | ✅ doble micrófono + prueba de separación, verificado con datos sintéticos |
+| Modo 22 · fase por parlante | ✅ en la placa: corre, termina, sobrevive al cambio de modo, se baja entero |
+| `tools/fase.py` | ✅ 22 comprobaciones de respuesta conocida |
+| `tools/nivel.py` | ✅ probado contra la placa |
 | Banco físico | ⏳ en construcción — ver §3 |
 | Primera medición | ⏳ espera el banco |
