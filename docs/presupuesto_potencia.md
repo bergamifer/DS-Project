@@ -285,3 +285,76 @@ cerrada, con los 32 amplificadores adentro, el margen es lo primero que se gasta
    calor, más margen) y elegir el TVS en consecuencia (SMBJ13A o similar).
 3. Si se quiere plena potencia, considerar **alimentar los amps con su propio
    riel** separado del digital, para que un brown-out de audio no arrastre al MCU.
+
+---
+
+## §D — El hundimiento del riel de 3V3, MEDIDO (3 de septiembre de 2026)
+
+El §B describía como hipótesis razonable que el riel de +3V3 se hunde al
+encender los amplificadores y que IC1 (MAX809T, umbral 3,08 V) reinicia el
+STM32. **Ahora está medido, desde adentro de la placa y sin agregar un solo
+componente.**
+
+### Cómo se mide
+
+El STM32H743 tiene un canal interno de ADC a su referencia de banda prohibida
+(VREFINT ≈ 1,21 V, fija). Midiéndola contra un fondo de escala que *es* VDDA, el
+cociente da VDDA, y la calibración de fábrica está grabada en la flash de
+sistema:
+
+```
+VDDA [mV] = 3300 × VREFINT_CAL / lectura        VREFINT_CAL en 0x1FF1E860
+```
+
+`Rail_Poll()` en `main.c` lo hace sin bloquear (arranca la conversión en una
+pasada del main loop y la cosecha en otra, mirando EOC) y guarda el **mínimo
+retenido**. Eso último es lo que hace la diferencia: un valor instantáneo leído
+una vez por segundo no ve un hundimiento de milisegundos.
+
+### Lo medido
+
+| condición | VDDA típico | mínimo retenido |
+|---|---|---|
+| amps apagados, salida en mute | 3300 mV | 3251–3255 mV |
+| amps **encendidos**, salida en mute | 3300 mV | 3247–3254 mV |
+| amps encendidos, **volumen −20 dB** | 3195–3221 mV | **3068 mV** |
+| amps encendidos, **volumen −18 dB** | 3219 mV | **3075 mV** → **RESET** |
+
+**Encender los amplificadores no cuesta casi nada** (3254 → 3247 mV). Lo que
+hunde el riel es la **corriente de audio**: a −20 dB el mínimo cae 230 mV y toca
+el umbral del supervisor; a −18 dB la placa **se reinicia**.
+
+Y el reinicio se identifica sin ambigüedad: `/status` informa `reset: PIN`,
+`rsr 00460000` — el pin **NRST**. No fue software (`SFT`), ni el brownout
+interno del núcleo (`BOR`), ni el watchdog. Fue IC1.
+
+### Precisión, dicha de entrada
+
+La referencia interna tiene ±1 % de tolerancia y la calibración se tomó a 30 °C,
+así que **el valor absoluto vale ±30 mV**. Lo que vale mucho más son los
+**cambios** —la caída de 230 mV— porque el error es común a todas las lecturas.
+Y de todos modos la evidencia dura del umbral no es el número: es el reinicio
+con causa PIN.
+
+### Qué significa
+
+1. **El §B queda confirmado, y con el mecanismo identificado.** No es la fuente
+   de banco, no es el consumo medio, no son los 24 V: es la caída del **3V3
+   digital** durante los transitorios de corriente de audio, aguas abajo del
+   cuello de botella FB2 → D9 → AP1117-33.
+2. **El margen de operación es de ~200 mV y desaparece con audio fuerte.** Con
+   el ST-Link puesto (que alimenta el riel por J7 pin 10, *después* del cuello
+   de botella) la placa aguanta más; sin él, menos. Eso explica por qué las
+   cinco DS11 nunca corrieron sin USB.
+3. **El equipo dejó de ser ciego.** El amperímetro de la fuente no podía verlo:
+   promedia, mide del lado de la entrada, y el evento son 230 mV durante
+   milisegundos dos conversiones más adelante.
+
+### Para la DS12
+
+Esto le pone número al ítem §0.1 de `DS12_PLANNING.md`. El requisito no es
+"mejor regulador": es que **el camino de 3V3 sostenga el transitorio**, lo que
+apunta a más bulk local en el 3V3 y a sacar el diodo serie y el ferrite del
+camino de alimentación principal. Y a **medir los otros rieles**, que hoy siguen
+siendo invisibles: +5V, +5VA y +24V necesitan divisores resistivos a entradas de
+ADC — el 3V3 salió gratis sólo porque el STM32 se mide a sí mismo.

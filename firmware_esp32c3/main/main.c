@@ -159,7 +159,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    19
+#define PROTO_VERSION    20
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -282,8 +282,11 @@ typedef struct __attribute__((packed)) {
     uint8_t  ota_pct;         // v8: avance de la carga, 0..100
     int16_t  dma_phase;
     uint32_t reset_rsr;   // v14: por que arranco el STM32       // v9: fase RX-TX de los DMA en muestras (multinode nivel 2)
+    uint16_t vdda_mv;        // riel de 3V3 medido por el propio STM32
+    uint16_t vdda_min_mv;    // minimo desde el /status anterior (se limpia al leer)
+    uint16_t vdda_min_abs;   // minimo desde que arranco
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 89, "ds_status_t debe ser 89 bytes");
+_Static_assert(sizeof(ds_status_t) == 95, "ds_status_t debe ser 95 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 #define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
@@ -993,6 +996,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"fw_id\":\"%08lX\",\"fw_build\":%lu,\"ota_state\":%u,\"ota_pct\":%u,"
             "\"dma_phase\":%d,\"autostart\":%s,\"autostart_held\":%s,"
             "\"reset\":\"%s\",\"reset_rsr\":\"%08lX\","
+        "\"vdda_mv\":%u,\"vdda_min_mv\":%u,\"vdda_min_abs\":%u,"
             "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             device_id,
@@ -1021,6 +1025,12 @@ static esp_err_t status_handler(httpd_req_t *req)
             (s->state_flags & STATE_F_AUTOSTART) ? "true" : "false",
             (s->state_flags & STATE_F_AUTO_HELD) ? "true" : "false",
             reset_name(s->reset_rsr), (unsigned long)s->reset_rsr,
+            /* Solo valen si la trama es de la version que los trae: un firmware
+             * viejo del STM32 llenaria estos campos con basura del final del
+             * buffer. Mismo criterio que dma_phase, arriba. */
+            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->vdda_mv : 0u,
+            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->vdda_min_mv : 0u,
+            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->vdda_min_abs : 0u,
             self, (unsigned)last_status_len,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));

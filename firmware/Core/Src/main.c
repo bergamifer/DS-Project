@@ -247,6 +247,11 @@ UART_HandleTypeDef huart7;
 UART_HandleTypeDef huart4;
 
 ADC_HandleTypeDef hadc3;
+/* Vigilancia del riel de 3V3 — ver el comentario largo junto a Rail_Poll(). */
+static volatile uint16_t vdda_mv      = 0;       /* ultima lectura, en mV */
+static volatile uint16_t vdda_min_mv  = 0xFFFF;  /* minimo desde el ultimo /status */
+static volatile uint16_t vdda_min_abs = 0xFFFF;  /* minimo desde que arranco */
+static volatile int32_t  cpu_temp_x10 = -9990;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
@@ -1592,6 +1597,7 @@ static void MX_ADC3_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 static int32_t Read_CPU_Temperature(void);
+static void Rail_Poll(void);
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset);
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void Service_Fills(void);
@@ -2710,6 +2716,7 @@ int main(void)
 
     // ===== LOOPBACK driver — misma disciplina: correlación en trozos =====
     if (lb_enabled) LB_Process();
+    Rail_Poll();          /* vigilancia del riel de 3V3, sin bloquear */
     if (fc_enabled) FC_Process();
     if (ps_enabled) PS_Process();
     if (fs_enabled) FS_Process();
@@ -3211,6 +3218,14 @@ int main(void)
           if (ph > half) ph -= (int32_t)(LB_DMA_WORDS / AUDIO_CHANNELS);
           st.dma_phase = (int16_t)ph;
         st.reset_rsr = reset_rsr;
+        /* El MINIMO se limpia al leerse, igual que adc_pk: asi cada /status
+         * informa el hundimiento mas profundo DESDE LA LECTURA ANTERIOR y no
+         * uno de hace media hora. El minimo absoluto va aparte, que es el que
+         * sirve para "¿alguna vez estuvo cerca del umbral del MAX809?". */
+        st.vdda_mv      = vdda_mv;
+        st.vdda_min_mv  = (vdda_min_mv == 0xFFFF) ? vdda_mv : vdda_min_mv;
+        st.vdda_min_abs = (vdda_min_abs == 0xFFFF) ? vdda_mv : vdda_min_abs;
+        vdda_min_mv = 0xFFFF;
         }
         st.master_vol_db = beam_config.master_vol_db;
         st.in_gain_db = in_gain_db;
@@ -4149,22 +4164,109 @@ static void MX_ADC3_Init(void)
   }
 }
 
-static int32_t Read_CPU_Temperature(void)
+/* ============================================================
+ * VIGILANCIA DEL RIEL DE 3V3 — sin agregar un solo componente
+ * ============================================================
+ *
+ * El STM32 puede medir su PROPIA alimentacion analogica sin hardware externo.
+ * ADC3 tiene un canal interno a la referencia de banda prohibida (VREFINT), que
+ * es una tension FIJA de ~1,21 V; midiendola contra un fondo de escala que es
+ * VDDA, el cociente da VDDA. Y la calibracion de fabrica esta grabada en la
+ * flash de sistema: VREFINT_CAL es la lectura cruda con VDDA = 3300 mV exactos.
+ *
+ *     VDDA [mV] = 3300 * VREFINT_CAL / lectura
+ *
+ * POR QUE IMPORTA EN ESTA PLACA. El supervisor IC1 (MAX809T) reinicia el STM32
+ * cuando el 3V3 baja de 3,08 V, y eso PASA: las cinco DS11 fabricadas nunca
+ * corrieron sin el USB del ST-Link, que alimenta el riel por J7 pin 10 aguas
+ * ABAJO del cuello de botella FB2/D9 (docs/presupuesto_potencia.md §B). El
+ * sintoma es que al encender los 32 amplificadores la placa se reinicia.
+ *
+ * Y hasta hoy el equipo era CIEGO a eso. El amperimetro de la fuente de banco
+ * no lo ve: promedia, mide del lado de la entrada, y el evento son cientos de
+ * milivoltios durante milisegundos dos conversiones mas adelante. La causa
+ * quedaba como hipotesis razonable en vez de como medicion.
+ *
+ * MINIMO RETENIDO, no instantaneo. Un valor instantaneo leido una vez por
+ * segundo no ve un hundimiento de milisegundos: la probabilidad de que la
+ * lectura caiga justo adentro es de una en mil. Lo que sirve es el MINIMO desde
+ * la lectura anterior, igual que `adc_peak_net` para el audio. Con eso, "el
+ * riel bajo a 3,05 V" aparece en la telemetria aunque haya durado 2 ms.
+ *
+ * NO BLOQUEA. La conversion se arranca en una pasada del main loop y se cosecha
+ * en otra, mirando la bandera EOC. `HAL_ADC_PollForConversion` con timeout
+ * podria bloquear milisegundos, y en este proyecto un bloqueo de mas de 10 ms
+ * es un deadline de fill perdido = medio buffer repetido en los 32 canales.
+ *
+ * PRECISION. La referencia interna tiene +-1% de tolerancia y la calibracion se
+ * tomo a 30 C; la deriva termica agrega decimas. O sea: los milivoltios
+ * absolutos valen +-30 mV, pero los CAMBIOS —que es lo que interesa— valen
+ * mucho mas, porque el error es comun a todas las lecturas. */
+#define RAIL_TEMP_CADA   200      /* 1 de cada 200 conversiones va a temperatura */
+
+static uint8_t  rail_busy = 0;      /* hay una conversion en vuelo */
+static uint8_t  rail_is_temp = 0;   /* la que esta en vuelo es de temperatura */
+static uint16_t rail_count = 0;
+
+/** @brief Configura ADC3 en un canal interno. Barato: no re-inicializa el ADC. */
+static void Rail_SelectChannel(uint32_t ch, uint32_t stime)
 {
-  HAL_ADC_Start(&hadc3);
-  if (HAL_ADC_PollForConversion(&hadc3, 10) != HAL_OK) {
-    return -999;
+  ADC_ChannelConfTypeDef c = {0};
+  c.Channel      = ch;
+  c.Rank         = ADC_REGULAR_RANK_1;
+  c.SamplingTime = stime;
+  c.SingleDiff   = ADC_SINGLE_ENDED;
+  c.OffsetNumber = ADC_OFFSET_NONE;
+  HAL_ADC_ConfigChannel(&hadc3, &c);
+}
+
+/**
+ * @brief Una pasada del vigilante del riel. Se llama desde el main loop.
+ *
+ * Maquina de dos tiempos: si no hay conversion en vuelo, arranca una; si hay y
+ * ya termino, la cosecha. Nunca espera.
+ */
+static void Rail_Poll(void)
+{
+  if (!rail_busy) {
+    /* VREFINT necesita >=4,3 us de muestreo por su impedancia alta; a 8 MHz de
+     * reloj de ADC, 64,5 ciclos son 8 us. El sensor de temperatura es aun mas
+     * lento y por eso conserva los 810,5 ciclos de siempre. */
+    rail_is_temp = (rail_count % RAIL_TEMP_CADA) == 0;
+    Rail_SelectChannel(rail_is_temp ? ADC_CHANNEL_TEMPSENSOR : ADC_CHANNEL_VREFINT,
+                       rail_is_temp ? ADC_SAMPLETIME_810CYCLES_5
+                                    : ADC_SAMPLETIME_64CYCLES_5);
+    rail_count++;
+    if (HAL_ADC_Start(&hadc3) != HAL_OK) return;
+    rail_busy = 1;
+    return;
   }
+
+  if (!__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC)) return;   /* todavia no */
   uint32_t raw = HAL_ADC_GetValue(&hadc3);
   HAL_ADC_Stop(&hadc3);
+  rail_busy = 0;
 
-  // Factory calibration: TS_CAL1 @30C, TS_CAL2 @110C (16-bit, VREF=3.3V)
-  uint16_t ts_cal1 = *((uint16_t *)0x1FF1E820);
-  uint16_t ts_cal2 = *((uint16_t *)0x1FF1E840);
+  if (rail_is_temp) {
+    uint16_t ts_cal1 = *((uint16_t *)0x1FF1E820);
+    uint16_t ts_cal2 = *((uint16_t *)0x1FF1E840);
+    if (ts_cal2 != ts_cal1)
+      cpu_temp_x10 = 300 + (int32_t)(raw - ts_cal1) * 800 / (int32_t)(ts_cal2 - ts_cal1);
+    return;
+  }
 
-  // Linear interpolation, x10 for 0.1C precision (no float)
-  int32_t temp_x10 = 300 + (int32_t)(raw - ts_cal1) * 800 / (int32_t)(ts_cal2 - ts_cal1);
-  return temp_x10;
+  uint16_t cal = *VREFINT_CAL_ADDR;
+  if (raw == 0 || cal == 0) return;
+  uint32_t mv = ((uint32_t)VREFINT_CAL_VREF * cal) / raw;
+  if (mv > 6000) return;                       /* lectura absurda: se descarta */
+  vdda_mv = (uint16_t)mv;
+  if (mv < vdda_min_mv)  vdda_min_mv  = (uint16_t)mv;
+  if (mv < vdda_min_abs) vdda_min_abs = (uint16_t)mv;
+}
+
+static int32_t Read_CPU_Temperature(void)
+{
+  return cpu_temp_x10;     /* lo actualiza Rail_Poll, sin bloquear */
 }
 
 /**
