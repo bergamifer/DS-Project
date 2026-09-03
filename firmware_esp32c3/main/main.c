@@ -119,6 +119,13 @@ static void device_identity_init(void)
 // que se lee por tramos como la captura.
 #define CMD_SET_AUTOSTART 0x18  // payload: uint8 (1=on, 0=off), persistido
 #define CMD_SET_TONE      0x19  // payload: [hz:2 LE][dither:1] — tono de medicion
+// Barrido de fase por parlante (modo 22). 32 x 14 x 8 medidas complejas: se
+// bajan por tramos con el mismo patron que la captura del ADC.
+#define CMD_GET_PHASE_INFO 0x1A // payload: none
+#define CMD_PHASE_INFO     0x1B // STM32 -> ESP32: ds_phase_info_t
+#define CMD_PHASE_READ     0x1C // payload: uint32 offset en bytes
+#define CMD_PHASE_DATA     0x1D // STM32 -> ESP32: [offset:4][datos]
+#define PHASE_MAX_PTS      16
 #define CMD_GET_MODES    0x16   // payload: uint8 indice del primer modo
 #define CMD_MODES_DATA   0x17   // STM32 -> ESP32: ds_modes_hdr_t + nombres NUL
 #define CMD_GET_CAL      0x13   // payload: uint8 indice del primer canal
@@ -147,11 +154,23 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    15
+#define PROTO_VERSION    16
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
 #define FW_CHUNK_MAX     (PROTO_MAX_PAYLOAD - 2)
+
+// Espejo de ds_phase_info_t del STM32 (uart_protocol.h).
+typedef struct __attribute__((packed)) {
+    uint8_t  n_spk;
+    uint8_t  n_pts;
+    uint8_t  n_ch;
+    uint8_t  state;        // 0 idle, 1 corriendo, 2 listo
+    uint8_t  progress;     // parlantes TERMINADOS
+    uint8_t  reserved;
+    uint32_t total_bytes;
+    uint16_t freq_hz[PHASE_MAX_PTS];
+} ds_phase_info_t;
 
 // Espejo de ds_cap_info_t del STM32 (uart_protocol.h).
 typedef struct __attribute__((packed)) {
@@ -307,6 +326,12 @@ static uint8_t           last_cap_data[CAP_CHUNK_BYTES];
 static uint32_t          last_cap_off;
 static uint16_t          last_cap_len;
 static SemaphoreHandle_t cap_data_sem;
+static ds_phase_info_t   last_phase_info;
+static SemaphoreHandle_t phase_info_sem;
+static uint8_t           last_phase_data[CAP_CHUNK_BYTES];
+static uint32_t          last_phase_off;
+static uint16_t          last_phase_len;
+static SemaphoreHandle_t phase_data_sem;
 static ds_cal_hdr_t      last_cal_hdr;  // valido tras tomar cal_sem
 static ds_cal_ch_t       last_cal_ch[CAL_CHUNK_CH];
 static SemaphoreHandle_t cal_sem;
@@ -467,6 +492,15 @@ static bool frame_feed(uint8_t b)
                 memcpy(&last_cap_info, fr_payload, sizeof(ds_cap_info_t));
                 xSemaphoreGive(cap_info_sem);
             }
+        } else if (fr_cmd == CMD_PHASE_INFO && fr_len == sizeof(ds_phase_info_t)) {
+            memcpy(&last_phase_info, fr_payload, sizeof(ds_phase_info_t));
+            xSemaphoreGive(phase_info_sem);
+        } else if (fr_cmd == CMD_PHASE_DATA && fr_len >= 4 && fr_len <= PROTO_MAX_PAYLOAD) {
+            last_phase_off = (uint32_t)fr_payload[0]        | ((uint32_t)fr_payload[1] << 8)
+                           | ((uint32_t)fr_payload[2] << 16) | ((uint32_t)fr_payload[3] << 24);
+            last_phase_len = (uint16_t)(fr_len - 4);
+            if (last_phase_len) memcpy(last_phase_data, &fr_payload[4], last_phase_len);
+            xSemaphoreGive(phase_data_sem);
         } else if (fr_cmd == CMD_CAP_DATA && fr_len >= 4 && fr_len <= PROTO_MAX_PAYLOAD) {
             uint8_t x = 0;
             for (uint16_t i = 0; i < fr_len; i++) x ^= fr_payload[i];
@@ -1371,6 +1405,82 @@ static esp_err_t capture_handler(httpd_req_t *req)
         }
         httpd_resp_send_chunk(req, (const char *)last_cap_data, last_cap_len);
         off += last_cap_len;
+    }
+
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+// ============== GET /fase — el barrido de fase por parlante ==============
+//
+// Devuelve BINARIO, como /capture y por el mismo motivo: son 32 x 14 x 8 = 3584
+// medidas complejas, y en JSON eso son mas de 100 kB que habria que armar en
+// RAM. El encabezado va adelante (ds_phase_info_t) y despues los datos crudos;
+// tools/fase.py lo parsea.
+//
+// Si el barrido no termino, contesta JSON con el progreso en vez de datos a
+// medio hacer. Es deliberado: un lector que reciba ceros de los parlantes que
+// faltan los leeria como "ese parlante no suena", que es la conclusion mas cara
+// posible de sacar por error.
+static esp_err_t fase_handler(httpd_req_t *req)
+{
+    char msg[256];
+
+    xSemaphoreTake(phase_info_sem, 0);          // drenar respuesta vieja
+    uart_send_frame(CMD_GET_PHASE_INFO, NULL, 0);
+    if (xSemaphoreTake(phase_info_sem, 1500 / portTICK_PERIOD_MS) != pdTRUE) {
+        int n = snprintf(msg, sizeof(msg),
+                 "{\"ok\":false,\"message\":\"el STM32 no contesto el pedido de fase\"}");
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, msg, n);
+        return ESP_OK;
+    }
+
+    ds_phase_info_t info = last_phase_info;
+    if (info.state != 2) {
+        static const char *st[] = { "sin correr", "corriendo", "listo" };
+        int n = snprintf(msg, sizeof(msg),
+                 "{\"ok\":false,\"state\":\"%s\",\"progress\":%u,\"n_spk\":%u,"
+                 "\"message\":\"el barrido de fase no termino. Entra al modo 22 "
+                 "y espera ~3 min.\"}",
+                 info.state < 3 ? st[info.state] : "?",
+                 (unsigned)info.progress, (unsigned)info.n_spk);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, msg, n);
+        return ESP_OK;
+    }
+
+    uint32_t total = info.total_bytes;
+    printf("[ESP32] Fase: %u parlantes x %u frecuencias x %u entradas (%lu bytes)\n",
+           (unsigned)info.n_spk, (unsigned)info.n_pts, (unsigned)info.n_ch,
+           (unsigned long)total);
+
+    httpd_resp_set_type(req, "application/octet-stream");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=fase.ds");
+    httpd_resp_send_chunk(req, (const char *)&info, sizeof(info));
+
+    for (uint32_t off = 0; off < total; ) {
+        uint8_t r4[4] = { (uint8_t)off, (uint8_t)(off >> 8),
+                          (uint8_t)(off >> 16), (uint8_t)(off >> 24) };
+        int ok = 0;
+        // Hasta tres intentos: reenviar es inofensivo porque el pedido lleva el
+        // offset y el STM32 devuelve siempre lo mismo.
+        for (int t = 0; t < 3 && !ok; t++) {
+            xSemaphoreTake(phase_data_sem, 0);
+            uart_send_frame(CMD_PHASE_READ, r4, 4);
+            if (xSemaphoreTake(phase_data_sem, 1500 / portTICK_PERIOD_MS) == pdTRUE &&
+                last_phase_off == off && last_phase_len > 0) {
+                ok = 1;
+            }
+        }
+        if (!ok) {
+            printf("[ESP32] Fase CORTADA en el byte %lu\n", (unsigned long)off);
+            httpd_resp_send_chunk(req, NULL, 0);   // cierra truncado a proposito
+            return ESP_OK;
+        }
+        httpd_resp_send_chunk(req, (const char *)last_phase_data, last_phase_len);
+        off += last_phase_len;
     }
 
     httpd_resp_send_chunk(req, NULL, 0);
@@ -2488,6 +2598,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/capture", .method = HTTP_GET,  .handler = capture_handler },
             { .uri = "/cal",     .method = HTTP_GET,  .handler = cal_handler     },
             { .uri = "/modes",   .method = HTTP_GET,  .handler = modes_handler   },
+            { .uri = "/fase",    .method = HTTP_GET,  .handler = fase_handler    },
     };
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -2735,6 +2846,8 @@ void app_main(void)
     health_sem = xSemaphoreCreateBinary();
     cap_info_sem = xSemaphoreCreateBinary();
     cap_data_sem = xSemaphoreCreateBinary();
+    phase_info_sem = xSemaphoreCreateBinary();
+    phase_data_sem = xSemaphoreCreateBinary();
     cal_sem = xSemaphoreCreateBinary();
     modes_sem = xSemaphoreCreateBinary();
     status_sem = xSemaphoreCreateBinary();

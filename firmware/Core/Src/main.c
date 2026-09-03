@@ -427,6 +427,7 @@ typedef struct {
   uint8_t loopb;                  // 1 = LOOPBACK: medición eléctrica del camino de salida
   uint8_t fsweep;                 // 1 = BARRIDO DE FRECUENCIA por el lazo (Test D)
   uint8_t fhold;                  // 1 = el barrido NO avanza: tono fijo (medición con téster)
+  uint8_t psweep;                 // 1 = BARRIDO DE FASE por parlante (uno por vez)
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor",                  .monitor = 1 },
@@ -564,6 +565,19 @@ static const ui_state_t ui_states[] = {
   // muchos leen bajo, y arriba de 4 kHz directamente no especifican.
   { .name = "TONO FIJO 500 Hz por el lazo (medicion con tester)",
     .fsweep = 1, .fhold = 1 },
+  /* FASE POR PARLANTE — 32 parlantes de a uno, 14 frecuencias cada uno.
+   *
+   * Es el modo que contesta "¿llegan todos en fase al punto de escucha, y sigue
+   * siendo cierto en toda la banda?". Ninguno de los que ya estaban podía:
+   * el AUTOFOCUS recorre los parlantes de a uno pero devuelve UN escalar
+   * (el retardo de grupo del chirp, promediado sobre 500 Hz-6 kHz), y el modo
+   * 20 mide fase contra frecuencia pero con los cuatro bancos sonando juntos,
+   * o sea que mide la SUMA — y una suma no se puede desarmar.
+   *
+   * Tarda ~3 minutos y no se parece a música: son tonos puros, uno por vez,
+   * recorriendo el muro. No es un modo para escuchar. Ver el comentario largo
+   * de PS_NUM_SPK y docs/banco_dos_microfonos.md §4. */
+  { .name = "FASE por parlante (32 x 14 tonos, ~3 min)", .psweep = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 /* Un nombre mas largo que un tramo entero no se podria mandar NUNCA: el lazo de
@@ -1026,6 +1040,129 @@ static const uint16_t fs_base[FS_NUM_BASE] = {
     723,  800, 1000, 1400, 2000, 2800, 4000, 5600, 8000,11200,
   16000,20000
 };
+/* ============================================================
+ * BARRIDO DE FASE POR PARLANTE (modo 22)
+ * ============================================================
+ *
+ * Un tono puro, UN parlante por vez, y detección coherente en las ocho
+ * entradas. Por cada par (parlante, frecuencia) quedan la amplitud Y LA FASE
+ * con que ese parlante llega al punto de escucha.
+ *
+ * POR QUE NO ALCANZABA CON LO QUE YA HABIA
+ * ---------------------------------------------------------------
+ * El AUTOFOCUS ya recorre los 32 parlantes de a uno, pero correlaciona un
+ * chirp: devuelve UN escalar por parlante —el retardo de grupo promediado
+ * sobre 500 Hz-6 kHz— y ahí se termina. Si un parlante llega bien en 1 kHz y
+ * mal en 3 kHz, el chirp promedia las dos cosas y el número que sale no
+ * describe ninguna.
+ *
+ * El BARRIDO DE FRECUENCIA (modo 20) sí mide fase contra frecuencia, pero con
+ * los cuatro bancos emitiendo A LA VEZ: lo que mide es la SUMA en el micrófono.
+ * Una suma no se puede desarmar — dos parlantes en contrafase dan lo mismo que
+ * dos parlantes mudos.
+ *
+ * Este modo es el producto cartesiano que faltaba: 32 parlantes x 14
+ * frecuencias, cada uno solo. Es lo único que puede contestar "¿llegan todos
+ * en fase, y sigue siendo cierto en toda la banda?".
+ *
+ * LO QUE SE PUEDE LEER DE ESTO, Y QUE NO SE PODIA ANTES
+ * ---------------------------------------------------------------
+ * - **Arribo en fase.** Restándole a cada parlante su fase geométrica
+ *   (2*pi*f*d_k/c, y d_k se conoce), lo que queda tiene que ser IGUAL para los
+ *   32. La DISPERSION de ese residuo entre parlantes, frecuencia por
+ *   frecuencia, es literalmente "cuánto se desalinean". Y no hace falta
+ *   desenvolver nada: es una comparación a f fija.
+ * - **Polaridad contra retardo, que el chirp NO distingue.** Un parlante
+ *   invertido tiene pi de desfase A TODAS las frecuencias; uno con el retardo
+ *   mal tiene un desfase que CRECE con f. En el retardo de grupo del AUTOFOCUS
+ *   los dos se ven parecidos.
+ * - **Si un retardo alcanza.** Si el residuo de un parlante es una recta en f,
+ *   es retardo puro y un solo número lo corrige. Si se curva —probable cerca
+ *   de la resonancia de 125-180 Hz de loopback_debug.md §28— NINGUN retardo lo
+ *   corrige, y eso hay que saberlo antes de construir una calibración encima.
+ * - **Diagnóstico del nodo, de yapa.** Un parlante mudo da amplitud de piso en
+ *   las 14 frecuencias; uno flojo, una fila entera baja; uno mal mapeado, un
+ *   retardo que no cierra con su posición.
+ *
+ * Y hay una propiedad que lo hace válido en TODA la banda: con un solo parlante
+ * emitiendo no hay array, así que **no hay lóbulos de rejilla**. El techo de
+ * 2140 Hz que limita a los modos enfocados acá no aplica; por eso la grilla
+ * llega a 5 kHz.
+ *
+ * COSTO
+ * ---------------------------------------------------------------
+ * 32 x 14 x 400 ms = 3 minutos. Los resultados viven en la AXI SRAM, que tiene
+ * 256 kB sin usar: en DTCM no entrarían (quedan ~18 kB) y en RAM_D2 competirían
+ * con los buffers de DMA. No es memoria de DMA — la escribe el CPU una vez cada
+ * 400 ms.
+ *
+ * DELIBERADAMENTE SEPARADO del modo 20
+ * ---------------------------------------------------------------
+ * Comparte la idea del detector y no comparte una línea de código. Se podría
+ * haber parametrizado `fs_*` con un "¿un parlante o todos?" y ahorrar unas
+ * treinta líneas; no se hizo porque esas treinta líneas están en el camino
+ * caliente del audio, que ya se rompió una vez esta semana por un cambio que
+ * parecía inocuo. Duplicar un lazo de acumulación es más barato que enhebrar
+ * condicionales por adentro de algo que anda. */
+#define PS_NUM_SPK   32
+#define PS_NUM_PTS   14
+#define PS_SETTLE    4800u    /* 100 ms, igual que el modo 20 */
+/* 300 ms y no 200: un parlante solo llega ~30 dB más bajo que los 32 juntos, y
+ * la ganancia de proceso de la detección coherente va con la raíz de la
+ * ventana. 300 ms dan ~42 dB, que es lo que hace medible un canal solo contra
+ * el ruido de una sala real. */
+#define PS_WINDOW    14400u
+/* Tercios de octava de 250 Hz a 5 kHz. Abajo de 250 el parlante está en su
+ * resonancia y la sala manda; arriba de 5 kHz la tabla de 48 puntos deja de ser
+ * un seno limpio (9,6 muestras por ciclo). El techo de 2140 Hz de los modos
+ * enfocados NO aplica: sin array no hay lóbulos de rejilla. */
+static const uint16_t ps_freq[PS_NUM_PTS] = {
+   250,  315,  400,  500,  630,  800, 1000,
+  1250, 1600, 2000, 2500, 3150, 4000, 5000
+};
+/* I y Q normalizados por parlante, punto y entrada. Se guardan los dos y no la
+ * magnitud: la fase es el punto de este modo, y guardar sólo el módulo la
+ * tiraría — que es exactamente el error que el modo 20 ya había corregido. */
+static float ps_fi[PS_NUM_SPK][PS_NUM_PTS][ADC_CHANNELS] __attribute__((section(".axi_ram")));
+static float ps_fq[PS_NUM_SPK][PS_NUM_PTS][ADC_CHANNELS] __attribute__((section(".axi_ram")));
+/* Fase del emisor al abrir cada punto. Igual que fs_tx0 y por el mismo motivo:
+ * forzarla a cero rompía la amplitud de forma repetible (§15) y anotarla no
+ * cuesta nada. Sin esto las fases de dos parlantes distintos no comparten
+ * origen y no se pueden restar — o sea, el modo no mediría nada. */
+static uint32_t ps_tx0[PS_NUM_SPK][PS_NUM_PTS] __attribute__((section(".axi_ram")));
+
+typedef enum { PS_IDLE = 0, PS_RUN, PS_DONE } ps_state_t;
+static volatile uint8_t     ps_enabled = 0;
+static volatile ps_state_t  ps_state = PS_IDLE;
+static volatile uint8_t     ps_spk = 0;        /* parlante en curso, 0..31 */
+static volatile uint8_t     ps_pt = 0;         /* punto de frecuencia, 0..13 */
+static volatile uint8_t     ps_point_ready = 0;
+static volatile uint32_t    ps_n = 0;          /* muestras dentro del punto (RX) */
+static int64_t  ps_i[ADC_CHANNELS], ps_q[ADC_CHANNELS];
+static uint32_t ps_tx_phase = 0;               /* fase del emisor (contexto fill) */
+static uint32_t ps_rx_phase = 0;               /* fase del detector (contexto RX) */
+
+_Static_assert(PS_SETTLE % AUDIO_BUFFER_SAMPLES == 0
+               && PS_WINDOW % AUDIO_BUFFER_SAMPLES == 0,
+               "los puntos tienen que cerrar en un borde de mitad");
+_Static_assert(PS_NUM_SPK <= BEAM_NUM_CHANNELS, "mas parlantes de los que hay");
+
+/** @brief Incremento de fase Q16 del punto en curso. Misma cuenta que
+ *  Tone_NextSample y que FS_Inc: la tabla es la misma, así que emisor y
+ *  detector ven la misma frecuencia por construcción. */
+static inline uint32_t PS_Inc(void) {
+  uint8_t k = ps_pt;
+  if (k >= PS_NUM_PTS) k = 0;         /* mismo clamp que FS_Inc, y por lo mismo */
+  return ((uint32_t)ps_freq[k] << 16) / 1000u;
+}
+/** @brief La frecuencia REAL emitida. `inc` es entero, así que 3150 pedidos son
+ *  3149,96 emitidos — despreciable para la amplitud y NO para la fase, que se
+ *  multiplica por el retardo. */
+static inline float PS_FreqReal(uint8_t k) {
+  uint32_t inc = ((uint32_t)ps_freq[k] << 16) / 1000u;
+  return (float)inc * 1000.0f / 65536.0f;
+}
+
 static volatile uint8_t  fs_enabled = 0;
 /* Punto en el que se congela el barrido, o 0xFF para barrer normalmente.
  * FS_HOLD_BASE es el índice en fs_base[]; 9 = 500 Hz. Los puntos van de a dos
@@ -1372,6 +1509,8 @@ static void Cal_StartScan(void);
 static void Cal_Process(void);
 static void LB_Process(void);
 static void FS_Process(void);
+static void PS_Process(void);
+static void PS_Start(void);
 static void OTA_ServiceRequests(void);
 static void Health_Run(ds_health_t *h);
 /* USER CODE END PFP */
@@ -2458,6 +2597,7 @@ int main(void)
 
     // ===== LOOPBACK driver — misma disciplina: correlación en trozos =====
     if (lb_enabled) LB_Process();
+    if (ps_enabled) PS_Process();
     if (fs_enabled) FS_Process();
 
     /* ===== BARRIDO: mover el foco, 20 veces por segundo =====
@@ -2708,6 +2848,72 @@ int main(void)
             }
           }
           UART_Protocol_SendCapData(coff, chunk, n);   /* n=0 = fuera de rango */
+        }
+      }
+
+      /* ===== Bajada del BARRIDO DE FASE POR PARLANTE ===== */
+      {
+        if (UART_Protocol_PhaseInfoRequested()) {
+          ds_phase_info_t inf;
+          memset(&inf, 0, sizeof(inf));
+          inf.n_spk = PS_NUM_SPK;
+          inf.n_pts = PS_NUM_PTS;
+          inf.n_ch  = ADC_CHANNELS;
+          inf.state = (uint8_t)ps_state;
+          /* Parlantes TERMINADOS, no el índice en curso: con el barrido a
+           * mitad de camino, el que se está midiendo todavía no tiene datos
+           * completos y contarlo haría leer ceros como medición. */
+          inf.progress = (ps_state == PS_DONE) ? PS_NUM_SPK : ps_spk;
+          inf.total_bytes = (uint32_t)PS_NUM_SPK * PS_NUM_PTS * ADC_CHANNELS * 4u;
+          for (uint8_t k = 0; k < PS_NUM_PTS; k++) inf.freq_hz[k] = ps_freq[k];
+          UART_Protocol_SendPhaseInfo(&inf);
+        }
+
+        uint32_t poff;
+        if (UART_Protocol_GetPhaseRead(&poff)) {
+          const uint32_t total =
+              (uint32_t)PS_NUM_SPK * PS_NUM_PTS * ADC_CHANNELS * 4u;
+          uint8_t  chunk[CAP_CHUNK_BYTES];
+          uint16_t n = 0;
+          /* El offset tiene que caer en un borde de entrada (4 bytes): la
+           * codificación se hace acá, al vuelo, y una entrada partida al medio
+           * no se puede calcular. El lector siempre pide múltiplos de 4. */
+          if (ps_state != PS_IDLE && poff < total && (poff & 3u) == 0) {
+            uint32_t left = total - poff;
+            n = (uint16_t)((left > CAP_CHUNK_BYTES) ? CAP_CHUNK_BYTES : left);
+            n = (uint16_t)(n & ~3u);
+            for (uint16_t k = 0; k < n; k += 4) {
+              uint32_t e   = (poff + k) >> 2;         /* índice de entrada */
+              uint32_t ch  = e % ADC_CHANNELS;
+              uint32_t pt  = (e / ADC_CHANNELS) % PS_NUM_PTS;
+              uint32_t spk = (e / ADC_CHANNELS) / PS_NUM_PTS;
+              float I = ps_fi[spk][pt][ch], Q = ps_fq[spk][pt][ch];
+
+              /* Amplitud: la misma normalización que FS_Mag, en dBFS x100. */
+              float mag = 2.0f * sqrtf(I * I + Q * Q) / 8388607.0f;
+              float db  = 20.0f * log10f(mag > 1e-16f ? mag : 1e-16f);
+              if (db < -320.0f) db = -320.0f;
+              if (db >   80.0f) db =   80.0f;
+              int16_t db100 = (int16_t)(db * 100.0f);
+
+              /* Fase, con el origen del emisor ya sumado — ver el comentario de
+               * ds_phase_info_t. ps_tx0 está en Q16 sobre una tabla de 48
+               * entradas, así que una vuelta entera son 48<<16. */
+              float th = atan2f(Q, I)
+                       + 6.2831853f * (float)ps_tx0[spk][pt] / (48.0f * 65536.0f);
+              /* A [0, 2pi) con fmodf y no con un while: un ps_tx0 grande daría
+               * decenas de vueltas y el lazo sería tan largo como el número. */
+              th = fmodf(th, 6.2831853f);
+              if (th < 0.0f) th += 6.2831853f;
+              uint16_t ph16 = (uint16_t)(th * (65536.0f / 6.2831853f));
+
+              chunk[k]     = (uint8_t)(db100 & 0xFF);
+              chunk[k + 1] = (uint8_t)((db100 >> 8) & 0xFF);
+              chunk[k + 2] = (uint8_t)(ph16 & 0xFF);
+              chunk[k + 3] = (uint8_t)((ph16 >> 8) & 0xFF);
+            }
+          }
+          UART_Protocol_SendPhaseData(poff, chunk, n);   /* n=0 = fuera de rango */
         }
       }
 
@@ -5022,6 +5228,82 @@ static void FS_Report(void) {
  * y el logaritmo son de coma flotante y no tienen por qué correr adentro del
  * presupuesto del fill. El detector sólo levanta una bandera.
  */
+/** @brief Abre un punto: acumuladores en cero y la fase del emisor anotada. */
+static void PS_StartPoint(void) {
+  for (uint32_t c = 0; c < ADC_CHANNELS; c++) { ps_i[c] = 0; ps_q[c] = 0; }
+  if (ps_spk < PS_NUM_SPK && ps_pt < PS_NUM_PTS)
+    ps_tx0[ps_spk][ps_pt] = ps_tx_phase;
+  ps_rx_phase = 0;
+  ps_n = 0;
+  ps_point_ready = 0;
+}
+
+/** @brief Entrar al modo arranca un barrido completo desde el parlante 0. */
+static void PS_Start(void) {
+  memset(ps_fi, 0, sizeof(ps_fi));
+  memset(ps_fq, 0, sizeof(ps_fq));
+  memset(ps_tx0, 0, sizeof(ps_tx0));
+  ps_spk = 0;
+  ps_pt = 0;
+  ps_tx_phase = 0;
+  ps_state = PS_RUN;
+  PS_StartPoint();
+  UART_Print("FASE POR PARLANTE: 32 parlantes x 14 frecuencias (250 Hz - 5 kHz).\r\n");
+  UART_Print("  ~3 minutos. Bajar el resultado con:  GET /fase\r\n");
+  if (!amps_enabled)
+    UART_Print("  !! AMPS APAGADOS — no va a salir sonido y se van a medir 3 "
+               "minutos de ruido.\r\n");
+  if (!(mic_live_mask & 1u))
+    UART_Print("  !! SIN SENAL en la entrada 1 (c0) — revisa el microfono.\r\n");
+}
+
+/** @brief Cierra el punto en curso y avanza. Corre en el main loop. */
+static void PS_Process(void) {
+  if (ps_state != PS_RUN || !ps_point_ready) return;
+
+  /* Misma normalización que el modo 20: la ventana y la escala de la tabla de
+   * senos, para que el 0 dBFS de acá sea el mismo 0 dBFS del resto. */
+  const float den = (float)PS_WINDOW * 4194304.0f;
+  for (uint32_t c = 0; c < ADC_CHANNELS; c++) {
+    ps_fi[ps_spk][ps_pt][c] = (float)ps_i[c] / den;
+    ps_fq[ps_spk][ps_pt][c] = (float)ps_q[c] / den;
+  }
+
+  ps_pt++;
+  if (ps_pt < PS_NUM_PTS) { PS_StartPoint(); return; }
+
+  /* Parlante terminado: una línea por parlante, con el nivel a 1 kHz en la
+   * entrada 1. Es el diagnóstico que se lee de un vistazo por el serie sin
+   * bajar nada — un canal mudo salta acá. */
+  {
+    float i1 = ps_fi[ps_spk][6][0], q1 = ps_fq[ps_spk][6][0];   /* punto 6 = 1 kHz */
+    float mag = 2.0f * sqrtf(i1 * i1 + q1 * q1);
+    /* Acotado antes de formatear: FS_FmtDb usa %ld y con un valor absurdo
+     * —un denormal, un inf— escribiría más de lo que entra en el destino.
+     * −199,9 dB ya está 80 dB por debajo del piso del conversor. */
+    float rel = (mag > 1e-9f) ? (mag / 8388607.0f) : 1e-9f;
+    float dbv = 20.0f * log10f(rel);
+    if (dbv < -199.9f) dbv = -199.9f;
+    if (dbv >  40.0f)  dbv =  40.0f;
+    /* 16 y no 12: FS_FmtDb formatea con %ld y el compilador no puede saber que
+     * el valor viene acotado, asi que acota el destino por las dudas. */
+    char db[16];
+    FS_FmtDb(db, dbv);
+    snprintf(uart_buf, sizeof(uart_buf),
+             "  FASE ch%02u: 1 kHz = %s dBFS en c0\r\n", (unsigned)ps_spk, db);
+    UART_Print(uart_buf);
+  }
+
+  ps_pt = 0;
+  ps_spk++;
+  if (ps_spk < PS_NUM_SPK) { PS_StartPoint(); return; }
+
+  ps_spk = PS_NUM_SPK - 1;          /* que el progreso informe 32/32, no 0 */
+  ps_state = PS_DONE;
+  UART_Print("FASE POR PARLANTE: listo. GET /fase para bajarlo; "
+             "tools/fase.py lo analiza.\r\n");
+}
+
 static void FS_Process(void) {
   if (fs_paused) {
     if ((int32_t)(HAL_GetTick() - fs_next_ms) < 0) return;
@@ -5277,6 +5559,18 @@ static void UI_ApplyState(uint8_t idx) {
   mfocus_in_enabled = st->mfin;
   if (st->mfin) MFocusIn_ApplyDefaults();
   sweep_axis = st->sweep;
+  ps_enabled = st->psweep;
+  if (st->psweep) {
+    PS_Start();                      // entrar al modo arranca el barrido de cero
+  } else if (ps_state == PS_RUN) {
+    /* Se salió del modo a mitad del barrido: lo medido hasta acá no sirve y se
+     * descarta. Un barrido TERMINADO, en cambio, sobrevive al cambio de modo —
+     * y tiene que sobrevivir, porque el uso natural es correr los 3 minutos,
+     * volver al modo 0 para que el muro se calle, y RECIEN AHI bajar el
+     * resultado. Poniendo PS_IDLE en los dos casos, ese orden perdía la
+     * medición sin decir nada. */
+    ps_state = PS_IDLE;
+  }
   fs_enabled = st->fsweep;
   fs_hold_pt = st->fhold ? (uint8_t)(FS_HOLD_BASE * 2) : 0xFF;
   if (st->fsweep) FS_Start();        // entrar al modo arranca el barrido de cero
@@ -5420,6 +5714,35 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
     }
     lb_cap_count = (uint16_t)n;
     if (n >= LB_CAPTURE_LEN) lb_capturing = 0;
+  }
+
+  /* BARRIDO DE FASE POR PARLANTE: el mismo detector coherente, pero mientras
+   * emite UN solo parlante. Lo que se guarda es I y Q —no la magnitud— porque
+   * la fase es el punto del modo. Cuesta 16 MAC por muestra y en este modo el
+   * beamforming no corre. */
+  if (ps_enabled && ps_state == PS_RUN && !ps_point_ready) {
+    uint32_t inc = PS_Inc();
+    uint32_t ph  = ps_rx_phase;
+    uint32_t n   = ps_n;
+    for (uint32_t i = 0; i < samples; i++) {
+      if (n >= PS_SETTLE) {
+        uint32_t pc = ph + (12u << 16);        /* +90°: 12 de 48 entradas */
+        if (pc >= FS_PHASE_MAX) pc -= FS_PHASE_MAX;
+        int32_t sq = FS_Sine(ph);
+        int32_t cq = FS_Sine(pc);
+        for (uint32_t c = 0; c < ADC_CHANNELS; c++) {
+          int32_t x = rx_buf[i * ADC_CHANNELS + c] >> 8;   /* escala 24 bits */
+          ps_i[c] += (int64_t)x * cq;
+          ps_q[c] += (int64_t)x * sq;
+        }
+      }
+      ph += inc;
+      if (ph >= FS_PHASE_MAX) ph -= FS_PHASE_MAX;
+      n++;
+    }
+    ps_rx_phase = ph;
+    ps_n = n;
+    if (n >= PS_SETTLE + PS_WINDOW) ps_point_ready = 1;
   }
 
   /* BARRIDO DE FRECUENCIA: detección coherente en las OCHO entradas a la vez.
@@ -5567,6 +5890,37 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
         UART_Print(uart_buf);
       }
     }
+    return;
+  }
+
+  /* BARRIDO DE FASE POR PARLANTE: el tono sale por UN canal y por ninguno más.
+   * Los otros tres bancos escriben silencio, y también el banco propio en sus
+   * siete canales restantes: que el resto esté MUDO es la condición del modo —
+   * si sonaran dos, lo que llega al micrófono es una suma y una suma no se
+   * puede desarmar. */
+  if (ps_enabled) {
+    if (ps_state != PS_RUN) {
+      for (uint32_t i = 0; i < samples * AUDIO_CHANNELS; i++) buffer[i] = 0;
+      return;
+    }
+    uint32_t inc = PS_Inc();
+    if ((ps_spk & ~7u) != ch_offset) {        /* el emisor no es de este banco */
+      for (uint32_t i = 0; i < samples * AUDIO_CHANNELS; i++) buffer[i] = 0;
+      return;
+    }
+    uint32_t local = ps_spk & 7u;
+    uint32_t ph = ps_tx_phase;
+    for (uint32_t i = 0; i < samples; i++) {
+      int32_t sv = FS_Sine(ph);
+      ph += inc;
+      if (ph >= FS_PHASE_MAX) ph -= FS_PHASE_MAX;
+      for (uint32_t ch = 0; ch < AUDIO_CHANNELS; ch++) {
+        buffer[i * AUDIO_CHANNELS + ch] = (ch == local) ? sv : 0;
+      }
+    }
+    /* Un solo acumulador, avanzado por el ÚNICO banco que emite. Si se avanzara
+     * en los cuatro fills, la fase correría cuatro veces por ventana. */
+    ps_tx_phase = ph;
     return;
   }
 

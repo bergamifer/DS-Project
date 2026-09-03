@@ -65,6 +65,9 @@ static volatile uint8_t  modes_req_flag = 0; /* CMD_GET_MODES: idem */
 static volatile uint8_t  mode_count_known = 0;
 static volatile uint8_t  autostart_req_flag = 0;
 static volatile uint8_t  autostart_req_on = 0;
+static volatile uint8_t  phase_info_flag = 0;
+static volatile uint8_t  phase_read_flag = 0;
+static volatile uint32_t phase_read_off = 0;
 static volatile uint8_t  tone_req_flag = 0;
 static volatile uint16_t tone_req_hz = 0;
 static volatile uint8_t  tone_req_dither = 0;
@@ -306,6 +309,15 @@ static void process_byte(uint8_t byte)
             cap_read_off = (uint32_t)rx_payload[0]        | ((uint32_t)rx_payload[1] << 8)
                          | ((uint32_t)rx_payload[2] << 16) | ((uint32_t)rx_payload[3] << 24);
             cap_read_flag = 1;
+            rx_frame_count++;
+        } else if (rx_command == CMD_GET_PHASE_INFO && rx_payload_len == 0) {
+            phase_info_flag = 1;
+            rx_frame_count++;
+            /* Sin ACK: CMD_PHASE_INFO es la respuesta, igual que el status. */
+        } else if (rx_command == CMD_PHASE_READ && rx_payload_len == 4) {
+            phase_read_off = (uint32_t)rx_payload[0]        | ((uint32_t)rx_payload[1] << 8)
+                           | ((uint32_t)rx_payload[2] << 16) | ((uint32_t)rx_payload[3] << 24);
+            phase_read_flag = 1;
             rx_frame_count++;
         } else if (rx_command == CMD_SET_TONE && rx_payload_len == 3) {
             tone_req_hz     = (uint16_t)rx_payload[0] | ((uint16_t)rx_payload[1] << 8);
@@ -710,6 +722,36 @@ uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on)
     autostart_req_flag = 0;
     *on = autostart_req_on;
     return 1;
+}
+
+uint8_t UART_Protocol_PhaseInfoRequested(void)
+{
+    if (!phase_info_flag) return 0;
+    phase_info_flag = 0;
+    return 1;
+}
+
+void UART_Protocol_SendPhaseInfo(const ds_phase_info_t *info)
+{
+    send_frame_yielding(CMD_PHASE_INFO, (const uint8_t *)info, sizeof(ds_phase_info_t));
+}
+
+uint8_t UART_Protocol_GetPhaseRead(uint32_t *off)
+{
+    if (!phase_read_flag) return 0;
+    phase_read_flag = 0;
+    *off = phase_read_off;
+    return 1;
+}
+
+void UART_Protocol_SendPhaseData(uint32_t offset, const uint8_t *data, uint16_t len)
+{
+    uint8_t pl[PROTO_MAX_PAYLOAD];
+    if (len > CAP_CHUNK_BYTES) len = CAP_CHUNK_BYTES;
+    pl[0] = (uint8_t)(offset);        pl[1] = (uint8_t)(offset >> 8);
+    pl[2] = (uint8_t)(offset >> 16);  pl[3] = (uint8_t)(offset >> 24);
+    memcpy(&pl[4], data, len);
+    send_frame_yielding(CMD_PHASE_DATA, pl, (uint16_t)(4 + len));
 }
 
 uint8_t UART_Protocol_GetToneRequest(uint16_t *hz, uint8_t *dither)

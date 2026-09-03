@@ -48,7 +48,227 @@ conversiones aguas abajo. No sirve para descartar esto.
 > D9 es lo que impide el backfeed). Si los reinicios desaparecen, no es sólo el
 > diagnóstico cerrado: es el arreglo de las cinco DS11.
 
+#### ✅ 2026-09-02 — la solución: dos bucks desde la entrada, y el 3V3 deja de ser un LDO
+
+Análisis completo del conexionado de alimentación hecho sobre `DS.txt` (netlist de
+producción) + datasheets. Lo que sigue reemplaza al "buck propio para el riel digital"
+genérico de arriba por una topología concreta con part numbers.
+
+##### El árbol de alimentación real de la DS11 (verificado en el netlist)
+
+```
+J11 ─┬─ +24V ─┬─ D8 (SMBJ24A, TVS)            ← J11 y J12 son EL MISMO net: nodo de paso
+J12 ─┘        ├─ C56 22µF/50V + C58 100nF        del daisy-chain. Sin fusible, sin P-FET.
+              ├─ R33 470k → EN (sin UVLO programado)
+              └─ IC2 MP2315S ─ SW ─ L1 4.7µH ─┬─ +5VA  5,09 V
+                                              │   (FB: 0,8V × (1+40,2k/7,5k) = 5,09 V;
+                                              │    R31 20k es serie a FB, C62 33pF feedfwd)
+                                              │
+    +5VA ─┬─ 32× PAM8302A (U12-U43)  +  bulk 5×220µF (C71, C290-293)
+          ├─ FB3 ─ +5VA_DAC ─ 4× PCM1690 VCC1/VCC2
+          └─ FB2 ─ D9 (SS34) ─┬─ +5V ─┬─ U11 ─ +3V3   ← toda la carga digital
+                              │       ├─ U10 ─ +3,3VA
+                              │       └─ J5.10 / J6.10 (expansión, al exterior)
+                              │
+      USB-C J3 VBUS ─ D2 ─────┤   ← los tres diodos hacen OR sobre +5V
+      J7.10 (ST-Link 5V) ─ D11┘
+
+      J7.1 (ST-Link 3V3) ─────────── +3V3   ⚠️ SIN NADA EN SERIE
+```
+
+##### Los seis hallazgos, en orden de gravedad
+
+**1. El margen de dropout no es de 250-350 mV: es de cero.** La `presupuesto_potencia.md`
+§3bis B lo calculó con el **AP1117**, pero el part number que está en el BOM es otro:
+
+| ref | símbolo dice | BOM / LCSC dice | dato que importa |
+|---|---|---|---|
+| U11 | AP1117-33 | **AMS1117-3.3** (C6186) | dropout **1,1 V típ / 1,3 V máx** |
+| U10 | AP2125 | **AP2125K-3.3TRG1** (C110463) | 300 mA, VIN máx 6 V, dropout **65 mV**, PSRR 65 dB |
+
+Con ~0,6 A de riel digital: `+5V = 5,09 − 0,35 (D9) − 0,13 (FB2, 220 mΩ) = 4,61 V`.
+El AMS1117 necesita `3,3 + 1,1 = 4,4 V` típico y **`4,6 V` en el peor caso**. O sea que
+la placa nominal está **a 10 mV del borde**, y cualquier hundimiento de `+5VA` la cruza.
+Eso ya no es "poco margen", es una cadena que no cierra por diseño. (El AP2125 con sus
+65 mV de dropout nunca perdió regulación — por eso el ADC nunca fue el síntoma.)
+
+Y de paso queda cerrada la verificación pendiente del bring-up: **U10 es un LDO fijo de
+3,3 V**, así que el riel `+3,3VA` tiene que medir 3,3 V; si mide otra cosa, hay un problema.
+
+**2. Cuatro fuentes en paralelo sobre el riel digital, tres protegidas y una no.**
+`+5V` recibe de `+5VA` (D9), del USB-C (D2) y del ST-Link (D11) — los tres Schottky
+bien orientados, ninguna de las tres puede backfeed al VBUS ajeno. Pero **J7 pin 1 va
+directo a `+3V3`**, sin diodo ni resistencia: es un cable duro entre el riel de la placa
+y el pin de 3,3 V de la sonda. Ver el ítem 2b, que hay que reformular (abajo).
+
+**3. Hot-plug: la entrada es sólo cerámica.** El único bulk de entrada es C56 (22 µF/50 V
+cerámico, que con 20 V de DC bias entrega quizá 8-10 µF reales) + C58. Enchufar en
+caliente un ladrillo de 19-20 V por un cable largo es un LC serie sin amortiguar:
+**el pico llega a ~2× la tensión de entrada**, o sea 40 V. Eso está por encima del máximo
+absoluto del MP2315S (26 V) **y** de cualquier buck que pongamos. El TVS clampea a 38,9 V,
+que tampoco alcanza. Falta un electrolítico/polímero con algo de ESR en la entrada
+(100 µF/35 V) — es amortiguación, no filtrado, y hoy no está.
+
+**4. El MAX809T está mal elegido para un riel de 3,3 V.** Umbral 3,08 V típico con rango
+**2,92-3,23 V**. Un buck de 3,3 V ±2 % puede quedar en 3,234 V: por encima del típico,
+pero **por debajo del peor caso del supervisor**. Hoy zafa porque el LDO tira un poco
+alto; con el riel bien regulado el margen sigue siendo malo. → **MAX809S (2,93 V)**.
+El STM32H743 funciona hasta 1,71 V, así que 2,93 V sobra y deja 300 mV de margen real.
+
+**5. J5/J6 sacan `+3V3` y `+5V` al exterior sin ninguna protección** (pines 9 y 10).
+No hay fusible, ni PTC, ni TVS. Un cortocircuito en un cable de expansión arrastra el
+riel del MCU. Mínimo: PTC de 500 mA en cada uno, o al menos serigrafía y una nota.
+
+**6. La UVLO del buck no está programada.** R33 (470 k) sólo tira EN a VIN. Con la
+cadena cayendo, el MP2315S sigue intentando arrancar y entra en hiccup en vez de
+apagarse limpio. El EN de los AP632xx tiene umbral de precisión (1,18 V) justo para eso.
+
+##### La topología propuesta para DS12
+
+```
+J11/J12 (19-20 V, nodo de paso) ──────────────────────► siguiente placa (sin fusible en serie)
+   └─ derivación local: F1 3A ─ P-FET pol. inversa ─ D8' SMBJ20A ─ C 100µF/35V elec + 22µF cer
+        ├── BUCK A   AP63356DV-7   5,12 V / 3,5 A ──► +5VA ─┬─ 32× PAM8302A
+        │            (UVLO a ~15 V: los amps caen primero)  └─ FB3 ─ +5VA_DAC
+        │
+        └── BUCK B   AP63201WU-7   3,30 V / 2 A ────► +3V3  (STM32, ESP32, 4× PCM1690 VDD,
+                     ▲                                       AK5538 TVDD, EEPROM, pull-ups)
+                     │
+              D20 ───┘  Schottky desde +20V
+              D21 ───┘  Schottky desde +5V_AUX      ◄── el OR va en la ENTRADA del buck
+
+   +5VA ─ FB2 ─ D9 ─┬─ +5V_AUX ─┬─ U10 AP2125 ─ +3,3VA        ← ahora sólo ~60 mA:
+   USB-C VBUS ─ D2 ─┤            ├─ J5.10 / J6.10                la caída de FB2+D9
+   J7.10 ─ D11 ─────┘            └─ D21 ─ VIN de BUCK B          pasa de 0,48 V a 0,02 V
+
+   J7.1 ─ 100 Ω ─ +3V3        ← VTref: sensa, no alimenta (ver 2b reformulado)
+```
+
+**La idea que hace que todo esto sea barato: el OR de fuentes se muda de la SALIDA del
+regulador a su ENTRADA.** El AP63201 arranca desde 3,8 V, así que el mismo buck sirve
+con 20 V (modo normal) y con los 4,6 V que llegan del USB (modo flasheo sin fuente).
+Consecuencias:
+
+- **U11 (AMS1117) desaparece del BOM.** Con él se van 1,2 W de calor dentro de la caja
+  y el único componente de la cadena que no cerraba por dropout.
+- **La protección del puerto USB no se toca**: siguen siendo D2 y D11, en el mismo lugar,
+  haciendo lo mismo. Lo único que cambia es que ahora alimentan un nodo auxiliar de 5 V
+  en vez del riel principal.
+- **D20 es obligatorio**, no cosmético: sin él los 5 V del USB subirían al net `+24V` y
+  de ahí a **todas las placas de la cadena** y a la entrada del buck de los amps.
+- **D21 protege al AP2125**, cuyo máximo absoluto de entrada son 6 V: sin él los 20 V
+  del VIN del buck B volverían a `+5V_AUX`.
+- En modo USB el buck rinde ~90 % en vez del 66 % del LDO: **0,38 A desde el VBUS en vez
+  de 0,6 A**. Aun así, para bring-up sin fuente conviene un cargador, no un puerto de
+  laptop limitado a 500 mA.
+- La UVLO programada va en el **buck A** (amps), no en el B. Así, con la cadena cayendo,
+  **los amplificadores se apagan primero y el MCU sigue vivo para reportarlo** por red.
+
+##### El integrado: AP63201WU-7 (LCSC C2071044)
+
+Diodes Inc., misma familia que el AP2125 que ya está en la placa. TSOT-26, ~US$ 0,25.
+
+| parámetro | valor | por qué importa acá |
+|---|---|---|
+| VIN recomendado | 3,8 – 32 V | cubre 20 V normal **y** 4,6 V del USB con el mismo chip |
+| VIN máximo absoluto | **35 V DC / 40 V por 400 ms** | contra los 26 V del MP2315S: ver la coordinación con el TVS abajo |
+| Corriente | 2 A continuos | el riel digital estimado es 0,55-0,9 A → 2× de margen |
+| fSW | **500 kHz** | con 20 V→3,3 V el duty es 16,5 % → tON = 330 ns contra 80 ns de mínimo (**4×**) |
+| Modulación | **PWM siempre, sin PFM** | *esta es la razón principal de elegir el '201* |
+| Ref / salida | 0,8 V ±1 %, ajustable | divisor 75 k / 24 k → **3,300 V** exactos |
+| EN | umbral de precisión 1,18 V | UVLO programable por divisor (Eq.1/Eq.2 del datasheet) |
+| Protecciones | límite de pico ciclo a ciclo, hiccup, OVP, shutdown térmico | |
+| θJA | 89 °C/W (TSOT26) | a 0,6 A: Pd ≈ 0,33 W → +29 °C. Con 40 °C de ambiente, TJ ≈ 69 °C ✅ |
+
+**Por qué el '201 y no el '203 (que es 3,3 V fijo y parece más simple):** el AP63203 es
+1,1 MHz **y tiene PFM**. Las dos cosas juegan en contra:
+
+1. A 1,1 MHz con 20 V de entrada el tON baja a 150 ns, y a 24 V a 125 ns, contra 80 ns de
+   mínimo. Al borde del salteo de pulsos — que es rizado de baja frecuencia, justo lo que
+   no queremos.
+2. PFM = burst a carga liviana. **Es exactamente el mismo mecanismo del AAM del MP2315S**
+   que documentamos en `presupuesto_potencia.md` §3bis C y que se arregla removiendo R36.
+   No tiene sentido arreglarlo en un buck y reintroducirlo en el otro.
+
+El precio de elegir el '201 es un divisor de dos resistencias. Barato.
+
+**BOM alrededor del buck B:**
+
+| | valor | nota |
+|---|---|---|
+| L | 10 µH, Isat ≥ 2,5 A, DCR < 50 mΩ | ΔIL = 0,6 A a 20 V. Sunlord MWSA0703S o similar (ya usamos MWSA0603S en L1) |
+| CIN | 2× 10 µF / 50 V X7R 1210 + 100 nF | derating por DC bias: a 20 V un X7R 1210 pierde ~40 % |
+| COUT | 2× 22 µF / 10 V X7R 0805 + 100 nF | |
+| CBST | 100 nF / 16 V | de BST a SW |
+| R1 / R2 | 75 kΩ / 24 kΩ 1 % | `VOUT = 0,8 × (1 + 75/24) = 3,300 V` |
+| CFF | 22 pF sobre R1 | transitorio (el datasheet admite 10-220 pF) |
+| D20, D21 | SS34 o similar | OR de entrada; D20 conduce ~130 mA, caída despreciable |
+
+##### Y de paso, el buck de los amplificadores (ítem 1 / 0.2): AP63356DV-7 (LCSC C2158014)
+
+No es lo que preguntaste, pero sale gratis del mismo análisis y resuelve tres ítems abiertos:
+
+- **3,5 A** contra 3 A del MP2315S.
+- **θJA = 25 °C/W** (V-DFN3020 con pad térmico) contra **100 °C/W** del MP2315S. El límite
+  de 1,25 W de disipación continua de `presupuesto_potencia.md` §1 —el que hacía elegir
+  entre 12 V y 19 V— deja de ser el binding constraint.
+- **PWM siempre, sin PFM.** El ítem del AAM/R36 desaparece estructuralmente, no por
+  remover un componente.
+- Tiene **Power Good**, que el STM32 puede leer por GPIO: discriminador de brown-out del
+  riel de amps por hardware, sin inferirlo del `reset` del `/status`.
+- Mismo fabricante, misma familia de ecuaciones y mismo estilo de layout que el buck B.
+  Divisor para 5,12 V: R1 = 162 k, R2 = 30 k. L = 6,8-10 µH.
+
+##### Esto reabre §0.2 (el TVS): con un buck de 35 V la coordinación cierra
+
+La tabla de §0.2 se calculó contra el **máximo absoluto de 26 V del MP2315S** y por eso
+daba imposible. Con la familia AP632xx (35 V DC / 40 V por 400 ms) el cuadro cambia:
+
+| TVS | VRWM | VC máx | ¿bajo 35 V DC? | ¿bajo 40 V / 400 ms? |
+|---|---|---|---|---|
+| SMBJ20A | 20 V | 32,4 V | **sí** ✅ | sí |
+| SMBJ22A | 22 V | 35,5 V | al borde | sí |
+| SMBJ24A (actual) | 24 V | 38,9 V | no | sí, con 1,1 V de margen |
+
+**Recomendación: fijar el sistema en 19 V (ladrillo de notebook típico: 19,0-19,5 V) y
+poner SMBJ20A.** Queda 2,6 V por debajo del máximo absoluto **continuo**, no del de
+transitorio — que es el único caso en que un TVS realmente protege. Si se quiere admitir
+hasta 21 V de entrada, SMBJ22A y se acepta que la coordinación es sólo con el rating de
+400 ms. **La conclusión de §0.2 —"hace falta un buck de ≥42 V"— era correcta *dado el
+SMBJ24A*; bajando el TVS a SMBJ20A un buck de 35 V alcanza y sobra.**
+
+Sigue haciendo falta la impedancia serie entre conector y TVS (el fusible del §0.4).
+
+##### Presupuesto del riel de 3,3 V (para dimensionar el buck B)
+
+| consumidor | típico | pico |
+|---|---|---|
+| STM32H743 @480 MHz VOS0 | ~300 mA | ~350 mA |
+| ESP32-C3 con WiFi | ~100 mA | ~350 mA (TX) |
+| 4× PCM1690 VDD (digital) | ~100 mA | ~120 mA |
+| AK5538 TVDD + LDO interno | ~15 mA | |
+| EEPROM, pull-ups, LEDs, e-paper | ~30 mA | |
+| **total** | **≈ 550 mA** | **≈ 900 mA** |
+
+2 A es el tamaño correcto: 2× sobre el pico y sin pasarse de temperatura en TSOT-26.
+Nota: liberar esa carga de `+5VA` le devuelve **~0,6 A** al buck de los amplificadores
+(hoy el LDO consume 3 W del riel de 5 V para entregar 2 W).
+
+##### Lo que hay que verificar en banco antes de congelar el diseño
+
+- [ ] Medir el `+5V` real de una DS11 con los amps encendidos y a volumen. Si baja de
+      4,6 V, el hallazgo 1 queda cerrado con número.
+- [ ] Medir `+3,3VA` = 3,3 V (cierra la verificación pendiente sobre U10).
+- [ ] Confirmar el consumo real del riel de 3,3 V con un shunt, contra los 550 mA de la tabla.
+- [ ] Verificar el pinout del AP2114H-3.3 (SOT-223) contra el AMS1117 **si** se decide
+      dejar el LDO en vez de sacarlo — no dar por hecho que es drop-in.
+
 ### 0.2. El TVS: con 19-20 V y un buck de 26 V no existe solución
+
+> ⚠️ **2026-09-02: este ítem quedó reabierto por §0.1.** La imposibilidad de abajo se
+> deriva del máximo absoluto de **26 V del MP2315S**. Con la familia AP632xx (35 V DC /
+> 40 V por 400 ms) el **SMBJ20A** cierra la coordinación. Ver la tabla al final de §0.1.
+
 El ítem 1 propone "TVS de standoff más bajo (SMBJ18/20A)". **No funciona**: lo que
 importa es el **VC (clamping)**, que en la familia SMBJ es ~1,6× el VRWM.
 
@@ -278,14 +498,36 @@ Estaba planificado (DS11_PLANNING §8.2) pero **no aparece en el BOM final** de 
   beamformean coherente). Ver [../../docs/multinode.md](../../docs/multinode.md) §2.
 - Costo: 2 pads + 1 R.
 
-### 2b. J7 pin 1 (3V3 del ST-Link) sin protección — poner Schottky
+### 2b. J7 pin 1 (3V3 del ST-Link) sin protección — ⚠️ el Schottky es el arreglo equivocado
 Detectado en el bring-up de la DS11 (2026-08). El **pin 1 de J7 va directo al riel
 `+3V3`**, mientras que el pin 10 (5V) sí pasa por el Schottky **D11**. Sin esa
 protección el ST-Link intenta alimentar toda la placa (STM32H743 + 4 PCM1690 + AK5538
 + ESP32 ≈ 700 mA), no puede, y se apaga su LED — que es exactamente el síntoma que
 hizo perder horas creyendo que había un corto. Mitigación en DS11: **cortar el pin 1
-del cable**. Para DS12: **Schottky en serie en el pin 1**, igual que el D11 del pin 10.
-Detalle en [../../docs/ds11_errata.md](../../docs/ds11_errata.md).
+del cable**. Detalle en [../../docs/ds11_errata.md](../../docs/ds11_errata.md).
+
+#### Corrección 2026-09-02: va una resistencia, no un diodo
+
+Este ítem decía "Schottky en serie, igual que el D11 del pin 10". **Un Schottky
+orientado sonda→placa arregla el backfeed pero deja intacto el modo de falla que
+efectivamente ocurrió**: sigue permitiendo que el ST-Link intente alimentar los 700 mA
+de la placa. Es el diodo el que le abre esa puerta.
+
+El pin 1 de un conector de debug **no es un riel de alimentación: es `VTref`**, una
+entrada de sensado con la que la sonda averigua a qué tensión trabaja el target y ajusta
+sus level shifters. En un ST-LINK/V2 o V3 originales es una entrada de alta impedancia
+(no puede alimentar nada); en los dongles clon ese pin es la salida de un AMS1117 y sí
+entrega corriente. **Como el comportamiento depende de qué sonda se enchufe, la
+protección tiene que estar en la placa.**
+
+- **DS12: `+3V3 ─ 100 Ω ─ J7.1`.** La sonda sensa 3,3 V con error despreciable y la
+  corriente de falla queda limitada a ~33 mA en cualquiera de las dos direcciones.
+  (1 kΩ es aún más seguro, pero algunas sondas consumen unos mA en VTref y ahí 1 kΩ
+  ya introduce error de sensado. 100 Ω es el compromiso.)
+- Opcionalmente un 0 Ω **DNP** en paralelo, serigrafiado, por si alguna vez se quiere
+  el modo "alimentar desde la sonda" a sabiendas.
+- **D11 (pin 10, 5 V) se queda como está**: ese sí es un camino de alimentación
+  legítimo y su Schottky ya impide el backfeed hacia el VBUS del host.
 
 ### 2d. JSPK09 y JSPK10 están cruzados en el esquemático — corregir
 Confirmado en el netlist (`DS.txt`) y **verificado en la placa física el 2026-08-14**:

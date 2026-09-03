@@ -144,6 +144,27 @@
  * puesto por una medicion de hace tres dias. */
 #define CMD_SET_TONE        0x19
 
+/* ===== BARRIDO DE FASE POR PARLANTE (0x1A-0x1D) =====
+ *
+ * El modo 22 mide, parlante por parlante y frecuencia por frecuencia, con qué
+ * amplitud y con qué FASE llega cada uno al punto de escucha. Son
+ * 32 x 14 x 8 = 3584 medidas complejas; no entran en una trama ni en diez, así
+ * que se bajan por tramos con el mismo patrón que la captura del ADC: el pedido
+ * lleva el offset en bytes y la respuesta devuelve lo que entra.
+ *
+ * Primero se pide el encabezado (CMD_GET_PHASE_INFO), que dice estado,
+ * progreso, la grilla de frecuencias y cuántos bytes hay. Recién con eso el
+ * lector sabe si vale la pena bajar algo: un barrido tarda ~3 minutos, y
+ * preguntar "¿terminó?" tiene que costar una trama y no catorce kilobytes. */
+#define CMD_GET_PHASE_INFO  0x1A    /* payload: none */
+#define CMD_PHASE_INFO      0x1B    /* STM32 → ESP32: ds_phase_info_t */
+#define CMD_PHASE_READ      0x1C    /* payload: uint32 offset en bytes */
+#define CMD_PHASE_DATA      0x1D    /* STM32 → ESP32: [offset:4][datos:≤124] */
+
+/* Techo de la grilla de frecuencias del encabezado. El firmware usa 14; el
+ * campo es fijo para que ds_phase_info_t tenga tamaño conocido. */
+#define PHASE_MAX_PTS       16
+
 /* ===== Actualización de firmware por WiFi (0x20-0x23) =====
  *
  * Los tres primeros NO se contestan desde el parser: el ACK lo manda el MAIN
@@ -191,7 +212,7 @@ typedef struct __attribute__((packed)) {
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      15   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      16   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -230,7 +251,16 @@ typedef struct __attribute__((packed)) {
                                  * dither, por red. Es lo que habilita medir con
                                  * el banco de dos microfonos sin nadie delante
                                  * de la placa: el host barre foco y frecuencia
-                                 * y baja las capturas. ds_status_t NO cambio. */
+                                 * y baja las capturas. ds_status_t NO cambio.
+                                 * v16: + el BARRIDO DE FASE POR PARLANTE y sus
+                                 * cuatro comandos. Era la medicion que faltaba:
+                                 * el AUTOFOCUS recorre los parlantes de a uno
+                                 * pero devuelve UN escalar por parlante, y el
+                                 * barrido de frecuencia da fase contra
+                                 * frecuencia pero con los cuatro bancos sonando
+                                 * juntos, o sea la SUMA. Ninguno de los dos
+                                 * podia contestar si los 32 llegan EN FASE al
+                                 * punto de escucha. ds_status_t NO cambio. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -341,6 +371,43 @@ typedef struct __attribute__((packed)) {
 } ds_health_t;
 
 _Static_assert(sizeof(ds_health_t) == 20, "ds_health_t must be 20 bytes");
+
+/**
+ * @brief Encabezado del BARRIDO DE FASE POR PARLANTE (CMD_PHASE_INFO).
+ *
+ * `state`: 0 = nunca corrió, 1 = corriendo, 2 = terminado. Con 1, `progress`
+ * dice cuántos parlantes van; lo de los que faltan son ceros y NO hay que
+ * leerlos como "ese parlante no suena".
+ *
+ * FORMATO DE LOS DATOS (CMD_PHASE_DATA), por si alguien lo lee sin el script:
+ * dos int16 little-endian por cada terna (parlante, punto, entrada), en ese
+ * orden de anidamiento — parlante el más externo, entrada el más interno:
+ *
+ *   [0] amplitud en dBFS x100      (int16; -32000 = por debajo de todo)
+ *   [1] fase en unidades de 2*pi/65536, con el origen del emisor ya restado
+ *
+ * La fase viaja CORREGIDA por la fase del emisor al abrir cada punto. Sin esa
+ * corrección, dos parlantes medidos en instantes distintos no comparten origen,
+ * restarles la geometría no daría nada, y el modo no mediría lo único que vino
+ * a medir.
+ *
+ * dB x100 y fase en Q16 en vez de dos floats: la mitad de bytes —14 kB en lugar
+ * de 28— por 0,01 dB y 0,0055 grados de resolución, que están varios órdenes de
+ * magnitud por debajo del ruido de cualquier sala.
+ */
+typedef struct __attribute__((packed)) {
+    uint8_t  n_spk;                    /* parlantes recorridos */
+    uint8_t  n_pts;                    /* frecuencias por parlante */
+    uint8_t  n_ch;                     /* entradas del ADC guardadas */
+    uint8_t  state;                    /* 0 idle, 1 corriendo, 2 listo */
+    uint8_t  progress;                 /* parlantes terminados */
+    uint8_t  reserved;
+    uint32_t total_bytes;              /* n_spk * n_pts * n_ch * 4 */
+    uint16_t freq_hz[PHASE_MAX_PTS];   /* la grilla; valen los n_pts primeros */
+} ds_phase_info_t;
+
+_Static_assert(sizeof(ds_phase_info_t) == 10 + 2 * PHASE_MAX_PTS,
+               "ds_phase_info_t cambio de tamano");
 
 /**
  * @brief Cabecera de un tramo del resultado del AUTOFOCUS (CMD_CAL_DATA).
@@ -670,6 +737,14 @@ void UART_Protocol_SetModeCount(uint8_t n);
 uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on);
 /** @brief ¿Llegó un CMD_SET_TONE? Devuelve 1, la frecuencia y si va con dither. */
 uint8_t UART_Protocol_GetToneRequest(uint16_t *hz, uint8_t *dither);
+/** @brief ¿Llegó un CMD_GET_PHASE_INFO? */
+uint8_t UART_Protocol_PhaseInfoRequested(void);
+/** @brief Contesta CMD_PHASE_INFO. Sólo desde el main loop, como SendStatus. */
+void UART_Protocol_SendPhaseInfo(const ds_phase_info_t *info);
+/** @brief ¿Llegó un CMD_PHASE_READ? Devuelve 1 y el offset pedido. */
+uint8_t UART_Protocol_GetPhaseRead(uint32_t *off);
+/** @brief Contesta CMD_PHASE_DATA con `len` bytes desde `off`. */
+void UART_Protocol_SendPhaseData(uint32_t off, const uint8_t *data, uint16_t len);
 /** @brief ¿Llegó un CMD_GET_MODES? Devuelve 1 y el índice del primer modo. */
 uint8_t UART_Protocol_GetModesReq(uint8_t *first);
 /** @brief Contesta CMD_MODES_DATA. `names` son `hdr->count` cadenas contiguas
