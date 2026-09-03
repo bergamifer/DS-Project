@@ -1,0 +1,22 @@
+{
+ "puntos": [
+  {
+   "nombre": "izquierda",
+   "x": -233.9,
+   "y": -48.2,
+   "z": 951.3,
+   "rms_us": 3.79,
+   "solidos": 28,
+   "mic": 0
+  },
+  {
+   "nombre": "centro",
+   "x": 11.9,
+   "y": -43.1,
+   "z": 963.8,
+   "rms_us": 3.62,
+   "solidos": 28,
+   "mic": 1
+  }
+ ]
+}
