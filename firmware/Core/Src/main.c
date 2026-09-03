@@ -719,6 +719,16 @@ static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
  * El costo son 32 raíces cuadradas cada 5 ms = ~0,06% de CPU. */
 #define SWEEP_STEP_MS   5
 static volatile uint8_t sweep_axis = 0;   /* 0 = quieto, SWEEP_AXIS_X / _Y */
+/* Instante en que se entro al modo. El triangulo se cuenta DESDE ACA y no desde
+ * el reloj de la placa, y arranca en el centro del recorrido.
+ *
+ * Antes usaba HAL_GetTick() crudo, asi que el primer reapunte tiraba el foco
+ * donde el triangulo estuviera pasando en ese momento — medido el 2026-09-03,
+ * saltos de 89 a 662 mm segun la suerte. En los parlantes del borde eso son
+ * ~20 muestras de retardo en un solo buffer: un clic al entrar al modo, uno
+ * solo, que es exactamente lo que Fernando reporto ("aparece uno al principio").
+ * Arrancar en el centro lo empalma con el (0,0,1000) que dejo UI_ApplyState. */
+static uint32_t sweep_t0_ms = 0;
 
 /* ===== MULTIFOCUS (modo 14) — N fuentes internas, cada una con su foco =====
  * Precuela de la intervención de 8 entradas analógicas: la infraestructura
@@ -2641,7 +2651,11 @@ int main(void)
       uint32_t now_ms = HAL_GetTick();
       if (now_ms - sweep_last_ms >= SWEEP_STEP_MS) {
         sweep_last_ms = now_ms;
-        uint32_t ph = now_ms % (2u * SWEEP_HALF_MS);          /* 0 … 2·half */
+        /* +half/2 para que el recorrido EMPIECE en el centro (v = 0), que es
+         * donde UI_ApplyState dejo el foco: sin ese desfase el modo arranca
+         * con un salto. */
+        uint32_t ph = (now_ms - sweep_t0_ms + SWEEP_HALF_MS / 2u)
+                      % (2u * SWEEP_HALF_MS);
         int32_t tri = (ph < SWEEP_HALF_MS)                    /* 0→half→0 */
                       ? (int32_t)ph
                       : (int32_t)(2u * SWEEP_HALF_MS - ph);
@@ -5686,6 +5700,7 @@ static void UI_ApplyState(uint8_t idx) {
   mfocus_in_enabled = st->mfin;
   if (st->mfin) MFocusIn_ApplyDefaults();
   sweep_axis = st->sweep;
+  if (st->sweep) sweep_t0_ms = HAL_GetTick();   /* el triangulo arranca ahora */
   ps_enabled = st->psweep;
   if (st->psweep) {
     PS_Start();                      // entrar al modo arranca el barrido de cero
