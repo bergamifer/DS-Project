@@ -688,9 +688,9 @@ static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
  * la demostración que se entiende sin explicación previa.
  *
  * Triángulo de ±SWEEP_X_MM en 2×SWEEP_HALF_MS. Se reapunta cada SWEEP_STEP_MS
- * desde el main loop: 32 raíces cuadradas por paso, ~3 µs, despreciable. El paso
- * de foco por actualización es de ~14 mm = 0,04 muestras de delay, así que no
- * hay salto audible al reapuntar. */
+ * desde el main loop: 32 raíces cuadradas por paso, ~3 µs. Ver el comentario de
+ * SWEEP_STEP_MS para por qué son 5 ms y no 50 — el salto al reapuntar SÍ se
+ * oía. */
 #define SWEEP_X_MM      700     /* amplitud a cada lado del centro */
 /* Amplitud vertical menor que la horizontal, y no por gusto: la apertura en Y
  * son 480 mm contra 600 mm en X, y a 800 Hz el haz vertical es MUCHO más ancho
@@ -700,7 +700,24 @@ static int16_t tx_focus_x_mm = 0, tx_focus_y_mm = 0, tx_focus_z_mm = 0;
  * lado: el máximo recorrido que sigue siendo un foco moviéndose. */
 #define SWEEP_Y_MM      600
 #define SWEEP_HALF_MS   2500    /* medio recorrido → ciclo completo de 5 s */
-#define SWEEP_STEP_MS   50      /* 20 actualizaciones por segundo */
+/* 200 actualizaciones por segundo, no 20.
+ *
+ * Con 50 ms el foco se reapunta 20 veces por segundo, y cada reapuntada mueve
+ * el retardo de cada parlante ~0,04 muestras. Eso es un ESCALON de ~1% de
+ * amplitud en la señal de salida — y el comentario que estaba acá decía que no
+ * se oía. Se oye: pasa 20 veces por segundo, EN FASE en los 32 parlantes a la
+ * vez, o sea un zumbido de 20 Hz perfectamente periódico. Fernando lo reportó
+ * el 2026-09-03 escuchando el modo 16 ("se escucha un pedito"), que es
+ * exactamente como suena una serie de clics a 20 Hz.
+ *
+ * El error del razonamiento anterior fue mirar el TAMAÑO del escalón y no su
+ * REPETICIÓN: 1% es despreciable una vez y es una nota grave veinte veces por
+ * segundo.
+ *
+ * Bajar a 5 ms hace dos cosas a la vez: el escalón se achica 10× (0,004
+ * muestras) y su frecuencia sube a 200 Hz, donde además el array casi no radia.
+ * El costo son 32 raíces cuadradas cada 5 ms = ~0,06% de CPU. */
+#define SWEEP_STEP_MS   5
 static volatile uint8_t sweep_axis = 0;   /* 0 = quieto, SWEEP_AXIS_X / _Y */
 
 /* ===== MULTIFOCUS (modo 14) — N fuentes internas, cada una con su foco =====
@@ -2616,8 +2633,9 @@ int main(void)
      * Triángulo entre −amp y +amp sobre el eje elegido. Va acá y no en el fill
      * porque Beam_SetTxFocus usa floats y escribe tx_delay_q8[], que el fill
      * lee: en el main loop el peor caso es que un fill agarre la tabla a mitad
-     * de actualización, y como el paso son ~14 mm (0,04 muestras) eso no se
-     * oye. */
+     * de actualización. Con el paso de 5 ms eso son 0,004 muestras de
+     * diferencia entre dos canales de la tabla, unas cien veces por debajo de
+     * la interpolación Q8. */
     if (sweep_axis) {
       static uint32_t sweep_last_ms = 0;
       uint32_t now_ms = HAL_GetTick();
