@@ -606,3 +606,86 @@ veces.
 El contador `retries` de `GET /foco` lo hace visible. **Si crece durante un
 barrido, los puntos no son comparables entre sí.** Falta encontrar la causa de
 raíz.
+
+---
+
+## 8. Imagen de haz — localizar los micrófonos como un radar
+
+`tools/imagen.py`. Barre el foco por una grilla del espacio y mapea cuánto
+sonido **directo** llega a cada micrófono en cada caso. Donde el mapa tiene su
+máximo, está el micrófono — no por cálculo, sino porque ahí es donde el array
+logra concentrar la energía. Es la misma idea que una imagen de apertura
+sintética, con la diferencia de que el micrófono es un receptor cooperativo y no
+un eco.
+
+```
+python3 tools/imagen.py --host <ip> --plano xz --x -500 300 50 --z 500 1600 100
+python3 tools/imagen.py --host <ip> --plano xy --x -400 200 50 --y -400 400 50 --fijo 1000
+```
+
+### 8.1 Dos métodos independientes, y coinciden
+
+|  | imagen de haz | ajuste de TOF | diferencia |
+|---|---|---|---|
+| c0 | (−244, −53, 1007) | (−233, −52, 948) | X 11 · Y 1 · **Z 59** mm |
+| c1 | (+12, −46, 1021) | (+14, −46, 954) | X 2 · Y 0 · **Z 67** mm |
+
+**Separación entre los dos micrófonos: 256 mm (imagen), 247 mm (TOF), 250 mm
+(cinta métrica).** Tres métodos dentro de 9 mm.
+
+Uno es geométrico (mínimos cuadrados sobre 32 tiempos de vuelo) y el otro es
+energético (dónde el array concentra). Que coincidan en X e Y **dentro de un
+milímetro en Y y once en X** es la validación más fuerte que tiene el proyecto.
+
+La discrepancia en Z —unos 60 mm— no es un error: es que **ninguno de los dos
+determina Z bien**, y la razón es §8.2.
+
+### 8.2 🔴 El foco no es un punto: es un cigarro de 20 cm × 20 cm × más de 90 cm
+
+Medido con el chirp enfocado, a 1 m:
+
+| eje | ancho −6 dB |
+|---|---|
+| X (horizontal) | **200 mm** |
+| Y (vertical) | **200 mm** |
+| Z (profundidad) | **≥ 900–1100 mm** — el −6 dB toca el borde del barrido |
+
+La profundidad es un **límite inferior**: el mapa no llegó a caer 6 dB dentro del
+rango barrido (500 a 1600 mm).
+
+Y eso no es un defecto, es física. La profundidad de foco de una apertura va con
+el **cuadrado** de z/D:
+
+```
+DOF ≈ 8 · λ · (z/D)²
+```
+
+| array | apertura X | z/D a 1 m | DOF a 2 kHz | ancho X a 2 kHz |
+|---|---|---|---|---|
+| **DS11 actual 8×4** | 560 mm | 1,79 | **4,4 m** | 306 mm |
+| 2×16 entrelazado | 1240 mm | 0,81 | **0,9 m** | 138 mm |
+| 2×16 a 60 mm | 930 mm | 1,08 | 1,6 m | 184 mm |
+
+**Consecuencias, que son grandes:**
+
+1. **Un nodo solo no puede poner sonido en «un punto» de la sala.** Puede ponerlo
+   en una dirección, sobre un tubo largo. La discriminación en profundidad la
+   tienen que dar **varios nodos desde ángulos distintos** — es decir, la
+   geometría de la instalación de quince, no el foco de uno.
+2. **Es un argumento nuevo y fuerte para el 2×16**, que no aparecía en §0.8 de
+   `DS12_PLANNING.md`: al duplicar la apertura horizontal, la profundidad de foco
+   mejora **cinco veces**, porque va con el cuadrado. La resolución lateral sólo
+   mejora al doble.
+3. **Los 200 mm en vertical son exactamente lo que Fernando no quiere.** Una
+   persona que mueve la cabeza 20 cm hacia arriba pierde el foco. Su propuesta de
+   bajar el array a dos filas convierte esos 200 mm en más de un metro. La
+   medición confirma la intuición con un número.
+
+### 8.3 Lo que falta medir
+
+- **Cuán largo es de verdad el foco en Z.** Hay que barrer de 300 a 3000 mm; el
+  rango de esta corrida se quedó corto.
+- **El mapa a distintas frecuencias.** El chirp promedia 500 Hz–6 kHz; el ancho
+  y la profundidad dependen de λ, así que a 800 Hz todo es 3,75× más grande.
+- **Si el cigarro se inclina al apuntar fuera del eje.** El mapa X-Z de c0 (que
+  está a −244 mm) se ve inclinado; hay que mirarlo bien.
