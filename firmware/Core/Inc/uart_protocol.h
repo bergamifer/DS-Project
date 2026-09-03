@@ -168,6 +168,17 @@
  * sin saberlo. Las herramientas lo mandan siempre antes de medir, y el
  * encabezado del resultado dice con cuales se midio. */
 #define CMD_SET_MICS        0x1E    /* payload: [ch1:1][ch2:1], 0..7 */
+/* Mapeo del arnes: 0 = canal k -> cono k, 1 = canal k -> cono k^1.
+ *
+ * Existe para poder hacer la prueba A/B A OIDO, sin reflashear y sin cortar el
+ * sonido. El arnes cruzado le da a cada parlante el retardo de su vecino: los
+ * residuos medidos van de -79 a +131 us, que a 2 kHz son 72 grados de fase.
+ * Eso deberia oirse, y "deberia" no es una medicion.
+ *
+ * NO se persiste, y el default de compilacion es el mapeo MEDIDO (cruzado). Un
+ * reinicio vuelve solo a lo correcto: se puede desenfocar el muro para escuchar
+ * la diferencia sin riesgo de dejarlo asi. */
+#define CMD_SET_SPKMAP      0x1F    /* payload: uint8 (0 directo, 1 cruzado) */
 #define CMD_GET_PHASE_INFO  0x1A    /* payload: none */
 #define CMD_PHASE_INFO      0x1B    /* STM32 → ESP32: ds_phase_info_t */
 #define CMD_PHASE_READ      0x1C    /* payload: uint32 offset en bytes */
@@ -224,7 +235,7 @@ typedef struct __attribute__((packed)) {
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      17   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      18   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -277,7 +288,10 @@ typedef struct __attribute__((packed)) {
                                  * bytes con los dos numeros de entrada. El arnes
                                  * real dio senal en c0 y c7, no en c0 y c1: que
                                  * canal es el microfono es una propiedad del
-                                 * cableado. */
+                                 * cableado.
+                                 * v18: + CMD_SET_SPKMAP — cambiar el mapeo del
+                                 * arnes en caliente, para poder A/B a oido lo
+                                 * que se midio. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -760,6 +774,8 @@ void UART_Protocol_SetModeCount(uint8_t n);
 uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on);
 /** @brief ¿Llegó un CMD_SET_TONE? Devuelve 1, la frecuencia y si va con dither. */
 uint8_t UART_Protocol_GetToneRequest(uint16_t *hz, uint8_t *dither);
+/** @brief ¿Llegó un CMD_SET_SPKMAP? Devuelve 1 y el mapeo pedido. */
+uint8_t UART_Protocol_GetSpkMapRequest(uint8_t *cruzado);
 /** @brief ¿Llegó un CMD_SET_MICS? Devuelve 1 y las dos entradas pedidas. */
 uint8_t UART_Protocol_GetMicsRequest(uint8_t *m1, uint8_t *m2);
 /** @brief ¿Llegó un CMD_GET_PHASE_INFO? */

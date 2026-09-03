@@ -667,6 +667,14 @@ static volatile uint8_t tx_steer_enabled = 0;
 static uint16_t tx_delay_q8[BEAM_NUM_CHANNELS] = {0}; // ≤ TX_MAX_DELAY_SAMPLES<<8
 static int8_t speaker_sign[BEAM_NUM_CHANNELS];       // +1 all — DS11 alternating-
                                                      // polarity fix goes here later
+/* Mapeo del arnes: 1 = el canal k mueve el cono k^1. Variable y no constante
+ * para poder hacer la prueba A/B a oido en caliente (CMD_SET_SPKMAP). Arranca
+ * SIEMPRE en el valor MEDIDO, asi que un reinicio devuelve el muro a lo
+ * correcto sin que nadie se tenga que acordar. El porque esta en el comentario
+ * largo de SPK_PAIR_SWAP, junto a Beam_InitTxGeometry. */
+#define SPK_PAIR_SWAP  1
+static volatile uint8_t spk_pair_swap = SPK_PAIR_SWAP;
+
 static float spk_x_mm[BEAM_NUM_CHANNELS];            // built by Beam_InitTxGeometry
 static float spk_y_mm[BEAM_NUM_CHANNELS];
 static float spk_center_x_mm = 0, spk_center_y_mm = 0;
@@ -2751,6 +2759,26 @@ int main(void)
         Set_Amps(amps_on);
       }
 
+      /* ===== Mapeo del arnes en caliente (CMD_SET_SPKMAP) =====
+       * Rehace la tabla de posiciones y REAPLICA el foco vigente: sin lo
+       * segundo el cambio no se oiria hasta el proximo cambio de modo, y la
+       * prueba A/B no serviria para nada. */
+      {
+        uint8_t cruz;
+        if (UART_Protocol_GetSpkMapRequest(&cruz)) {
+          spk_pair_swap = cruz;
+          Beam_InitTxGeometry();
+          Beam_SetTxFocus(tx_focus_x_mm, tx_focus_y_mm, tx_focus_z_mm);
+          if (mfocus_enabled)    MFocus_ApplyDefaults();
+          if (mfocus_in_enabled) MFocusIn_ApplyDefaults();
+          snprintf(uart_buf, sizeof(uart_buf),
+                   "ARNES: %s  (foco reaplicado en %d,%d,%d)\r\n",
+                   cruz ? "pares CRUZADOS — el mapeo MEDIDO" : "directo — DESENFOCA",
+                   (int)tx_focus_x_mm, (int)tx_focus_y_mm, (int)tx_focus_z_mm);
+          UART_Print(uart_buf);
+        }
+      }
+
       /* ===== Que entradas son los microfonos (CMD_SET_MICS) ===== */
       {
         uint8_t m1, m2;
@@ -4385,13 +4413,12 @@ static void Beam_UpdateDelays(int16_t az_deg) {
  * hardware/DS/DS12_PLANNING.md: un conector que no permita cruzar los pares
  * vale mas que cualquier correccion por software. */
 #define SPK_PAIR_SWAP  1
-
 static void Beam_InitTxGeometry(void) {
   float sx = 0, sy = 0;
   for (uint32_t ch = 0; ch < BEAM_NUM_CHANNELS; ch++) {
     /* La POSICION FISICA del canal ch. Con el arnes cruzado, el canal ch mueve
      * el cono que esta en el lugar ch^1. */
-    uint32_t pos = SPK_PAIR_SWAP ? (ch ^ 1u) : ch;
+    uint32_t pos = spk_pair_swap ? (ch ^ 1u) : ch;
     uint32_t r = pos / SPK_COLS, c = pos % SPK_COLS;
     spk_x_mm[ch] = (float)c * SPK_X_PITCH_MM + ((r & 1) ? SPK_ROW_DX_MM : 0.0f);
     spk_y_mm[ch] = (float)r * SPK_Y_PITCH_MM;
@@ -4405,7 +4432,7 @@ static void Beam_InitTxGeometry(void) {
           (int)(7 * SPK_X_PITCH_MM + SPK_ROW_DX_MM), (int)(3 * SPK_Y_PITCH_MM),
           (int)spk_center_x_mm, (int)spk_center_y_mm);
   UART_Print(uart_buf);
-  UART_Print(SPK_PAIR_SWAP
+  UART_Print(spk_pair_swap
              ? "  ARNES: pares CRUZADOS (canal k -> cono k^1). Medido el "
                "2026-09-03: 3,9 us de residuo contra 62,0 sin cruzar.\r\n"
                "         Si el arnes se arregla, poner SPK_PAIR_SWAP en 0.\r\n"

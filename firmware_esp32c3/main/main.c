@@ -122,6 +122,7 @@ static void device_identity_init(void)
 // Barrido de fase por parlante (modo 22). 32 x 14 x 8 medidas complejas: se
 // bajan por tramos con el mismo patron que la captura del ADC.
 #define CMD_SET_MICS       0x1E // payload: [ch1:1][ch2:1] — que entradas son los mics
+#define CMD_SET_SPKMAP     0x1F // payload: uint8 (0 directo, 1 cruzado de a pares)
 #define CMD_GET_PHASE_INFO 0x1A // payload: none
 #define CMD_PHASE_INFO     0x1B // STM32 -> ESP32: ds_phase_info_t
 #define CMD_PHASE_READ     0x1C // payload: uint32 offset en bytes
@@ -155,7 +156,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    17
+#define PROTO_VERSION    18
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -1169,6 +1170,39 @@ static esp_err_t autostart_handler(httpd_req_t *req)
  * 1; el arnes real dio senal en c0 y c7. No se persiste a proposito: es un dato
  * del CABLEADO de este banco, y que sobreviva a un reinicio significa que
  * dentro de un mes alguien mide con el cableado de hoy sin saberlo. */
+/* POST /spkmap {"cruzado":true|false}
+ *
+ * Cambia el mapeo del arnes EN CALIENTE, para poder A/B a oido lo que se midio.
+ * No se persiste: un reinicio vuelve al mapeo medido, asi que se puede
+ * desenfocar el muro a proposito sin riesgo de dejarlo asi. */
+static esp_err_t spkmap_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"bad json\"}");
+        return ESP_OK;
+    }
+    cJSON *j = cJSON_GetObjectItem(root, "cruzado");
+    uint8_t v = (j && (cJSON_IsTrue(j) || j->valueint)) ? 1 : 0;
+    cJSON_Delete(root);
+
+    int ack = uart_send_and_wait_ack(CMD_SET_SPKMAP, &v, 1, 500);
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"%s\",\"cruzado\":%s}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"), v ? "true" : "false");
+    printf("[ESP32] POST /spkmap %s -> %s\n", v ? "cruzado" : "directo",
+           ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 static esp_err_t mics_handler(httpd_req_t *req)
 {
     char buf[128];
@@ -2633,6 +2667,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/autostart", .method = HTTP_POST, .handler = autostart_handler },
             { .uri = "/tone",    .method = HTTP_POST, .handler = tone_handler    },
             { .uri = "/mics",    .method = HTTP_POST, .handler = mics_handler    },
+            { .uri = "/spkmap",  .method = HTTP_POST, .handler = spkmap_handler  },
             { .uri = "/reset",   .method = HTTP_POST, .handler = reset_handler   },
             { .uri = "/ingain",  .method = HTTP_POST, .handler = ingain_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },

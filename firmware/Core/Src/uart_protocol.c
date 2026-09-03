@@ -65,6 +65,8 @@ static volatile uint8_t  modes_req_flag = 0; /* CMD_GET_MODES: idem */
 static volatile uint8_t  mode_count_known = 0;
 static volatile uint8_t  autostart_req_flag = 0;
 static volatile uint8_t  autostart_req_on = 0;
+static volatile uint8_t  spkmap_req_flag = 0;
+static volatile uint8_t  spkmap_req_val = 1;
 static volatile uint8_t  mics_req_flag = 0;
 static volatile uint8_t  mics_req_1 = 0, mics_req_2 = 1;
 static volatile uint8_t  phase_info_flag = 0;
@@ -312,6 +314,11 @@ static void process_byte(uint8_t byte)
                          | ((uint32_t)rx_payload[2] << 16) | ((uint32_t)rx_payload[3] << 24);
             cap_read_flag = 1;
             rx_frame_count++;
+        } else if (rx_command == CMD_SET_SPKMAP && rx_payload_len == 1) {
+            spkmap_req_val = rx_payload[0] ? 1 : 0;
+            spkmap_req_flag = 1;
+            rx_frame_count++;
+            send_ack();
         } else if (rx_command == CMD_SET_MICS && rx_payload_len == 2) {
             mics_req_1 = rx_payload[0];
             mics_req_2 = rx_payload[1];
@@ -729,6 +736,14 @@ uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on)
     if (!autostart_req_flag) return 0;
     autostart_req_flag = 0;
     *on = autostart_req_on;
+    return 1;
+}
+
+uint8_t UART_Protocol_GetSpkMapRequest(uint8_t *cruzado)
+{
+    if (!spkmap_req_flag) return 0;
+    spkmap_req_flag = 0;
+    *cruzado = spkmap_req_val;
     return 1;
 }
 
