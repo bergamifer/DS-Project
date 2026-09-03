@@ -1561,6 +1561,16 @@ static volatile uint64_t fill_all_cycles = 0;
  * telemetría: sin esto, "este modo no entra en presupuesto" sólo se podía
  * diagnosticar con el cable serie enchufado. */
 static volatile uint16_t cpu_fills_x10 = 0;
+/* Lo mismo para el procesamiento de ENTRADA, que estaba sin medir.
+ *
+ * `fill_all_cycles` cuenta los cuatro fills de salida, y las marcas de DWT
+ * empiezan DESPUÉS de las dos llamadas a Process_ADC_Half — así que todo el
+ * lado del ADC quedaba fuera del presupuesto publicado: las delay lines, el
+ * MULTIFOCUS de entradas, los detectores coherentes, y cualquier reproductor
+ * futuro. Alguien podía mirar /status, ver el mismo porcentaje que antes y
+ * declarar victoria mientras los underruns subían. */
+static volatile uint64_t adc_all_cycles = 0;
+static volatile uint16_t cpu_adc_x10 = 0;
 /* Offset entre bancos: timestamp del último Half callback de cada master.
  * SAI1_A y SAI2_A son masters asíncronos entre sí — si arrancan separados,
  * ese desfase queda fijo para siempre. Se reporta en la línea SYNC. */
@@ -1875,12 +1885,16 @@ static void Service_Fills(void) {
   if (rx_3b_first_half_ready) {
     rx_3b_first_half_ready = 0;
     __DSB();
+    uint32_t t0 = DWT->CYCCNT;
     Process_ADC_Half(&audio_buffer_3b_rx[0], ADC_BUFFER_SAMPLES);
+    adc_all_cycles += DWT->CYCCNT - t0;
   }
   if (rx_3b_second_half_ready) {
     rx_3b_second_half_ready = 0;
     __DSB();
+    uint32_t t0 = DWT->CYCCNT;
     Process_ADC_Half(&audio_buffer_3b_rx[ADC_BUFFER_SIZE], ADC_BUFFER_SAMPLES);
+    adc_all_cycles += DWT->CYCCNT - t0;
   }
 
   /* Las banderas del banco 0 se leen y se limpian UNA VEZ, con las
@@ -3238,6 +3252,7 @@ int main(void)
                        | (autostart_state == AS_GAVEUP ? STATE_F_AUTO_HELD : 0);
         st.uptime_ms = HAL_GetTick();
         st.cpu_fills_x10 = cpu_fills_x10;
+        st.cpu_adc_x10   = cpu_adc_x10;
         st.mic_live_mask = mic_live_mask;
         st.cal_progress  = cal_progress;
         st.cal_ok_count  = cal_ok_count;
@@ -3388,11 +3403,18 @@ int main(void)
         last_fill_all = now_fill;
         cpu_fills_x10 = (uint16_t)(cpu_x10 > 65535 ? 65535 : cpu_x10);
 
+        static uint64_t last_adc_all = 0;
+        uint64_t now_adc = adc_all_cycles;
+        uint32_t cpu_a10 = (uint32_t)(((now_adc - last_adc_all) * 1000ULL) / 480000000ULL);
+        last_adc_all = now_adc;
+        cpu_adc_x10 = (uint16_t)(cpu_a10 > 65535 ? 65535 : cpu_a10);
+
         snprintf(uart_buf, sizeof(uart_buf),
                  "     SYNC bancos: %ld us (%ld cyc) | CPU fills: %lu.%lu%% | "
-                 "fase RX-TX: %ld\r\n",
+                 "CPU adc: %lu.%lu%% | fase RX-TX: %ld\r\n",
                  (long)skew_us, (long)skew,
                  (unsigned long)(cpu_x10 / 10), (unsigned long)(cpu_x10 % 10),
+                 (unsigned long)(cpu_a10 / 10), (unsigned long)(cpu_a10 % 10),
                  (long)DMA_PhaseSamples());
         UART_Print(uart_buf);
       }
@@ -6712,8 +6734,14 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
           }
           acc = (acc * (int32_t)beam_config.gains[gch]) >> 8; // -6dBFS×255 < 2³¹
           if (speaker_sign[gch] < 0) acc = -acc;
-          if (acc > 8388607) acc = 8388607;
-          else if (acc < -8388608) acc = -8388608;
+          /* CUENTA el recorte. De los cuatro clamps de salida del firmware, dos
+           * no contaban —este y el del MULTIFOCUS de entradas— así que los modos
+           * 14 y 15 podían recortar el 100% de las muestras y `out_clip` seguía
+           * en cero. Es la misma familia de fallo que el chirp enfocado, donde
+           * 1,3 millones de muestras recortadas no se oían como distorsión y
+           * ningún contador las delataba: el instrumento mintiendo en silencio. */
+          if (acc > 8388607)       { acc = 8388607;  out_clip_count++; }
+          else if (acc < -8388608) { acc = -8388608; out_clip_count++; }
         }
         buffer[i * AUDIO_CHANNELS + ch] = acc;
       }
@@ -6778,8 +6806,12 @@ static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_o
           acc = (int32_t)(((int64_t)sum * g_q8) >> 8);
           // Clamp ANTES del gain por canal: 8 fuentes × boost pueden exceder
           // ±FS, y FS×255 es el máximo que el multiply soporta en int32.
-          if (acc > 8388607) acc = 8388607;
-          else if (acc < -8388608) acc = -8388608;
+          //
+          // Y CUENTA, que es lo que faltaba. Este modo suma OCHO fuentes y les
+          // aplica la ganancia de entrada: es el que más fácil recorta de todo
+          // el firmware, y era el único que lo hacía sin que se viera.
+          if (acc > 8388607)       { acc = 8388607;  out_clip_count++; }
+          else if (acc < -8388608) { acc = -8388608; out_clip_count++; }
           acc = (acc * (int32_t)beam_config.gains[gch]) >> 8;
           if (speaker_sign[gch] < 0) acc = -acc;
         }

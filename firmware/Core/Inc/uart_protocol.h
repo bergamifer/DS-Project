@@ -241,7 +241,7 @@ typedef struct __attribute__((packed)) {
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      20   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      21   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -306,7 +306,9 @@ typedef struct __attribute__((packed)) {
                                  * El STM32 mide su propio riel de 3V3 contra la
                                  * referencia interna, sin hardware nuevo. Es el
                                  * riel que vigila el MAX809 a 3,08 V y el que
-                                 * reinicia la placa al encender los amps. */
+                                 * reinicia la placa al encender los amps.
+                                 * v21: + cpu_adc_x10. El lado de la ENTRADA
+                                 * estaba fuera del presupuesto publicado. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -597,6 +599,13 @@ typedef struct __attribute__((packed)) {
     uint16_t vdda_mv;        /* ultima lectura */
     uint16_t vdda_min_mv;    /* minimo desde el /status anterior */
     uint16_t vdda_min_abs;   /* minimo desde que arranco la placa */
+    /* v21: el % de CPU del lado de la ENTRADA, que estaba sin medir. Las marcas
+     * de DWT de Service_Fills empiezan DESPUES de Process_ADC_Half, asi que
+     * `cpu_fills_x10` no incluia las delay lines, el MULTIFOCUS de entradas,
+     * los detectores coherentes, ni ningun reproductor futuro. Se podia mirar
+     * el status, ver el mismo numero y declarar victoria con los underruns
+     * subiendo. */
+    uint16_t cpu_adc_x10;
 } ds_status_t;
 
 /* Estado REAL, no el nominal.
@@ -629,7 +638,7 @@ typedef struct __attribute__((packed)) {
  * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18
  * midiendo underruns, cuando el contador BAJÓ de 6 a 0 — un contador monótono
  * que retrocede es un reboot, y no había con qué confirmarlo. */
-_Static_assert(sizeof(ds_status_t) == 95, "ds_status_t must be 95 bytes");
+_Static_assert(sizeof(ds_status_t) == 97, "ds_status_t must be 97 bytes");
 /* ⚠️ Un payload por encima de PROTO_MAX_PAYLOAD hace que el ESP32 descarte la
  * trama por larga y el endpoint quede mudo SIN dar error — de ahí los asserts. */
 _Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,
