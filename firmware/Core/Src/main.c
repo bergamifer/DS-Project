@@ -110,7 +110,7 @@
 // polarity (a negative correlation peak = inverted speaker → speaker_sign).
 // All fixed pipeline latencies (TX buffer wait, DAC/ADC group delay) are
 // identical for every speaker, so they cancel in the relative delays.
-#define CAL_MIC_CH        0                       // measurement mic = ADC ch0
+#define CAL_MIC_CH        0                       // default: mic 1 = ADC ch0
 /* ===== El SEGUNDO microfono del banco (docs/banco_dos_microfonos.md) =====
  *
  * El scan mide, parlante por parlante, TOF = t0 + tau_k + |p_k - m|/c: instante
@@ -137,8 +137,12 @@
  * igual. 16 bits son 96 dB de rango contra los ~60 dB que da un microfono de
  * medicion en una sala, asi que la precision la sigue poniendo el aire.
  * Quedaban 17,9 kB libres de DTCM: duplicar en int32 no entraba. */
-#define CAL_MIC2_CH       1                       // segundo microfono = ADC ch1
 #define CAL_NUM_MIC       2
+/* Que entradas son los microfonos. Variables y no #define desde la v17: el
+ * arnes real dio senal en c0 y c7 —el RJ45 no reparte los pares como uno
+ * espera— y con 0/1 clavados el AUTOFOCUS media un canal vacio SIN decir nada
+ * raro: la calidad salia baja y parecia ruido de sala. */
+static volatile uint8_t cal_mic_ch[CAL_NUM_MIC] = { CAL_MIC_CH, 1 };
 /* Ventana de busqueda del segundo microfono alrededor del pico del primero.
  * +-128 muestras son +-2,7 ms = +-91 cm de diferencia de camino, contra los
  * 25 cm que separan los microfonos del banco: 3,6x de margen. Acotarla no es
@@ -2747,6 +2751,26 @@ int main(void)
         Set_Amps(amps_on);
       }
 
+      /* ===== Que entradas son los microfonos (CMD_SET_MICS) ===== */
+      {
+        uint8_t m1, m2;
+        if (UART_Protocol_GetMicsRequest(&m1, &m2)) {
+          if (m1 > 7) m1 = 0;
+          if (m2 > 7) m2 = 1;
+          /* Dos veces la misma entrada no es un error de tipeo inofensivo:
+           * daria dos juegos de tau_k identicos y una "validacion cruzada" que
+           * se valida a si misma. Se rechaza el segundo y se avisa. */
+          if (m2 == m1) m2 = (uint8_t)((m1 + 1) & 7u);
+          cal_mic_ch[0] = m1;
+          cal_mic_ch[1] = m2;
+          snprintf(uart_buf, sizeof(uart_buf),
+                   "MICROFONOS: 1 -> c%u,  2 -> c%u%s\r\n",
+                   (unsigned)m1, (unsigned)m2,
+                   (mic_live_mask & (1u << m1)) ? "" : "   (c1 SIN SENAL)");
+          UART_Print(uart_buf);
+        }
+      }
+
       /* ===== Tono de medición (CMD_SET_TONE) =====
        *
        * Fija la frecuencia del emisor y apaga el dither, para que una captura
@@ -3001,6 +3025,8 @@ int main(void)
         hdr.state      = (uint8_t)cal_state;
         hdr.progress   = cal_progress;
         hdr.ok_count   = cal_ok_count;
+        hdr.mic1       = cal_mic_ch[0];
+        hdr.mic2       = cal_mic_ch[1];
         UART_Protocol_SendCalData(&hdr, chs);
       }
 
@@ -4321,10 +4347,52 @@ static void Beam_UpdateDelays(int16_t az_deg) {
  * listener frame. Rows 2&4 (r=1,3) shifted +SPK_ROW_DX_MM in X.
  * Also computes the array center, the origin for focal-point presets.
  */
+/* ===== EL ARNES ESTA CRUZADO DE A PARES =====
+ *
+ * En el banco de 2026-09-03, la caja conectada al canal k del firmware esta en
+ * la posicion k^1: 0<->1, 2<->3, ... 30<->31. Fernando lo aviso, y la medicion
+ * lo confirmo sin lugar a dudas.
+ *
+ * COMO SE COMPROBO, porque un mapeo mal puesto es de las cosas mas caras de
+ * descubrir tarde. El AUTOFOCUS mide el tiempo de vuelo de los 32 parlantes
+ * hasta un microfono y despues se ajustan por minimos cuadrados las cuatro
+ * incognitas (posicion del microfono y offset de disparo). El residuo de ese
+ * ajuste dice cuanto NO explica la geometria:
+ *
+ *     cableado directo   RMS 62,0 us  = 21,3 mm
+ *     pares cruzados     RMS  3,9 us  =  1,3 mm      <- 15,8x mejor
+ *
+ * Y lo hicieron los DOS microfonos del banco por separado, con el mismo
+ * veredicto y bajando a los mismos 3,9 us. De yapa, con el mapeo corregido el
+ * ajuste recupera la separacion entre los dos microfonos: 247 mm contra los
+ * 250 de la cinta metrica. Con el mapeo directo, no.
+ *
+ * POR QUE HAY QUE CORREGIRLO ACA Y NO SOLO ANOTARLO: la tabla de posiciones es
+ * lo que Beam_UpdateTxFocus usa para calcular los retardos. Con el arnes
+ * cruzado y la tabla sin cruzar, cada parlante recibe el retardo de su vecino,
+ * y el error crece hacia los bordes del muro —donde la diferencia de camino
+ * entre columnas vecinas es mayor— justo donde el foco mas lo necesita. El haz
+ * se forma igual, pero mal, y nada lo delata: el equipo no tiene forma de saber
+ * que caja tiene enchufada en cada salida.
+ *
+ * SINTOMA, para reconocerlo en otro nodo: en la tabla de tau_k del AUTOFOCUS,
+ * los residuos ALTERNAN de signo dentro de cada par y crecen hacia el borde.
+ * `python3 tools/calfase.py cal.json --pares` lo decide con un numero.
+ *
+ * ⚠️ ESTO ES UN PARCHE DE FIRMWARE PARA UN ERROR DE CABLEADO. Lo correcto es
+ * arreglar el arnes; el dia que se arregle hay que poner esto en 0, y el
+ * banner del arranque lo dice para que no quede escondido. Para la DS12, ver
+ * hardware/DS/DS12_PLANNING.md: un conector que no permita cruzar los pares
+ * vale mas que cualquier correccion por software. */
+#define SPK_PAIR_SWAP  1
+
 static void Beam_InitTxGeometry(void) {
   float sx = 0, sy = 0;
   for (uint32_t ch = 0; ch < BEAM_NUM_CHANNELS; ch++) {
-    uint32_t r = ch / SPK_COLS, c = ch % SPK_COLS;
+    /* La POSICION FISICA del canal ch. Con el arnes cruzado, el canal ch mueve
+     * el cono que esta en el lugar ch^1. */
+    uint32_t pos = SPK_PAIR_SWAP ? (ch ^ 1u) : ch;
+    uint32_t r = pos / SPK_COLS, c = pos % SPK_COLS;
     spk_x_mm[ch] = (float)c * SPK_X_PITCH_MM + ((r & 1) ? SPK_ROW_DX_MM : 0.0f);
     spk_y_mm[ch] = (float)r * SPK_Y_PITCH_MM;
     speaker_sign[ch] = 1;
@@ -4337,6 +4405,11 @@ static void Beam_InitTxGeometry(void) {
           (int)(7 * SPK_X_PITCH_MM + SPK_ROW_DX_MM), (int)(3 * SPK_Y_PITCH_MM),
           (int)spk_center_x_mm, (int)spk_center_y_mm);
   UART_Print(uart_buf);
+  UART_Print(SPK_PAIR_SWAP
+             ? "  ARNES: pares CRUZADOS (canal k -> cono k^1). Medido el "
+               "2026-09-03: 3,9 us de residuo contra 62,0 sin cruzar.\r\n"
+               "         Si el arnes se arregla, poner SPK_PAIR_SWAP en 0.\r\n"
+             : "  ARNES: directo (canal k -> cono k).\r\n");
 }
 
 /**
@@ -4606,8 +4679,11 @@ static void Cal_StartScan(void) {
   cal_ok_count = 0;
   cal_settle = CAL_SETTLE_HALVES;
   cal_state = CAL_SETTLE;
-  UART_Print("AUTOFOCUS: mic 1 en el punto focal -> entrada c0. "
-             "Mic 2 (c1) mide en paralelo y NO participa del foco. Scanning...\r\n");
+  snprintf(uart_buf, sizeof(uart_buf),
+           "AUTOFOCUS: mic 1 en el punto focal -> entrada c%u. "
+           "Mic 2 (c%u) mide en paralelo y NO participa del foco. Scanning...\r\n",
+           (unsigned)cal_mic_ch[0], (unsigned)cal_mic_ch[1]);
+  UART_Print(uart_buf);
   /* Las dos formas de tirar 8 segundos de scan a la basura, dichas ANTES y no
    * después. Sin amplificadores no sale sonido y la correlación mide ruido; sin
    * señal en c0 no hay nada que correlacionar. En los dos casos el scan
@@ -4615,16 +4691,22 @@ static void Cal_StartScan(void) {
   if (!amps_enabled) {
     UART_Print("  !! AMPS APAGADOS — no va a salir sonido. Encendelos y volve a entrar al modo.\r\n");
   }
-  if (!(mic_live_mask & (1u << CAL_MIC_CH))) {
-    UART_Print("  !! SIN SENAL en la entrada 1 (c0) — revisa el microfono y su preamp.\r\n");
+  if (!(mic_live_mask & (1u << cal_mic_ch[0]))) {
+    snprintf(uart_buf, sizeof(uart_buf),
+             "  !! SIN SENAL en c%u (microfono 1) — revisa el microfono y su preamp.\r\n",
+             (unsigned)cal_mic_ch[0]);
+    UART_Print(uart_buf);
   }
   /* El segundo NO aborta nada: el scan de siempre sigue funcionando con un solo
    * microfono, y lo unico que se pierde es la validacion cruzada. Decirlo igual,
    * porque descubrirlo despues —cuando calfase.py no encuentra el segundo juego
    * de tau_k— cuesta un scan entero. */
-  if (!(mic_live_mask & (1u << CAL_MIC2_CH))) {
-    UART_Print("  (sin senal en la entrada 2 (c1): el scan corre igual, pero no "
-               "va a haber con que validar los tau_k)\r\n");
+  if (!(mic_live_mask & (1u << cal_mic_ch[1]))) {
+    snprintf(uart_buf, sizeof(uart_buf),
+             "  (sin senal en c%u (microfono 2): el scan corre igual, pero no "
+             "va a haber con que validar los tau_k)\r\n",
+             (unsigned)cal_mic_ch[1]);
+    UART_Print(uart_buf);
   }
 }
 
@@ -5789,8 +5871,8 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
      * ellos, igual que en el LOOPBACK. */
     int32_t cpk = cal_cap_peak, cpk2 = cal_cap_peak2;
     for (uint32_t i = 0; i < samples && cal_cap_count < CAL_CAPTURE_LEN; i++) {
-      int32_t r1 = rx_buf[i * ADC_CHANNELS + CAL_MIC_CH];
-      int32_t r2 = rx_buf[i * ADC_CHANNELS + CAL_MIC2_CH];
+      int32_t r1 = rx_buf[i * ADC_CHANNELS + cal_mic_ch[0]];
+      int32_t r2 = rx_buf[i * ADC_CHANNELS + cal_mic_ch[1]];
       cal_capture[0][cal_cap_count] = (int16_t)(r1 >> 16);
       cal_capture[1][cal_cap_count] = (int16_t)(r2 >> 16);
       cal_cap_count++;

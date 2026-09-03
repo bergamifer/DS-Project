@@ -121,6 +121,7 @@ static void device_identity_init(void)
 #define CMD_SET_TONE      0x19  // payload: [hz:2 LE][dither:1] — tono de medicion
 // Barrido de fase por parlante (modo 22). 32 x 14 x 8 medidas complejas: se
 // bajan por tramos con el mismo patron que la captura del ADC.
+#define CMD_SET_MICS       0x1E // payload: [ch1:1][ch2:1] — que entradas son los mics
 #define CMD_GET_PHASE_INFO 0x1A // payload: none
 #define CMD_PHASE_INFO     0x1B // STM32 -> ESP32: ds_phase_info_t
 #define CMD_PHASE_READ     0x1C // payload: uint32 offset en bytes
@@ -154,7 +155,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    16
+#define PROTO_VERSION    17
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -202,11 +203,13 @@ typedef struct __attribute__((packed)) {
     uint8_t  first;
     uint8_t  count;
     uint8_t  n_channels;
-    uint8_t  state;       // 0 IDLE 1 SETTLE 2 ARM 3 CAPT 4 CORR 5 DONE
+    uint8_t  state;
     uint8_t  progress;
     uint8_t  ok_count;
+    uint8_t  mic1;        // entrada del ADC del microfono 1
+    uint8_t  mic2;        // idem del 2
 } ds_cal_hdr_t;
-_Static_assert(sizeof(ds_cal_hdr_t) == 6, "ds_cal_hdr_t debe ser 6 bytes");
+_Static_assert(sizeof(ds_cal_hdr_t) == 8, "ds_cal_hdr_t debe ser 8 bytes");
 
 typedef struct __attribute__((packed)) {
     int32_t  tof_q8;      // pico de correlacion, muestras Q8 (1/256)
@@ -1160,6 +1163,45 @@ static esp_err_t autostart_handler(httpd_req_t *req)
  * Vale solo mientras dure el modo: elegir un modo vuelve a poner la frecuencia
  * de la tabla y re-enciende el dither. Es a proposito — ver el comentario de
  * CMD_SET_TONE en uart_protocol.h. */
+/* POST /mics {"m1":0,"m2":7}
+ *
+ * Que entradas del ADC son los microfonos de medicion. Estaban clavadas en 0 y
+ * 1; el arnes real dio senal en c0 y c7. No se persiste a proposito: es un dato
+ * del CABLEADO de este banco, y que sobreviva a un reinicio significa que
+ * dentro de un mes alguien mide con el cableado de hoy sin saberlo. */
+static esp_err_t mics_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int n = httpd_req_recv(req, buf, req->content_len < (int)sizeof(buf) - 1
+                                     ? req->content_len : (int)sizeof(buf) - 1);
+    if (n <= 0) return ESP_FAIL;
+    buf[n] = '\0';
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"bad json\"}");
+        return ESP_OK;
+    }
+    cJSON *j1 = cJSON_GetObjectItem(root, "m1");
+    cJSON *j2 = cJSON_GetObjectItem(root, "m2");
+    int m1 = j1 ? j1->valueint : 0;
+    int m2 = j2 ? j2->valueint : 1;
+    cJSON_Delete(root);
+    if (m1 < 0 || m1 > 7) m1 = 0;
+    if (m2 < 0 || m2 > 7) m2 = 1;
+
+    uint8_t p[2] = { (uint8_t)m1, (uint8_t)m2 };
+    int ack = uart_send_and_wait_ack(CMD_SET_MICS, p, sizeof(p), 500);
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"status\":\"%s\",\"m1\":%d,\"m2\":%d}",
+             ack == 1 ? "ok" : (ack == 0 ? "nack" : "timeout"), m1, m2);
+    printf("[ESP32] POST /mics c%d y c%d -> %s\n", m1, m2,
+           ack == 1 ? "ACK" : "sin ACK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
 static esp_err_t tone_handler(httpd_req_t *req)
 {
     char buf[128];
@@ -1654,9 +1696,11 @@ static esp_err_t cal_handler(httpd_req_t *req)
     static const char *st_name[] = { "idle", "settle", "arm", "capt", "corr", "done" };
     uint8_t st = have_hdr ? hdr0.state : 0;
     p += snprintf(buf + p, sizeof(buf) - p,
-                  "],\"n_channels\":%u,\"state\":\"%s\",\"progress\":%u,"
+                  "],\"n_channels\":%u,\"mic1\":%u,\"mic2\":%u,"
+                  "\"state\":\"%s\",\"progress\":%u,"
                   "\"ok_count\":%u,\"q8_per_sample\":256,\"rate_hz\":48000}",
                   have_hdr ? hdr0.n_channels : 0,
+                  have_hdr ? hdr0.mic1 : 0, have_hdr ? hdr0.mic2 : 1,
                   st < (sizeof(st_name) / sizeof(st_name[0])) ? st_name[st] : "?",
                   have_hdr ? hdr0.progress : 0,
                   have_hdr ? hdr0.ok_count : 0);
@@ -2588,6 +2632,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/amps",    .method = HTTP_POST, .handler = amps_handler    },
             { .uri = "/autostart", .method = HTTP_POST, .handler = autostart_handler },
             { .uri = "/tone",    .method = HTTP_POST, .handler = tone_handler    },
+            { .uri = "/mics",    .method = HTTP_POST, .handler = mics_handler    },
             { .uri = "/reset",   .method = HTTP_POST, .handler = reset_handler   },
             { .uri = "/ingain",  .method = HTTP_POST, .handler = ingain_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },

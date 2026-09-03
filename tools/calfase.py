@@ -156,8 +156,16 @@ def n_mics(d):
     return max((c.get("mic", 1) for c in d["channels"]), default=1)
 
 
-def analizar(d, c_ms, mic=1):
+def analizar(d, c_ms, mic=1, orden=None):
+    """`orden[k]` = indice de la posicion FISICA del canal k del firmware.
+
+    Existe porque el arnes puede no estar cableado como el firmware supone, y
+    eso NO se ve en ningun otro lado: el scan sale igual de plausible con los
+    parlantes cruzados, solo que los tau_k absorben el error de geometria y uno
+    los lee como si fueran del parlante."""
     p = geometria()
+    if orden is not None:
+        p = p[np.asarray(orden)]
     canales = [c for c in d["channels"] if c.get("mic", 1) == mic]
     n = len(canales)
     if n != SPK_ROWS * SPK_COLS:
@@ -227,6 +235,80 @@ def informe(a, c_ms, con_cola=True):
         print("  lugar y comparar:   python3 tools/calfase.py --comparar A.json B.json")
 
 
+def probar_pares(dj, c_ms, mic):
+    """¿Estan los parlantes cruzados de a pares?
+
+    Un arnes cruzado de a pares (0<->1, 2<->3, ...) es INVISIBLE para todo lo
+    demas: el scan mide bien, el ajuste converge, y el error de geometria se va
+    entero a los tau_k, que uno despues lee como "el retardo propio de ese
+    parlante". El sintoma, si uno sabe mirarlo, es que los tau alternan de signo
+    dentro de cada par y crecen hacia el borde del muro — porque la diferencia
+    de camino entre columnas vecinas crece con la distancia al microfono.
+
+    La prueba es directa: reajustar con el mapeo cruzado y mirar si el residuo
+    BAJA. No hay que interpretar nada; el numero decide.
+    """
+    n = SPK_ROWS * SPK_COLS
+    ident = np.arange(n)
+    pares = ident ^ 1
+
+    a = analizar(dj, c_ms, mic, ident)
+    b = analizar(dj, c_ms, mic, pares)
+    print()
+    print("=" * 70)
+    print("  ¿ESTAN LOS PARLANTES CRUZADOS DE A PARES?")
+    print("=" * 70)
+    for nom, r in (("cableado DIRECTO ", a), ("PARES cruzados   ", b)):
+        m = r["m"]
+        print(f"  {nom}: RMS del residuo {r['rms_us']:7.2f} us "
+              f"= {r['rms_us'] * c_ms / 1000.0:6.2f} mm   "
+              f"microfono ({m[0]:+6.0f},{m[1]:+6.0f},{m[2]:6.0f}) mm")
+    mejor = b if b["rms_us"] < a["rms_us"] else a
+    orden = pares if b["rms_us"] < a["rms_us"] else ident
+    razon = max(a["rms_us"], b["rms_us"]) / max(min(a["rms_us"], b["rms_us"]), 1e-9)
+    print()
+    print(f"  el mejor baja el residuo {razon:.1f}x")
+
+    # --- par por par, con el mapeo que gano como base ---
+    print()
+    print("  par por par (con la posicion del microfono ya ajustada):")
+    print(f"  {'par':>4}{'canales':>10}{'RMS directo':>14}{'RMS cruzado':>14}"
+          f"{'veredicto':>12}")
+    print("  " + "-" * 54)
+    final = orden.copy()
+    n_cru = 0
+    for i in range(0, n, 2):
+        o1 = orden.copy()
+        o2 = orden.copy()
+        o2[i], o2[i + 1] = o2[i + 1], o2[i]
+        r1 = analizar(dj, c_ms, mic, o1)
+        r2 = analizar(dj, c_ms, mic, o2)
+        usable = r1["usar"][i] and r1["usar"][i + 1]
+        if not usable:
+            print(f"  {i//2:>4}{f'{i}-{i+1}':>10}{r1['rms_us']:>13.2f}u"
+                  f"{r2['rms_us']:>13.2f}u{'sin datos':>12}")
+            continue
+        if r2["rms_us"] < r1["rms_us"]:
+            final[i], final[i + 1] = final[i + 1], final[i]
+            n_cru += 1
+        print(f"  {i//2:>4}{f'{i}-{i+1}':>10}{r1['rms_us']:>13.2f}u"
+              f"{r2['rms_us']:>13.2f}u"
+              f"{('CRUZADO' if r2['rms_us'] < r1['rms_us'] else 'directo'):>12}")
+
+    rf = analizar(dj, c_ms, mic, final)
+    print()
+    print(f"  mapeo final: {n_cru} par(es) mas cruzados respecto del base")
+    print(f"  RMS con el mapeo final: {rf['rms_us']:.2f} us "
+          f"= {rf['rms_us'] * c_ms / 1000.0:.2f} mm")
+    print(f"  microfono: ({rf['m'][0]:+.0f}, {rf['m'][1]:+.0f}, {rf['m'][2]:.0f}) mm")
+    print()
+    print("  orden final (posicion fisica de cada canal del firmware):")
+    for r in range(SPK_ROWS):
+        print("    fila %d: %s" % (r, " ".join(f"{final[r*SPK_COLS+c]:2d}"
+                                               for c in range(SPK_COLS))))
+    return final
+
+
 def comparar(fa, fb, c_ms):
     """Dos corridas SEPARADAS, con el microfono movido a mano entre una y otra."""
     a = analizar(json.load(open(fa)), c_ms)
@@ -234,7 +316,7 @@ def comparar(fa, fb, c_ms):
     _veredicto(a, b, fa, fb, c_ms)
 
 
-def comparar_mics(d, c_ms, sep_esperada_mm=None):
+def comparar_mics(d, c_ms, sep_esperada_mm=None, orden=None):
     """Los DOS microfonos del banco, de la MISMA corrida.
 
     Es la misma prueba que --comparar y es mejor por tres motivos, todos por
@@ -253,7 +335,8 @@ def comparar_mics(d, c_ms, sep_esperada_mm=None):
     ajuste la estima sin saberla, asi que comparar las dos es una prueba de
     respuesta conocida sobre TODA la cadena — geometria, Q8, mapeo y arnes.
     """
-    _veredicto(analizar(d, c_ms, mic=1), analizar(d, c_ms, mic=2),
+    _veredicto(analizar(d, c_ms, mic=1, orden=orden),
+               analizar(d, c_ms, mic=2, orden=orden),
                "microfono 1 (c0)", "microfono 2 (c1)", c_ms,
                sep_esperada_mm=sep_esperada_mm, misma_corrida=True)
 
@@ -457,6 +540,13 @@ def main():
     ap.add_argument("--mic", type=int, default=None,
                     help="informar SOLO este microfono (1 o 2) en vez de "
                          "comparar los dos")
+    ap.add_argument("--pares-fijo", action="store_true",
+                    help="dar por sentado el arnes cruzado de a pares y analizar "
+                         "con esa geometria (usar despues de confirmarlo con --pares)")
+    ap.add_argument("--pares", action="store_true",
+                    help="probar si los parlantes estan cruzados de a pares "
+                         "(0<->1, 2<->3, ...) — un error de arnes que el scan "
+                         "no delata solo")
     ap.add_argument("--sep", type=float, default=250.0,
                     help="separacion FISICA entre los dos microfonos del banco, "
                          "en mm (default 250). Es la prueba de respuesta "
@@ -465,6 +555,11 @@ def main():
 
     if args.autoprueba:
         autoprueba()
+        return
+
+    if args.pares:
+        probar_pares(json.load(open(args.archivo or "/dev/stdin"))
+                     if not args.host else bajar(args.host), args.c, args.mic or 1)
         return
 
     if args.comparar:
@@ -488,10 +583,11 @@ def main():
         # Los dos microfonos del banco: se informa cada uno y se compara.
         # Comparar es el punto — un solo informe no valida nada, y con dos
         # entradas la comparacion sale gratis en la misma corrida.
+        orden = ((np.arange(SPK_ROWS * SPK_COLS) ^ 1) if args.pares_fijo else None)
         for k in (1, 2):
             print(f"\n########## microfono {k} ##########")
-            informe(analizar(d, args.c, mic=k), args.c, con_cola=False)
-        comparar_mics(d, args.c, sep_esperada_mm=args.sep)
+            informe(analizar(d, args.c, mic=k, orden=orden), args.c, con_cola=False)
+        comparar_mics(d, args.c, sep_esperada_mm=args.sep, orden=orden)
     else:
         informe(analizar(d, args.c), args.c)
         print()

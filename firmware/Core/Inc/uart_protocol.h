@@ -156,6 +156,18 @@
  * progreso, la grilla de frecuencias y cuántos bytes hay. Recién con eso el
  * lector sabe si vale la pena bajar algo: un barrido tarda ~3 minutos, y
  * preguntar "¿terminó?" tiene que costar una trama y no catorce kilobytes. */
+/* Que entradas del ADC son los microfonos de medicion: [ch1:1][ch2:1].
+ *
+ * Estaban clavadas en 0 y 1. El 2026-09-03 el arnes real dio senal en c0 y c7
+ * —el RJ45 no reparte los pares como uno espera— y el AUTOFOCUS quedo midiendo
+ * un canal vacio sin decir nada raro: la calidad daba baja y parecia ruido de
+ * sala. Un numero de canal es una propiedad del CABLEADO, no del firmware.
+ *
+ * NO se persiste, a proposito. Es un dato de banco, y que sobreviva a un
+ * reinicio significa que dentro de un mes alguien mide con el cableado de hoy
+ * sin saberlo. Las herramientas lo mandan siempre antes de medir, y el
+ * encabezado del resultado dice con cuales se midio. */
+#define CMD_SET_MICS        0x1E    /* payload: [ch1:1][ch2:1], 0..7 */
 #define CMD_GET_PHASE_INFO  0x1A    /* payload: none */
 #define CMD_PHASE_INFO      0x1B    /* STM32 → ESP32: ds_phase_info_t */
 #define CMD_PHASE_READ      0x1C    /* payload: uint32 offset en bytes */
@@ -212,7 +224,7 @@ typedef struct __attribute__((packed)) {
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      16   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      17   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -260,7 +272,12 @@ typedef struct __attribute__((packed)) {
                                  * frecuencia pero con los cuatro bancos sonando
                                  * juntos, o sea la SUMA. Ninguno de los dos
                                  * podia contestar si los 32 llegan EN FASE al
-                                 * punto de escucha. ds_status_t NO cambio. */
+                                 * punto de escucha. ds_status_t NO cambio.
+                                 * v17: + CMD_SET_MICS, y ds_cal_hdr_t crece a 8
+                                 * bytes con los dos numeros de entrada. El arnes
+                                 * real dio senal en c0 y c7, no en c0 y c1: que
+                                 * canal es el microfono es una propiedad del
+                                 * cableado. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -418,13 +435,19 @@ _Static_assert(sizeof(ds_phase_info_t) == 10 + 2 * PHASE_MAX_PTS,
 typedef struct __attribute__((packed)) {
     uint8_t  first;        /* índice del primer canal de esta trama */
     uint8_t  count;        /* cuántos canales vienen acá */
-    uint8_t  n_channels;   /* total que recorre el scan (CAL_NUM_CH) */
+    uint8_t  n_channels;   /* total que recorre el scan (CAL_NUM_CH × micrófonos) */
     uint8_t  state;        /* cal_state_t: 0 IDLE 1 SETTLE 2 ARM 3 CAPT 4 CORR 5 DONE */
     uint8_t  progress;     /* parlantes ya medidos */
     uint8_t  ok_count;     /* de ésos, con calidad ≥ CAL_Q_MIN */
+    uint8_t  mic1;         /* entrada del ADC del micrófono 1 */
+    uint8_t  mic2;         /* ídem del 2 */
 } ds_cal_hdr_t;
 
-_Static_assert(sizeof(ds_cal_hdr_t) == 6, "ds_cal_hdr_t must be 6 bytes");
+/* Los dos canales viajan CON el resultado y no aparte: un scan que no dice con
+ * qué entradas se midió es un scan que dentro de una semana no se puede
+ * interpretar, y el error es silencioso — los números salen igual de plausibles
+ * con el micrófono equivocado. */
+_Static_assert(sizeof(ds_cal_hdr_t) == 8, "ds_cal_hdr_t must be 8 bytes");
 
 /**
  * @brief Medición de UN parlante (CMD_CAL_DATA).
@@ -737,6 +760,8 @@ void UART_Protocol_SetModeCount(uint8_t n);
 uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on);
 /** @brief ¿Llegó un CMD_SET_TONE? Devuelve 1, la frecuencia y si va con dither. */
 uint8_t UART_Protocol_GetToneRequest(uint16_t *hz, uint8_t *dither);
+/** @brief ¿Llegó un CMD_SET_MICS? Devuelve 1 y las dos entradas pedidas. */
+uint8_t UART_Protocol_GetMicsRequest(uint8_t *m1, uint8_t *m2);
 /** @brief ¿Llegó un CMD_GET_PHASE_INFO? */
 uint8_t UART_Protocol_PhaseInfoRequested(void);
 /** @brief Contesta CMD_PHASE_INFO. Sólo desde el main loop, como SendStatus. */

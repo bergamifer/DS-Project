@@ -398,3 +398,129 @@ antemano.
 | `tools/nivel.py` | ✅ probado contra la placa |
 | Banco físico | ⏳ en construcción — ver §3 |
 | Primera medición | ⏳ espera el banco |
+
+---
+
+## 6. Primera sesión con micrófonos — 3 de septiembre de 2026
+
+Sala de 3 × 2,5 m, obra en curso al lado, micrófonos en c0 y c1 (ver la
+advertencia de §6.4). Todo lo que sigue está medido.
+
+### 6.1 El arnés está cruzado de a pares — confirmado con un número
+
+La caja conectada al canal `k` del firmware está en la posición `k^1`:
+0↔1, 2↔3, … 30↔31. Fernando lo avisó; la medición lo confirma sin ambigüedad.
+
+El AUTOFOCUS mide el tiempo de vuelo de los 32 parlantes y `calfase.py --pares`
+reajusta con los dos mapeos:
+
+| mapeo | RMS del residuo | posición ajustada del micrófono |
+|---|---|---|
+| cableado directo | **62,0 µs** = 21,3 mm | (−293, −85, 1341) |
+| **pares cruzados** | **3,9 µs** = 1,3 mm | **(−233, −52, 948)** |
+
+**15,8× mejor**, y los **dos micrófonos por separado** dan el mismo veredicto y
+bajan a los mismos 3,9 µs. El ajuste par por par dice que no falta cruzar
+ninguno más: son los 16, uniformemente.
+
+**El síntoma, para reconocerlo en otro nodo:** en la tabla de τ_k del AUTOFOCUS
+los residuos **alternan de signo dentro de cada par** y **crecen hacia el borde
+del muro** — porque la diferencia de camino entre columnas vecinas crece con la
+distancia al micrófono. Con el cableado directo se veía así:
+
+```
+ch14 = +128 µs   ch15 = −72 µs        ch22 = +108   ch23 = −76
+ch30 = +131 µs   ch31 = −66 µs        ch12 =  +66   ch13 = −78
+```
+
+Corregido en el firmware con `SPK_PAIR_SWAP` (main.c), que lo dice en el banner
+del arranque. **Es un parche para un error de cableado**: cuando el arnés se
+arregle hay que ponerlo en 0.
+
+### 6.2 La prueba de aceptación pasó con 3 mm
+
+Con el mapeo corregido, el ajuste recupera **247 mm** de separación entre los dos
+micrófonos contra los **250** de la cinta métrica. Con eso quedan validados de
+una vez la tabla de geometría, los retardos Q8, el mapeo de canales y el arnés.
+
+Y ubica los micrófonos: **c1 en (+14, −46, 954) es el del centro; c0 en
+(−233, −52, 948) es el de la izquierda.** El −X del firmware es la izquierda del
+que mira los conos.
+
+### 6.3 Dos cajas mudas
+
+| canal | cono | nivel |
+|---|---|---|
+| ch6, ch7 | fila 0, columnas 7 y 6 | −107 dBFS |
+| ch28, ch29 | fila 3, columnas 5 y 4 | −109 dBFS |
+
+Sesenta decibeles por debajo del muro: desconectadas, no flojas. Y son
+**exactamente dos pares adyacentes**, o sea dos cajas. Los otros 28 canales
+tienen **2,1 dB** de dispersión entre sí, que es muy buen apareamiento.
+
+### 6.4 ⚠️ El mapeo de las ENTRADAS se corrió un slot, una vez
+
+Al empezar la sesión los micrófonos aparecían en **c0 y c7**; después de un
+reinicio por OTA pasaron a **c0 y c1**, y los ocho canales se corrieron
+exactamente una posición (`ahora[k] = antes[k−1]`, incluidos los canales
+conectados-pero-callados). **Siete reinicios posteriores fueron estables**, así
+que no se reproduce y no puedo decir desde acá si fue la alineación TDM del
+SAI3_B o el conector.
+
+**Lo que hay que hacer, hasta saberlo:** no dar por sentado en qué entrada está
+cada micrófono. `nivel.py` los lista siempre, `fase.py` corta si el canal pedido
+está en el piso, y el AUTOFOCUS ahora acepta `POST /mics {"m1":0,"m2":1}` — antes
+estaban clavados en 0 y 1, y con el micrófono en c7 medía un canal vacío
+**sin decir nada raro**: la calidad daba baja y parecía ruido de sala.
+
+### 6.5 Los parlantes SÍ llegan en fase — la sala no
+
+Es la pregunta que motivó la sesión, y tiene dos respuestas distintas según qué
+se mida:
+
+| método | qué ve | dispersión |
+|---|---|---|
+| **chirp** (AUTOFOCUS) | sólo la primera llegada | **3,9 µs = 1,3 mm** |
+| **tono continuo** (modo 22) | directo + sala | **50–90°** a todas las frecuencias |
+
+En el camino directo los 32 llegan alineados dentro de **1,3 mm**, que a 1 kHz
+es λ/264. Lo que rompe la suma en el punto de escucha es la sala, y ningún
+retardo por parlante puede arreglar eso — el análisis lo dictamina solo
+(«residuo 58,7°, no es retardo puro») y la comparación con el chirp dice por qué.
+
+Y la prueba del issue #21 pasó: los τ_k medidos desde los dos micrófonos
+**coinciden** — dispersión 3,90 µs dentro de cada corrida contra 1,09 µs de
+diferencia entre ellas. Son del parlante y generalizan. Con la salvedad que el
+propio script advierte: a 250 mm los dos puntos ven casi la misma reflexión, así
+que la prueba es **débil**. A 500 mm valdría mucho más (§3.1).
+
+### 6.6 El contraste no se puede medir en esta sala
+
+Sintetizando la respuesta del array desde el barrido de fase — validado contra
+el perfil medido físicamente con **r = 0,95 y 0,6 dB de error RMS**:
+
+| Hz | 250 | 500 | 800 | 1250 | 2000 | 2500 | 3150 | 5000 |
+|---|---|---|---|---|---|---|---|---|
+| contraste a 247 mm | −0,0 | −0,4 | +3,1 | +4,8 | +2,8 | +10,3 | +13,0 | +12,3 dB |
+| ancho −6 dB medido | — | 1020 | 820 | 440 | **540** | **700** | 180 | **460** mm |
+| el mismo array sin sala | — | 1400 | 880 | 520 | **320** | **240** | 180 | **100** mm |
+
+Por debajo de 1,2 kHz el contraste es de **0 a 3 dB**, que era lo previsto en
+§3.1: a 247 mm el segundo micrófono cae dentro del lóbulo principal. Pero
+además, en 2000, 2500 y 5000 Hz **la sala ensancha el lóbulo entre 1,7× y 4,6×**
+respecto del mismo array en campo libre.
+
+**El número del que depende la instalación de quince nodos no se puede medir
+acá.** Hace falta un espacio más grande o más muerto, o un método con ventana
+temporal — el chirp ya demostró que atraviesa esta sala sin problema, y una
+versión enfocada del chirp mediría el contraste del sonido directo. Es lo que
+falta construir.
+
+### 6.7 Un error propio, dicho porque cuesta caro
+
+La síntesis del array estuvo mal en su primera versión: asumía que la cadena de
+medición traduce un retardo en fase con signo negativo, y es **positivo**.
+Con el signo cambiado el array **desenfoca justo donde debería enfocar**. Lo
+delató la validación contra el perfil medido: r = +0,950 con el signo correcto
+y **−0,389** con el otro. Ahora `signo_de_fase()` lo determina de los datos y
+`sintetizar()` lo pide explícito.

@@ -165,8 +165,14 @@ def desvio_circular(a):
 
 # ------------------------------------------------------------------- analisis
 
-def analizar(d, mic, mic2=None, c_ms=C_MS, mic_ch=0, umbral_db=20.0, verbose=True):
+def analizar(d, mic, mic2=None, c_ms=C_MS, mic_ch=0, umbral_db=20.0, verbose=True,
+             orden=None, signo=+1):
+    """`orden[k]` = posicion FISICA del canal k. Sin esto, un arnes cruzado se
+    lee como si fueran defectos de los parlantes: el error de geometria no
+    desaparece, se disfraza de tau_k."""
     p = geometria()
+    if orden is not None:
+        p = p[np.asarray(orden)]
     n_spk, n_pts = d["n_spk"], d["n_pts"]
     f = np.array(d["freqs"], dtype=float)
     db = d["db"][:, :, mic_ch]                 # [spk][pt]
@@ -200,7 +206,7 @@ def analizar(d, mic, mic2=None, c_ms=C_MS, mic_ch=0, umbral_db=20.0, verbose=Tru
 
     # --- fase geometrica ---
     dist = np.linalg.norm(p[:, None, :] - np.asarray(mic)[None, None, :], axis=2)  # [spk][1]
-    geom = 2 * math.pi * f[None, :] * (dist / (c_ms * 1000.0))                     # [spk][pt]
+    geom = signo * 2 * math.pi * f[None, :] * (dist / (c_ms * 1000.0))             # [spk][pt]
     psi = env(ph - geom)
 
     # --- termino comun: promedio circular sobre los parlantes vivos ---
@@ -260,7 +266,7 @@ def analizar(d, mic, mic2=None, c_ms=C_MS, mic_ch=0, umbral_db=20.0, verbose=Tru
         v2 = (db2 > ref2 - umbral_db) & (db2 > -110.0) & viva
         d1 = np.linalg.norm(p[:, None, :] - np.asarray(mic)[None, None, :], axis=2)
         d2 = np.linalg.norm(p[:, None, :] - np.asarray(mic2)[None, None, :], axis=2)
-        esperado = 2 * math.pi * f[None, :] * ((d2 - d1) / (c_ms * 1000.0))
+        esperado = signo * 2 * math.pi * f[None, :] * ((d2 - d1) / (c_ms * 1000.0))
         medido = env(ph2 - ph)
         err = env(medido - esperado)
         # El retardo del pipeline es el MISMO para los dos microfonos (misma
@@ -490,8 +496,253 @@ def comparar(fa, fb, mic, c_ms):
         print("  medir mas cerca, con mas absorcion, y sin nadie caminando.")
 
 
+# ============================================================================
+# UBICAR: donde esta el microfono, y que parlante es cual
+# ============================================================================
+#
+# Todo el analisis de fase se apoya en dos cosas que hay que SABER y no suponer:
+# donde esta el microfono, y que posicion fisica le corresponde a cada canal del
+# firmware. Si cualquiera de las dos esta mal, la fase geometrica que se resta
+# esta mal, y lo que queda no es el defecto del parlante sino el error de uno
+# mismo.
+#
+# LA CUENTA. Para una posicion candidata m, la fase medida del parlante k a la
+# frecuencia f deberia ser
+#
+#     phi_k(f) = 2*pi*f*d_k(m)/c  +  comun(f)
+#
+# donde comun(f) —el retardo del pipeline y el origen del emisor— es el MISMO
+# para los 32. Entonces, si m es la correcta, al restarle a cada parlante su
+# fase geometrica los 32 residuos quedan APILADOS, y
+#
+#     coherencia(f) = | sum_k exp(i*(phi_k(f) - 2*pi*f*d_k(m)/c)) | / N
+#
+# vale 1. Si m esta mal, los residuos se abren y la coherencia cae. Maximizarla
+# sobre una grilla de m no necesita conocer `comun` en absoluto, que es
+# justamente lo que la hace robusta: el retardo del pipeline se cancela solo.
+#
+# LA AMBIGUEDAD, dicha antes de usarla. Las diferencias de camino entre
+# parlantes llegan a ~71 mm para un microfono a 1 m. A 5 kHz eso es mas de una
+# longitud de onda y aparecen maximos falsos; a 1 kHz es un quinto de longitud
+# de onda y no hay ninguno. Por eso el ajuste grueso usa SOLO 250-1000 Hz, y las
+# frecuencias altas entran despues, a refinar, cuando la posicion ya esta a
+# menos de un centimetro.
+
+def _dist(p, m):
+    return np.linalg.norm(p - np.asarray(m, float), axis=1)
+
+
+def _coherencia(ph, viva, f, p, m, orden, signo=+1):
+    """Coherencia media sobre las frecuencias, para la posicion m y el mapeo
+    `orden` (orden[k] = indice de la posicion fisica del canal k)."""
+    d = _dist(p[orden], m) / (C_MS * 1000.0)          # [spk] segundos
+    tot = 0.0
+    n = 0
+    for j in range(len(f)):
+        sel = viva[:, j]
+        if sel.sum() < 6:
+            continue
+        z = np.exp(1j * (ph[sel, j] - signo * 2 * math.pi * f[j] * d[sel]))
+        tot += abs(z.sum()) / sel.sum()
+        n += 1
+    return tot / n if n else 0.0
+
+
+def _coh_lote(ph, viva, f, pos, M, signo=+1):
+    """Coherencia para MUCHAS posiciones candidatas a la vez. `pos` son las
+    posiciones fisicas ya reordenadas, [K,3]; M es [n,3]. Vectorizado porque la
+    grilla gruesa son decenas de miles de puntos y en Python puro tarda
+    minutos."""
+    d = np.linalg.norm(pos[None, :, :] - M[:, None, :], axis=2) / (C_MS * 1000.0)
+    tot = np.zeros(len(M))
+    n = 0
+    for j in range(len(f)):
+        sel = viva[:, j]
+        if sel.sum() < 6:
+            continue
+        e = np.exp(1j * ph[sel, j])[None, :] * np.exp(-signo * 2j * math.pi * f[j] * d[:, sel])
+        tot += np.abs(e.sum(axis=1)) / sel.sum()
+        n += 1
+    return tot / n if n else tot
+
+
+def _ajustar_pos(ph, viva, f, p, orden, f_max=1000.0,
+                 caja=((-700, 700), (-500, 500), (400, 1800)), paso=40.0, signo=+1):
+    """Grilla gruesa y despues dos refinamientos. Sin gradiente a proposito: la
+    funcion tiene maximos locales por el envolvimiento de la fase, y un
+    gradiente cae en el primero que encuentra."""
+    usar = f <= f_max
+    fj, phj, vj = f[usar], ph[:, usar], viva[:, usar]
+    pos = p[orden]
+    (x0, x1), (y0, y1), (z0, z1) = caja
+    mejor, best = None, -1.0
+    for _ in range(3):
+        xs = np.arange(x0, x1 + 1e-9, paso)
+        ys = np.arange(y0, y1 + 1e-9, paso)
+        zs = np.arange(z0, z1 + 1e-9, paso)
+        M = np.stack(np.meshgrid(xs, ys, zs, indexing="ij"), -1).reshape(-1, 3)
+        c = _coh_lote(phj, vj, fj, pos, M, signo)
+        i = int(np.argmax(c))
+        best, mejor = float(c[i]), tuple(M[i])
+        x0, x1 = mejor[0] - paso, mejor[0] + paso
+        y0, y1 = mejor[1] - paso, mejor[1] + paso
+        z0, z1 = mejor[2] - paso, mejor[2] + paso
+        paso /= 5.0
+    return np.array(mejor, float), best
+
+
+def signo_de_fase(d, ch, orden=None, umbral_db=20.0):
+    """Con que signo traduce esta cadena un retardo en fase.
+
+    No es una sutileza de convenio: con el signo cambiado, restar la geometria
+    SUMA el doble en vez de cancelar, y sintetizar el array lo desenfoca justo
+    donde deberia enfocar. Se decide midiendo — se ajusta la posicion del
+    microfono con los dos signos y gana el que da mas coherencia, porque solo
+    uno de los dos puede apilar los 32 residuos."""
+    p = geometria()
+    if orden is not None:
+        p = p[np.asarray(orden)]
+    f = np.array(d["freqs"], float)
+    db = d["db"][:, :, ch]
+    ph = d["ph"][:, :, ch]
+    ref = np.median(db, axis=0, keepdims=True)
+    viva = (db > ref - umbral_db) & (db > -110.0)
+    ident = np.arange(len(p))
+    m_p, c_p = _ajustar_pos(ph, viva, f, p, ident, signo=+1)
+    m_n, c_n = _ajustar_pos(ph, viva, f, p, ident, signo=-1)
+    return (+1, m_p, c_p, c_n) if c_p >= c_n else (-1, m_n, c_n, c_p)
+
+
+def ubicar(d, ch, verbose=True, umbral_db=20.0, signo=+1):
+    """Ajusta la posicion del microfono `ch` y decide, PAR POR PAR, si los dos
+    canales estan intercambiados."""
+    p = geometria()
+    f = np.array(d["freqs"], float)
+    db = d["db"][:, :, ch]
+    ph = d["ph"][:, :, ch]
+    ref = np.median(db, axis=0, keepdims=True)
+    viva = (db > ref - umbral_db) & (db > -110.0)
+
+    ident = np.arange(len(p))
+    pares = ident ^ 1                      # 0<->1, 2<->3, ... 30<->31
+
+    m_i, c_i = _ajustar_pos(ph, viva, f, p, ident, signo=signo)
+    m_p, c_p = _ajustar_pos(ph, viva, f, p, pares, signo=signo)
+
+    if verbose:
+        print(f"\\n  --- entrada c{ch} ---")
+        print(f"  cableado DIRECTO   : microfono en "
+              f"({m_i[0]:+7.0f}, {m_i[1]:+7.0f}, {m_i[2]:7.0f}) mm   "
+              f"coherencia {c_i:.3f}")
+        print(f"  PARES intercambiados: microfono en "
+              f"({m_p[0]:+7.0f}, {m_p[1]:+7.0f}, {m_p[2]:7.0f}) mm   "
+              f"coherencia {c_p:.3f}")
+
+    orden = pares if c_p > c_i else ident
+    m = m_p if c_p > c_i else m_i
+
+    # --- par por par, con la posicion ya fijada ---
+    # Un veredicto global esconde el caso mas probable de todos: que se hayan
+    # cruzado ALGUNOS y no todos. Con m fija, cada par se decide solo.
+    detalle = []
+    orden_fin = orden.copy()
+    for i in range(0, len(p), 2):
+        a_ = orden.copy()
+        b_ = orden.copy()
+        b_[i], b_[i + 1] = b_[i + 1], b_[i]
+        ca = _coherencia(ph, viva, f, p, m, a_)
+        cb = _coherencia(ph, viva, f, p, m, b_)
+        vivos = int(viva[i].sum() + viva[i + 1].sum())
+        if vivos < 8:
+            detalle.append((i, None, ca, cb, vivos))
+            continue
+        if cb > ca:
+            orden_fin = b_ if np.array_equal(orden_fin, orden) else orden_fin
+            orden_fin[i], orden_fin[i + 1] = orden_fin[i + 1], orden_fin[i]
+        detalle.append((i, cb > ca, ca, cb, vivos))
+
+    c_fin = _coherencia(ph, viva, f, p, m, orden_fin)
+
+    # Incertidumbre por eje: cuanto se puede mover el microfono sin que la
+    # coherencia caiga un 1%. NO es cosmetico — con el microfono sobre el eje
+    # del muro, z apenas cambia las DIFERENCIAS de camino entre parlantes, que
+    # es lo unico que el ajuste ve, asi que z queda mucho peor determinado que
+    # x e y. Decirlo evita que alguien lea "z = 992" como si fueran milimetros.
+    inc = []
+    usar = f <= 1000.0
+    pos = p[orden_fin]
+    for eje in range(3):
+        delta = np.zeros((81, 3))
+        delta[:, eje] = np.linspace(-200, 200, 81)
+        c = _coh_lote(ph[:, usar], viva[:, usar], f[usar], pos, m[None, :] + delta)
+        ok = np.where(c >= c.max() * 0.99)[0]
+        inc.append(float(delta[ok[-1], eje] - delta[ok[0], eje]) / 2.0)
+
+    return dict(m=m, orden=orden_fin, base=orden, coh=c_fin, inc=np.array(inc),
+                coh_ident=c_i, coh_pares=c_p, detalle=detalle, viva=viva)
+
+
+# ============================================================================
+# SINTETIZAR: que hace el array entero, sin volver a medir
+# ============================================================================
+#
+# El barrido de fase mide la respuesta COMPLEJA de cada parlante hasta el
+# microfono: amplitud y fase, parlante por parlante y frecuencia por frecuencia.
+# Eso incluye la sala —reflexiones, modos, todo— porque el microfono no
+# distingue de donde viene lo que le llega.
+#
+# Y la sala es LINEAL. Entonces, si al parlante k se le pone un retardo t_k, lo
+# que llega al microfono es A_k * exp(i*(phi_k - 2*pi*f*t_k)), y lo que mide el
+# microfono con los 32 sonando es la SUMA. O sea que se puede calcular, exacto,
+# que va a medir el array para CUALQUIER foco, sin volver a emitir un solo tono.
+#
+# POR QUE IMPORTA ACA. El perfil medido moviendo el foco de a 50 mm tarda 65
+# segundos POR FRECUENCIA, y en una sala chica sale sucio: el campo reverberante
+# compite con el directo y el perfil de un microfono puede tener el maximo en
+# otro lado. Sintetizar da las 14 frecuencias de una, desde una sola corrida de
+# 3,5 minutos, y ademas permite hacer algo que fisicamente no se puede: comparar
+# el array real contra el MISMO array sin sala.
+#
+# LO QUE NO ARREGLA: si la sala mete un maximo donde no corresponde, la sintesis
+# lo reproduce fielmente, porque es cierto. Lo que da no es "el haz limpio" sino
+# "lo que va a medir ese microfono", que es justamente lo que hay que saber.
+
+def sintetizar(d, mic_ch, focos, orden=None, c_ms=C_MS, umbral_db=20.0, signo=+1):
+    """Nivel en el microfono `mic_ch` para cada foco de `focos` (Nx3, en mm).
+
+    `orden[k]` = posicion fisica del canal k (arnes cruzado). Devuelve
+    [n_focos][n_pts] en dB relativos al maximo de cada frecuencia."""
+    p = geometria()
+    if orden is not None:
+        p = p[np.asarray(orden)]
+    f = np.array(d["freqs"], float)
+    db = d["db"][:, :, mic_ch]
+    ph = d["ph"][:, :, mic_ch]
+    ref = np.median(db, axis=0, keepdims=True)
+    viva = (db > ref - umbral_db) & (db > -110.0)
+    A = np.where(viva, 10 ** (db / 20.0), 0.0)
+    H = A * np.exp(1j * ph)                       # [spk][pt] respuesta compleja
+
+    focos = np.asarray(focos, float)
+    out = np.zeros((len(focos), len(f)))
+    for i, fo in enumerate(focos):
+        # Los mismos retardos que Beam_UpdateTxFocus: el mas lejano dispara
+        # primero, asi todos los frentes llegan juntos al foco.
+        dk = np.linalg.norm(p - fo[None, :], axis=1) / (c_ms * 1000.0)
+        t = dk.max() - dk
+        for j in range(len(f)):
+            # `signo` es el convenio con que la cadena de medicion traduce un
+            # RETARDO en fase. No se supone: se determina de los datos con
+            # signo_de_fase(), porque equivocarlo no da un error chico sino el
+            # foco al reves — el array desenfoca justo donde deberia enfocar.
+            z = H[:, j] * np.exp(signo * 2j * math.pi * f[j] * t)
+            out[i, j] = 20 * math.log10(max(abs(z.sum()), 1e-12))
+    return out, f
+
+
 def _sintetico(mic, tau=None, inv=None, mudos=(), curva=None,
-               t0=1.2e-3, ruido_rad=0.0, freqs=None, mic2=None, seed=0):
+               t0=1.2e-3, ruido_rad=0.0, freqs=None, mic2=None, seed=0,
+               orden=None):
     """Arma una corrida como la que devuelve la placa, con la respuesta conocida.
 
         phi_k(f) = 2*pi*f*(d_k/c + t0 + tau_k) + pi*inv_k + curva_k(f)
@@ -507,9 +758,12 @@ def _sintetico(mic, tau=None, inv=None, mudos=(), curva=None,
                   1250, 1600, 2000, 2500, 3150, 4000, 5000], dtype=float)
     tau = np.zeros(n) if tau is None else np.asarray(tau, dtype=float)
     inv = np.zeros(n, bool) if inv is None else np.asarray(inv, dtype=bool)
+    # orden[k] = posicion FISICA del canal k. Sirve para simular un arnes
+    # cruzado y comprobar que `ubicar` lo descubre.
+    orden = np.arange(n) if orden is None else np.asarray(orden)
 
     def ph_de(m):
-        d = np.linalg.norm(p - np.asarray(m, float), axis=1) / (C_MS * 1000.0)
+        d = np.linalg.norm(p[orden] - np.asarray(m, float), axis=1) / (C_MS * 1000.0)
         a = 2 * math.pi * f[None, :] * (d[:, None] + t0 + tau[:, None])
         a = a + np.where(inv, math.pi, 0.0)[:, None]
         if curva is not None:
@@ -662,6 +916,8 @@ def main():
                          "esto por debajo de la mediana de su frecuencia "
                          "(default 20)")
     ap.add_argument("--mapa", action="store_true", help="el mapa parlante x frecuencia")
+    ap.add_argument("--pares", action="store_true",
+                    help="el arnes esta cruzado de a pares (0<->1, 2<->3, ...)")
     ap.add_argument("--comparar", nargs=2, metavar=("A.json", "B.json"))
     ap.add_argument("--autoprueba", action="store_true",
                     help="verifica el analisis con casos de respuesta conocida")
@@ -699,7 +955,9 @@ def main():
 
     print(f"\n  {d['n_spk']} parlantes x {d['n_pts']} frecuencias x "
           f"{d['n_ch']} entradas   ({d['freqs'][0]}-{d['freqs'][-1]} Hz)")
-    informe(analizar(d, mic, mic2, args.c, args.ch, args.umbral), d, args.mapa)
+    orden = (np.arange(SPK_ROWS * SPK_COLS) ^ 1) if args.pares else None
+    informe(analizar(d, mic, mic2, args.c, args.ch, args.umbral, orden=orden),
+            d, args.mapa)
 
 
 if __name__ == "__main__":
