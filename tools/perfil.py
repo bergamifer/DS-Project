@@ -82,7 +82,8 @@ RATE = 48000
 
 # Modo con tono interno + steering TX enfocado a 1 m. La frecuencia y el dither
 # se pisan despues con POST /tone; el foco, con POST /beam.
-MODO_TONO = 12
+MODO_TONO  = 12
+MODO_CHIRP = 23        # CHIRP ENFOCADO: mide el sonido DIRECTO, sin la sala
 
 
 # ------------------------------------------------------------------ transporte
@@ -98,6 +99,11 @@ def _post(host, path, obj, timeout=8):
 def _get(host, path, timeout=60):
     with urllib.request.urlopen(f"http://{host}{path}", timeout=timeout) as r:
         return r.read()
+
+
+def _getj(host, path, timeout=10):
+    """_get devuelve bytes crudos (la captura es binaria); esto, JSON."""
+    return json.loads(_get(host, path, timeout=timeout).decode())
 
 
 def estado(host):
@@ -143,6 +149,39 @@ def hz_real(hz):
 
 # --------------------------------------------------------------------- medida
 
+def medir_chirp(host, eje, pos_mm, fz_mm, espera=8.0):
+    """Nivel del sonido DIRECTO en los dos microfonos, con el foco en `pos_mm`.
+
+    El modo 23 emite el chirp por el array ENFOCADO y correlaciona: el pico es
+    la amplitud de la primera llegada, o sea el directo sin la sala. En una sala
+    chica esa es la diferencia entre medir el haz y medir la sala — el 2026-09-03
+    el tono continuo daba 2,8 dB de contraste entre dos puntos donde el chirp da
+    18.
+
+    NO alcanza con pedir el nivel despues de mover el foco: la placa mide cada
+    400 ms por su cuenta, asi que lo primero que se lee es la medicion del foco
+    ANTERIOR. Hay que esperar a que `seq` avance DOS veces (una puede haber
+    empezado antes del cambio) y ademas verificar que el foco que informa sea el
+    pedido. Sin las dos cosas el barrido entero sale corrido un punto y nada
+    avisa."""
+    foco = {"type": "tx", "fx": 0, "fy": 0, "fz": fz_mm}
+    foco["fx" if eje == "x" else "fy"] = int(pos_mm)
+    seq0 = _getj(host, "/foco")["seq"]
+    _post(host, "/beam", foco)
+    t0 = time.time()
+    while time.time() - t0 < espera:
+        time.sleep(0.25)
+        d = _getj(host, "/foco")
+        if ((d["seq"] - seq0) % 65536) >= 2 and d["focus"]["fx"] == foco["fx"] \
+           and d["focus"]["fy"] == foco["fy"]:
+            db = [-999.0] * 8
+            for m in range(min(2, d["n_mic"])):
+                db[m] = (20 * math.log10(max(d["peak"][m], 1) / FULL_SCALE))
+            return db, [d["q10"][m] for m in range(2)]
+    raise RuntimeError(f"la placa no entrego una medicion nueva en {espera:.0f} s "
+                       f"para el foco {foco}. ¿Esta en el modo {MODO_CHIRP}?")
+
+
 def medir_punto(host, eje, pos_mm, fz_mm, hz, n, settle):
     foco = {"type": "tx", "fx": 0, "fy": 0, "fz": fz_mm}
     foco["fx" if eje == "x" else "fy"] = int(pos_mm)
@@ -152,7 +191,8 @@ def medir_punto(host, eje, pos_mm, fz_mm, hz, n, settle):
     return goertzel_db(x, hz_real(hz), rate)
 
 
-def barrer(host, hz_list, eje, desde, hasta, paso, fz, n, settle, canales):
+def barrer(host, hz_list, eje, desde, hasta, paso, fz, n, settle, canales,
+           chirp=False, mics=(0, 1)):
     st = estado(host)
     if st.get("proto_ver", 0) < 15:
         sys.exit(f"proto_ver={st.get('proto_ver')} — hace falta >=15 (POST /tone).\n"
@@ -170,26 +210,46 @@ def barrer(host, hz_list, eje, desde, hasta, paso, fz, n, settle, canales):
     print(f"{len(hz_list)} frecuencia(s), {n} muestras/punto "
           f"({n / RATE * 1000:.0f} ms de ventana)\n")
 
-    _post(host, "/mode", {"mode": MODO_TONO})
+    if chirp:
+        if st.get("proto_ver", 0) < 19:
+            sys.exit(f"proto_ver={st.get('proto_ver')} — el chirp enfocado "
+                     f"necesita >=19.")
+        _post(host, "/mics", {"m1": int(mics[0]), "m2": int(mics[1])})
+        _post(host, "/mode", {"mode": MODO_CHIRP})
+        time.sleep(2.0)
+        canales = [0, 1]          # /foco devuelve microfono 1 y 2, en ese orden
+        out_canales = list(mics)
+    else:
+        _post(host, "/mode", {"mode": MODO_TONO})
+        out_canales = list(canales)
     out = {"host": host, "device_id": st.get("device_id"), "fw_id": st.get("fw_id"),
            "vol_db": st.get("vol_db"), "ingain_db": st.get("ingain_db"),
            "eje": eje, "fz_mm": fz, "n": n, "canales": canales,
+           "chirp": bool(chirp), "mics": list(mics),
            "posiciones_mm": posiciones, "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                                              time.gmtime()),
            "barridos": []}
 
     for hz in hz_list:
-        _post(host, "/tone", {"hz": int(hz), "dither": 0})
-        time.sleep(0.5)
+        if not chirp:
+            _post(host, "/tone", {"hz": int(hz), "dither": 0})
+            time.sleep(0.5)
         niveles = []
         t0 = time.time()
         for i, p in enumerate(posiciones):
-            db = medir_punto(host, eje, p, fz, hz, n, settle)
+            if chirp:
+                db, q = medir_chirp(host, eje, p, fz)
+                extra = "  q=" + "/".join(str(x) for x in q)
+            else:
+                db = medir_punto(host, eje, p, fz, hz, n, settle)
+                extra = ""
             niveles.append([float(v) for v in db])
-            print(f"\r  {hz:>5} Hz  {i + 1:>3}/{len(posiciones)}  "
+            etq = "chirp" if chirp else f"{hz:>5} Hz"
+            print(f"\r  {etq}  {i + 1:>3}/{len(posiciones)}  "
                   f"{p:>+6} mm   " +
-                  "  ".join(f"c{c}={db[c]:>6.1f}" for c in canales) + "   ",
-                  end="", flush=True)
+                  "  ".join(f"m{c+1}={db[c]:>6.1f}" if chirp
+                            else f"c{c}={db[c]:>6.1f}" for c in canales)
+                  + extra + "   ", end="", flush=True)
         print(f"\n  ({time.time() - t0:.0f} s)")
         out["barridos"].append({"hz": int(hz), "hz_real": hz_real(hz),
                                 "niveles_db": niveles})
@@ -199,9 +259,13 @@ def barrer(host, hz_list, eje, desde, hasta, paso, fz, n, settle, canales):
     # contraste real o el piso del preamplificador.
     print("\nmidiendo el piso (amps apagados)...")
     _post(host, "/amps", {"on": False})
-    time.sleep(1.0)
-    x, rate = capturar(host, n)
-    out["piso_db"] = [float(v) for v in goertzel_db(x, hz_real(hz_list[-1]), rate)]
+    time.sleep(1.5)
+    if chirp:
+        db, _ = medir_chirp(host, eje, 0, fz)
+        out["piso_db"] = [float(v) for v in db]
+    else:
+        x, rate = capturar(host, n)
+        out["piso_db"] = [float(v) for v in goertzel_db(x, hz_real(hz_list[-1]), rate)]
     _post(host, "/amps", {"on": True})
     print("  piso: " + "  ".join(f"c{c}={out['piso_db'][c]:>6.1f}" for c in canales))
     return out
@@ -244,9 +308,13 @@ def analizar(d, sep_esperada_mm=None, verbose=True):
         niv = np.array(b["niveles_db"], dtype=float)     # [pos][canal]
         fila = {"hz": b["hz"], "mics": {}}
         if verbose:
-            print(f"\n=== {b['hz']} Hz "
-                  f"(emitidos {b.get('hz_real', b['hz']):.1f}) "
-                  f"— eje {d['eje'].upper()} ===")
+            if d.get("chirp"):
+                print(f"\n=== CHIRP ENFOCADO 500 Hz – 6 kHz "
+                      f"— eje {d['eje'].upper()} — sonido DIRECTO, sin sala ===")
+            else:
+                print(f"\n=== {b['hz']} Hz "
+                      f"(emitidos {b.get('hz_real', b['hz']):.1f}) "
+                      f"— eje {d['eje'].upper()} — tono continuo, CON sala ===")
         for c in canales:
             db = niv[:, c]
             pk_mm, pk_i = _pico_parabolico(pos, db)
@@ -389,6 +457,14 @@ def main():
                     help="separacion FISICA entre los microfonos, en mm; el "
                          "signo dice para que lado esta el segundo")
     ap.add_argument("-o", "--out", help="donde guardar el JSON")
+    ap.add_argument("--chirp", action="store_true",
+                    help="medir con el CHIRP ENFOCADO (modo 23) en vez de tono "
+                         "continuo: mide el sonido DIRECTO y descarta las "
+                         "reflexiones. En una sala chica es la diferencia entre "
+                         "medir el haz y medir la sala.")
+    ap.add_argument("--mics", type=int, nargs=2, default=[0, 1],
+                    metavar=("M1", "M2"),
+                    help="entradas del ADC de los dos microfonos (para --chirp)")
     ap.add_argument("--comparar", nargs=2, metavar=("A.json", "B.json"))
     ap.add_argument("--grafico", action="store_true")
     a = ap.parse_args()
@@ -406,7 +482,7 @@ def main():
 
     try:
         d = barrer(a.host, a.hz, a.eje, a.desde, a.hasta, a.paso, a.fz,
-                   a.n, a.settle, a.canales)
+                   a.n, a.settle, a.canales, chirp=a.chirp, mics=a.mics)
     except urllib.error.URLError as e:
         sys.exit(f"no se pudo hablar con {a.host}: {e}")
     d["sep_esperada_mm"] = a.sep

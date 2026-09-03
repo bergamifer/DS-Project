@@ -206,6 +206,12 @@
 #define CMD_FW_END          0x22    /* payload: uint32 LE = CRC32 de la imagen */
 #define CMD_FW_ABORT        0x23    /* payload: none */
 
+/* ===== CHIRP ENFOCADO (0x24-0x25) =====
+ * El modo 23 mide, con ventana temporal, el nivel del sonido DIRECTO en los dos
+ * microfonos para el foco vigente. Se lee cuando se quiere; no dispara nada. */
+#define CMD_GET_FOCUS       0x24    /* payload: none */
+#define CMD_FOCUS_DATA      0x25    /* STM32 → ESP32: ds_focus_t */
+
 #define CMD_ACK             0x06
 #define CMD_NACK            0x15
 
@@ -235,7 +241,7 @@ typedef struct __attribute__((packed)) {
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      18   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      19   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -291,7 +297,11 @@ typedef struct __attribute__((packed)) {
                                  * cableado.
                                  * v18: + CMD_SET_SPKMAP — cambiar el mapeo del
                                  * arnes en caliente, para poder A/B a oido lo
-                                 * que se midio. */
+                                 * que se midio.
+                                 * v19: + el CHIRP ENFOCADO y su lectura. Es el
+                                 * unico modo que mide el haz sin la sala: la
+                                 * correlacion se queda con la primera llegada.
+                                 * ds_status_t NO cambio. */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -402,6 +412,36 @@ typedef struct __attribute__((packed)) {
 } ds_health_t;
 
 _Static_assert(sizeof(ds_health_t) == 20, "ds_health_t must be 20 bytes");
+
+/**
+ * @brief Una medicion del CHIRP ENFOCADO (CMD_FOCUS_DATA).
+ *
+ * `seq` es el numero de medicion COMPLETA. Es el campo que hace usable el modo
+ * para barrer: despues de mover el foco hay que esperar a que `seq` cambie
+ * ANTES de creerle al nivel, porque si no se lee la medicion del foco anterior
+ * y el barrido entero sale corrido un punto — sin que nada avise.
+ *
+ * `peak` es el pico de la correlacion normalizado, o sea la amplitud de la
+ * PRIMERA llegada. `lag_q8` es cuando llego, en muestras Q8; el offset absoluto
+ * incluye el retardo del pipeline y no significa nada por si solo, pero su
+ * variacion al mover el foco si.
+ */
+typedef struct __attribute__((packed)) {
+    uint16_t seq;              /* mediciones completas desde que arranco el modo */
+    uint8_t  state;            /* fc_state_t */
+    uint8_t  n_mic;
+    int32_t  peak[2];          /* amplitud de la primera llegada */
+    int32_t  lag_q8[2];        /* cuando llego, muestras Q8 */
+    uint16_t q10[2];           /* pico/promedio x10 — <100 no es confiable */
+    int16_t  fx_mm, fy_mm, fz_mm;   /* el foco con el que se midio */
+    uint16_t retries;          /* ciclos que hubo que reintentar — ver abajo */
+} ds_focus_t;
+
+/* `retries` NO es telemetria de adorno. Un ciclo que se pierde y se reintenta
+ * en silencio deja creer que la medicion salio bien; contarlo es lo que
+ * convierte una falla intermitente en algo que se ve. Si crece durante un
+ * barrido, los puntos de ese barrido no son comparables entre si. */
+_Static_assert(sizeof(ds_focus_t) == 32, "ds_focus_t cambio de tamano");
 
 /**
  * @brief Encabezado del BARRIDO DE FASE POR PARLANTE (CMD_PHASE_INFO).
@@ -774,6 +814,10 @@ void UART_Protocol_SetModeCount(uint8_t n);
 uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on);
 /** @brief ¿Llegó un CMD_SET_TONE? Devuelve 1, la frecuencia y si va con dither. */
 uint8_t UART_Protocol_GetToneRequest(uint16_t *hz, uint8_t *dither);
+/** @brief ¿Llegó un CMD_GET_FOCUS? */
+uint8_t UART_Protocol_FocusRequested(void);
+/** @brief Contesta CMD_FOCUS_DATA. Sólo desde el main loop, como SendStatus. */
+void UART_Protocol_SendFocus(const ds_focus_t *f);
 /** @brief ¿Llegó un CMD_SET_SPKMAP? Devuelve 1 y el mapeo pedido. */
 uint8_t UART_Protocol_GetSpkMapRequest(uint8_t *cruzado);
 /** @brief ¿Llegó un CMD_SET_MICS? Devuelve 1 y las dos entradas pedidas. */

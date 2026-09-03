@@ -65,6 +65,7 @@ static volatile uint8_t  modes_req_flag = 0; /* CMD_GET_MODES: idem */
 static volatile uint8_t  mode_count_known = 0;
 static volatile uint8_t  autostart_req_flag = 0;
 static volatile uint8_t  autostart_req_on = 0;
+static volatile uint8_t  focus_req_flag = 0;
 static volatile uint8_t  spkmap_req_flag = 0;
 static volatile uint8_t  spkmap_req_val = 1;
 static volatile uint8_t  mics_req_flag = 0;
@@ -314,6 +315,10 @@ static void process_byte(uint8_t byte)
                          | ((uint32_t)rx_payload[2] << 16) | ((uint32_t)rx_payload[3] << 24);
             cap_read_flag = 1;
             rx_frame_count++;
+        } else if (rx_command == CMD_GET_FOCUS && rx_payload_len == 0) {
+            focus_req_flag = 1;
+            rx_frame_count++;
+            /* Sin ACK: CMD_FOCUS_DATA es la respuesta. */
         } else if (rx_command == CMD_SET_SPKMAP && rx_payload_len == 1) {
             spkmap_req_val = rx_payload[0] ? 1 : 0;
             spkmap_req_flag = 1;
@@ -737,6 +742,18 @@ uint8_t UART_Protocol_GetAutostartRequest(uint8_t *on)
     autostart_req_flag = 0;
     *on = autostart_req_on;
     return 1;
+}
+
+uint8_t UART_Protocol_FocusRequested(void)
+{
+    if (!focus_req_flag) return 0;
+    focus_req_flag = 0;
+    return 1;
+}
+
+void UART_Protocol_SendFocus(const ds_focus_t *f)
+{
+    send_frame_yielding(CMD_FOCUS_DATA, (const uint8_t *)f, sizeof(ds_focus_t));
 }
 
 uint8_t UART_Protocol_GetSpkMapRequest(uint8_t *cruzado)

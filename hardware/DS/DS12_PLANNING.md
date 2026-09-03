@@ -746,3 +746,63 @@ a 10 placas es más barato y no depende del proveedor.
 - D8 = SMBJ24A unidireccional legítimo (datasheet verificado).
 - Rotation corrections aplicadas: JST_SH_BM10B=180, AP2125/SOT-23-5, PRTR/SOT-143=90,
   220µF/CP_Elec_6.3x7.7=180.
+
+---
+
+## 0.8 — 2 filas × 16 columnas entrelazadas: la disposición que pide la obra
+
+**Propuesta de Fernando, 3-sep-2026, después de escuchar el experimento
+vertical.** Es correcta, y el motivo de fondo merece escribirse porque invierte
+la intuición.
+
+### El requisito, dicho como requisito
+
+En una instalación de Domosónica la gente **camina por el piso** y tiene
+distintas estaturas. Lo que hay que conseguir es un foco angosto en el plano
+horizontal —para que se encuentre caminando— y **extendido en vertical**, para
+que una persona de 1,60 y otra de 1,90 sintonicen el mismo punto sin agacharse.
+
+### Por qué eso invierte el diseño actual
+
+El ancho del haz en un eje es **inversamente proporcional a la apertura en ese
+eje**. La DS11 tiene 480 mm de apertura vertical, y por eso enfoca en vertical —
+que es justo lo que **no** hace falta. Para que no enfoque en vertical hay que
+hacer el array **bajo**, no alto.
+
+Y lo entrelazado es el hallazgo fino: con las dos filas corridas 40 mm, el paso
+**efectivo** en X pasa de 80 a 40 mm y el techo de lóbulos de rejilla se
+duplica.
+
+| disposición | apertura X | apertura Y | techo sin aliasing | haz X @1k | haz X @2k | haz X @4k | haz Y @2k |
+|---|---|---|---|---|---|---|---|
+| DS11 actual 8×4 | 560 mm | 480 mm | 2144 Hz | ±306 | ±153 | ±77 | ±179 |
+| **2×16 entrelazado, 80 mm** | **1240 mm** | 160 mm | **4288 Hz** | **±138** | **±69** | **±35** | **±536** |
+| 2×16 entrelazado, 60 mm | 930 mm | 120 mm | 5717 Hz | ±184 | ±92 | ±46 | ±715 |
+| 1×32, 40 mm | 1240 mm | 0 | 4288 Hz | ±138 | ±69 | ±35 | omni |
+
+(haz = medio ancho a −6 dB, a 1 m)
+
+**Lo que gana el 2×16 entrelazado sobre lo que hay:** el doble de resolución
+horizontal, el doble de banda utilizable, y ±536 mm de cobertura vertical a 1 m
+en vez de ±179. **Sin tocar la electrónica**: mismos 32 canales, mismos
+amplificadores, mismos DAC. Cambia el layout mecánico y el arnés.
+
+### La tensión que hay que resolver antes de comprar nada
+
+- Paso chico en X (resolución y anti-aliasing) exige conos **angostos**.
+- Cobertura vertical amplia exige conos **bajos**.
+- Las dos cosas juntas son un cono **chico**, que da menos nivel y menos grave.
+
+**Sobre «parlantes longitudinales»:** un cono alargado en **vertical** da paso
+chico en X (bueno) pero **angosta** la dispersión vertical, que es exactamente
+lo que no se quiere. Uno alargado en horizontal da buena dispersión vertical
+pero impide juntar las columnas. Conviene elegir el driver con la cuenta de
+arriba delante.
+
+### Lo que esto le hace al issue #15
+
+Lo **retira**. El experimento del barrido vertical existía para decidir si había
+que bajar el paso de filas de 160 mm. Con 2 filas no hay steering vertical que
+aliasear: la pregunta desaparece en vez de contestarse. Verificado a oído el
+3-sep-2026 que el movimiento vertical **sí se percibe** en la DS11 — pero ya no
+es lo que se quiere.

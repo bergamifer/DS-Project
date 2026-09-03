@@ -432,6 +432,7 @@ typedef struct {
   uint8_t fsweep;                 // 1 = BARRIDO DE FRECUENCIA por el lazo (Test D)
   uint8_t fhold;                  // 1 = el barrido NO avanza: tono fijo (medición con téster)
   uint8_t psweep;                 // 1 = BARRIDO DE FASE por parlante (uno por vez)
+  uint8_t fchirp;                 // 1 = CHIRP ENFOCADO (mide el directo, sin sala)
 } ui_state_t;
 static const ui_state_t ui_states[] = {
   { .name = "ADC monitor",                  .monitor = 1 },
@@ -582,6 +583,18 @@ static const ui_state_t ui_states[] = {
    * recorriendo el muro. No es un modo para escuchar. Ver el comentario largo
    * de PS_NUM_SPK y docs/banco_dos_microfonos.md §4. */
   { .name = "FASE por parlante (32 x 14 tonos, ~3 min)", .psweep = 1 },
+  /* CHIRP ENFOCADO — el array entero emite el chirp CON los retardos del foco.
+   *
+   * Es el unico modo que mide el haz SIN la sala: la correlacion se queda con
+   * la primera llegada. Nacio porque el 2026-09-03 el perfil medido con tono
+   * continuo en una sala de 3x2,5 m salio inservible —el maximo de un microfono
+   * caia a 400 mm de donde estaba el microfono— mientras el chirp del AUTOFOCUS
+   * ubicaba los dos microfonos con 3 mm de error.
+   *
+   * El foco se mueve con POST /beam como en cualquier otro modo y el resultado
+   * se lee con GET /foco. Ver el comentario largo de FC_PERIOD_MS. */
+  { .name = "CHIRP ENFOCADO (mide el directo, sin sala)",
+    .beam = 1, .tx = 1, .fx_mm = 0, .fy_mm = 0, .fz_mm = 1000, .fchirp = 1 },
 };
 #define UI_NUM_STATES (sizeof(ui_states) / sizeof(ui_states[0]))
 /* Un nombre mas largo que un tramo entero no se podria mandar NUNCA: el lazo de
@@ -659,6 +672,64 @@ static float mic_pos_x_mm[MIC_COUNT] = {
  * beam mode delays[0..7] double as raw RX delays), so aliasing TX steering
  * onto it would silently destroy the focus each time a config arrives.
  * Gains/mutes/master ARE shared from beam_config (per-channel trims). */
+/* ============================================================
+ * CHIRP ENFOCADO (modo 23) — medir el foco SIN la sala
+ * ============================================================
+ *
+ * El array entero emite el chirp CON los retardos del foco, el microfono lo
+ * correlaciona, y se toma el pico de la PRIMERA llegada. Eso mide el sonido
+ * directo y descarta las reflexiones por construccion.
+ *
+ * POR QUE HIZO FALTA. El 2026-09-03, midiendo el perfil del haz con tono
+ * continuo en una sala de 3 x 2,5 m, el resultado salio inservible: el campo
+ * reverberante compite con el directo y el perfil de un microfono llegaba a
+ * tener el maximo a 400 mm de donde estaba el microfono. La misma noche, el
+ * chirp del AUTOFOCUS ajusto la posicion de los dos microfonos con 3 mm de
+ * error. La diferencia entre los dos no es la precision: es que la correlacion
+ * de un chirp se queda con la primera llegada y el tono continuo mide la SUMA
+ * de todo lo que hay en la sala.
+ *
+ * Con esto, el numero del que depende la instalacion —cuanto cae el nivel fuera
+ * del foco— se puede medir en la sala que hay, en vez de esperar una mejor.
+ *
+ * COMO REUSA LO QUE YA ESTABA. No hay emisor nuevo: el chirp se escribe en
+ * `beam_line` y el camino de salida de siempre le aplica `tx_delay_q8[]`, o sea
+ * los retardos del foco vigente. Cambiar el foco es un POST /beam como en
+ * cualquier otro modo. La captura y la correlacion son las del AUTOFOCUS.
+ *
+ * LA PRIMERA LLEGADA, no el maximo. El maximo global de la correlacion PUEDE
+ * ser una reflexion —basta que el foco apunte lejos del microfono y que una
+ * pared devuelva mas que el directo—, y justamente en esos puntos es donde
+ * importa no equivocarse, porque son los que miden el contraste. Se busca el
+ * primer maximo local que pase el 50% del maximo global.
+ *
+ * VENTANA DE BUSQUEDA. La primera medicion recorre todos los lags; las
+ * siguientes solo +-FC_WIN alrededor de la anterior. Mover el foco corre la
+ * llegada unas pocas decenas de muestras, asi que 256 sobran, y acotar hace la
+ * medicion ~8 veces mas rapida — que es lo que la vuelve usable para barrer.
+ */
+#define FC_PERIOD_MS   400     /* una medicion completa cada 400 ms */
+#define FC_WIN         256     /* +-muestras alrededor de la llegada anterior */
+typedef enum { FC_IDLE = 0, FC_ARM, FC_CAPT, FC_CORR, FC_WAIT } fc_state_t;
+static volatile uint8_t     fc_enabled = 0;
+static volatile fc_state_t  fc_state = FC_IDLE;
+static volatile uint16_t    fc_chirp_pos = 0;
+static volatile uint32_t    fc_next_ms = 0;
+static volatile uint8_t     fc_mic = 0;
+static uint32_t fc_corr_lag = 0, fc_corr_end = 0, fc_n_lags = 1;
+static int64_t  fc_best_mag = 0, fc_mag_sum = 0;
+static int32_t  fc_best_lag = 0;
+static int32_t  fc_lag[CAL_NUM_MIC];       /* llegada, muestras Q8 */
+static int32_t  fc_peak[CAL_NUM_MIC];      /* |correlacion| del pico */
+static uint16_t fc_q10[CAL_NUM_MIC];       /* pico/promedio x10 */
+static int32_t  fc_prev_lag = -1;          /* para acotar la busqueda */
+/* Numero de medicion COMPLETA. Es lo que le permite al que barre saber que lo
+ * que lee es posterior al cambio de foco y no la medicion anterior — sin esto,
+ * un barrido rapido lee todo corrido un punto y nadie se entera. */
+static volatile uint16_t fc_seq = 0;
+static volatile uint16_t fc_retries = 0;   /* ciclos que hubo que reintentar */
+static uint32_t fc_capt_deadline = 0;
+
 static volatile uint8_t tx_steer_enabled = 0;
 /* TX delays in Q8 fixed point (Fase 3): value = samples×256, so one LSB is
  * 1/256 sample ≈ 0.03mm of acoustic path. The fill interpolates linearly
@@ -1550,6 +1621,9 @@ static void LB_Process(void);
 static void FS_Process(void);
 static void PS_Process(void);
 static void PS_Start(void);
+static void FC_Process(void);
+static void FC_Start(void);
+static void FC_Arm(void);
 static void OTA_ServiceRequests(void);
 static void Health_Run(ds_health_t *h);
 /* USER CODE END PFP */
@@ -2636,6 +2710,7 @@ int main(void)
 
     // ===== LOOPBACK driver — misma disciplina: correlación en trozos =====
     if (lb_enabled) LB_Process();
+    if (fc_enabled) FC_Process();
     if (ps_enabled) PS_Process();
     if (fs_enabled) FS_Process();
 
@@ -2789,6 +2864,27 @@ int main(void)
       if (UART_Protocol_GetAmpsRequest(&amps_on)) {
         Autostart_ManualOverride(amps_on);
         Set_Amps(amps_on);
+      }
+
+      /* ===== Lectura del CHIRP ENFOCADO (CMD_GET_FOCUS) ===== */
+      if (UART_Protocol_FocusRequested()) {
+        ds_focus_t fo;
+        fo.seq   = fc_seq;
+        fo.state = (uint8_t)fc_state;
+        fo.n_mic = CAL_NUM_MIC;
+        for (uint8_t m = 0; m < CAL_NUM_MIC; m++) {
+          fo.peak[m]   = fc_peak[m];
+          fo.lag_q8[m] = fc_lag[m];
+          fo.q10[m]    = fc_q10[m];
+        }
+        /* El foco viaja CON la medicion: si no, el que barre tiene que confiar
+         * en que la placa aplico el POST /beam que mando, y ese es exactamente
+         * el supuesto que hace que un barrido salga corrido un punto. */
+        fo.fx_mm = tx_focus_x_mm;
+        fo.fy_mm = tx_focus_y_mm;
+        fo.fz_mm = tx_focus_z_mm;
+        fo.retries = fc_retries;
+        UART_Protocol_SendFocus(&fo);
       }
 
       /* ===== Mapeo del arnes en caliente (CMD_SET_SPKMAP) =====
@@ -5369,6 +5465,172 @@ static void FS_Report(void) {
  * y el logaritmo son de coma flotante y no tienen por qué correr adentro del
  * presupuesto del fill. El detector sólo levanta una bandera.
  */
+/** @brief Abre un ciclo: arma la captura Y el emisor, en el mismo lugar.
+ *
+ * La primera version armaba la captura adentro de Process_ADC_Half, cuando veía
+ * `fc_chirp_pos == 0`. Eso ataba el armado al instante del fill y hacía que el
+ * ciclo se colgara de vez en cuando —medido: se plantaba en un punto al azar de
+ * un barrido, con el estado en CAPT para siempre—. Armar las dos cosas juntas,
+ * desde el main loop, saca el acoplamiento de raíz: hay exactamente un armado
+ * por ciclo y no depende de cuándo corra el fill. */
+static void FC_Arm(void) {
+  cal_cap_count = 0;
+  cal_cap_peak = 0;
+  cal_cap_peak2 = 0;
+  cal_capturing = 1;
+  fc_chirp_pos = 0;
+  fc_capt_deadline = HAL_GetTick() + 400u;
+  fc_state = FC_ARM;
+}
+
+/** @brief Arranca un barrido de correlacion del CHIRP ENFOCADO. */
+static void FC_StartSweep(uint8_t mic) {
+  fc_mic = mic;
+  int32_t lo = 0, hi = (int32_t)CAL_MAX_LAG;
+  if (fc_prev_lag >= 0) {                  /* acotado a la llegada anterior */
+    lo = fc_prev_lag - FC_WIN;
+    hi = fc_prev_lag + FC_WIN;
+    if (lo < 1) lo = 1;
+    if (hi > (int32_t)CAL_MAX_LAG - 1) hi = (int32_t)CAL_MAX_LAG - 1;
+  }
+  cal_mic = mic;                           /* Cal_CorrAt lee cal_capture[cal_mic] */
+  fc_corr_lag = (uint32_t)lo;
+  fc_corr_end = (uint32_t)hi;
+  fc_n_lags   = (uint32_t)(hi > lo ? hi - lo : 1);
+  fc_best_mag = 0;
+  fc_best_lag = lo;
+  fc_mag_sum  = 0;
+}
+
+/** @brief Entrar al modo: primera medicion sin acotar. */
+static void FC_Start(void) {
+  fc_prev_lag = -1;
+  fc_seq = 0;
+  fc_retries = 0;
+  FC_Arm();
+  UART_Print("CHIRP ENFOCADO: el array entero emite el chirp CON los retardos "
+             "del foco.\r\n");
+  UART_Print("  Mide el sonido DIRECTO: la correlacion se queda con la primera "
+             "llegada y\r\n"
+             "  descarta las reflexiones. Mover el foco con POST /beam; leer "
+             "con GET /foco.\r\n");
+  if (!amps_enabled)
+    UART_Print("  !! AMPS APAGADOS — no va a salir sonido.\r\n");
+}
+
+/**
+ * @brief Driver del CHIRP ENFOCADO, llamado desde el main loop.
+ *
+ * Correlacion en trozos, como el AUTOFOCUS, para no perder deadlines. Al
+ * terminar los dos microfonos incrementa fc_seq: eso es lo que le dice al que
+ * barre que la medicion que va a leer es POSTERIOR al cambio de foco.
+ */
+static void FC_Process(void) {
+  if (fc_state == FC_WAIT) {
+    if ((int32_t)(HAL_GetTick() - fc_next_ms) < 0) return;
+    FC_Arm();
+    return;
+  }
+  if (fc_state == FC_CAPT) {
+    if (cal_capturing || cal_cap_count < CAL_CAPTURE_LEN) {
+      /* Perro guardián. La captura son 100 ms; si a los 400 no llegó, algo se
+       * perdió y hay que volver a empezar en vez de quedarse esperando para
+       * siempre — que es lo que hacía la primera versión, y el sintoma era un
+       * barrido que se plantaba en un punto al azar.
+       *
+       * Se CUENTA, y el contador sale por /foco. Un reintento silencioso es
+       * peor que el cuelgue: el cuelgue se nota, y un reintento que nadie ve
+       * deja pensar que la medición salió bien. */
+      if ((int32_t)(HAL_GetTick() - fc_capt_deadline) >= 0) {
+        fc_retries++;
+        FC_Arm();
+      }
+      return;
+    }
+    FC_StartSweep(0);
+    fc_state = FC_CORR;
+    return;
+  }
+  if (fc_state != FC_CORR) return;
+
+  uint32_t end = fc_corr_lag + CAL_CORR_CHUNK;
+  if (end > fc_corr_end) end = fc_corr_end;
+  for (; fc_corr_lag < end; fc_corr_lag++) {
+    int64_t c = Cal_CorrAt(fc_corr_lag);
+    int64_t m = (c < 0) ? -c : c;
+    fc_mag_sum += m;
+    if (m > fc_best_mag) { fc_best_mag = m; fc_best_lag = (int32_t)fc_corr_lag; }
+  }
+  if (fc_corr_lag < fc_corr_end) return;
+
+  /* LA PRIMERA LLEGADA, no el maximo global. El maximo PUEDE ser una reflexion
+   * —basta que el foco apunte lejos del microfono y una pared devuelva mas que
+   * el directo— y es justo en esos puntos donde importa no equivocarse, porque
+   * son los que miden el contraste. Se recorre desde el lag mas chico y se toma
+   * el primer maximo local que pase la mitad del maximo global. */
+  int32_t lo = (fc_prev_lag >= 0) ? fc_prev_lag - FC_WIN : 0;
+  if (lo < 1) lo = 1;
+  /* El umbral se toma contra el maximo Y contra el piso. Sólo contra el máximo
+   * no alcanza: cuando la medición es mala, la mitad del máximo cae DENTRO del
+   * ruido y el buscador se queda con el primer grumo que encuentra — medido, un
+   * microfono informaba una llegada 184 muestras antes que su vecino, estando
+   * los dos a 6 mm de distancia. Seis veces el promedio de |corr| está muy por
+   * encima del ruido, y con eso una medición pobre devuelve el máximo global
+   * (que es defendible) en vez de un accidente. */
+  int64_t avg0 = fc_mag_sum / (int64_t)fc_n_lags;
+  int64_t umbral = fc_best_mag / 2;
+  if (umbral < 6 * avg0) umbral = 6 * avg0;
+  int32_t prim = fc_best_lag;
+  int64_t prim_mag = fc_best_mag;
+  {
+    int64_t ant = 0, act = 0;
+    for (int32_t L = lo; L < (int32_t)fc_corr_end; L++) {
+      int64_t c = Cal_CorrAt((uint32_t)L);
+      int64_t m = (c < 0) ? -c : c;
+      if (L > lo && act >= umbral && act >= ant && act >= m) {
+        prim = L - 1; prim_mag = act; break;      /* maximo local util */
+      }
+      ant = act; act = m;
+    }
+  }
+
+  /* Refinamiento parabolico sobre |corr|, igual que el AUTOFOCUS. */
+  float frac = 0.0f;
+  if (prim > 0 && prim < (int32_t)CAL_MAX_LAG - 1) {
+    int64_t cm = Cal_CorrAt((uint32_t)prim - 1);
+    int64_t cp = Cal_CorrAt((uint32_t)prim + 1);
+    float mm1 = (float)((cm < 0) ? -cm : cm);
+    float mp1 = (float)((cp < 0) ? -cp : cp);
+    float den = mm1 - 2.0f * (float)prim_mag + mp1;
+    if (den < -1.0f) {
+      frac = 0.5f * (mm1 - mp1) / den;
+      if (frac > 0.5f) frac = 0.5f; else if (frac < -0.5f) frac = -0.5f;
+    }
+  }
+  uint32_t q10 = (avg0 > 0) ? (uint32_t)(prim_mag * 10 / avg0) : 0;
+  if (q10 > 9999) q10 = 9999;
+  int32_t pk_mic = (fc_mic == 0) ? cal_cap_peak : cal_cap_peak2;
+  if (pk_mic < MIC_LIVE_THRESH) q10 = 0;
+
+  fc_lag[fc_mic]  = (prim << 8) + (int32_t)(frac * 256.0f);
+  /* El pico se guarda NORMALIZADO por el largo del chirp, para que sea
+   * comparable con el pico de la senal en cuentas de 24 bits y no un numero de
+   * 64 bits que depende del largo de la ventana. */
+  fc_peak[fc_mic] = (int32_t)(prim_mag / (int64_t)CAL_CHIRP_LEN / 4096);
+  fc_q10[fc_mic]  = (uint16_t)q10;
+
+  if (fc_mic == 0) {
+    FC_StartSweep(1);
+    return;
+  }
+  /* Los dos microfonos listos. La ventana de la proxima se centra en la
+   * llegada del microfono 1, que es el que decide. */
+  fc_prev_lag = fc_lag[0] >> 8;
+  fc_seq++;
+  fc_next_ms = HAL_GetTick() + FC_PERIOD_MS;
+  fc_state = FC_WAIT;
+}
+
 /** @brief Abre un punto: acumuladores en cero y la fase del emisor anotada. */
 static void PS_StartPoint(void) {
   for (uint32_t c = 0; c < ADC_CHANNELS; c++) { ps_i[c] = 0; ps_q[c] = 0; }
@@ -5668,7 +5930,9 @@ static void Set_In_Gain(uint8_t db) {
   if (db > IN_GAIN_DB_MAX) db = IN_GAIN_DB_MAX;
   in_gain_db = db;
   in_gain_q8 = gain_q8_tbl[db];
-  if (!tone_enabled) beam_out_q8 = in_gain_q8;
+  /* Sin fc_enabled acá, cambiar la ganancia de entrada durante una medición
+   * con chirp enfocado la haría recortar. */
+  if (!tone_enabled && !fc_enabled) beam_out_q8 = in_gain_q8;
 }
 
 /**
@@ -5701,6 +5965,9 @@ static void UI_ApplyState(uint8_t idx) {
   if (st->mfin) MFocusIn_ApplyDefaults();
   sweep_axis = st->sweep;
   if (st->sweep) sweep_t0_ms = HAL_GetTick();   /* el triangulo arranca ahora */
+  fc_enabled = st->fchirp;
+  if (st->fchirp) FC_Start();
+  else            fc_state = FC_IDLE;
   ps_enabled = st->psweep;
   if (st->psweep) {
     PS_Start();                      // entrar al modo arranca el barrido de cero
@@ -5729,7 +5996,15 @@ static void UI_ApplyState(uint8_t idx) {
   /* Tone source is -6dBFS: el boost que levanta el beam débil del ADC lo
    * saturaría contra los PAM (plan §3.1). Con fuente de ADC, el beam usa la
    * MISMA ganancia de entrada que el resto — un ajuste, una cadena. */
-  beam_out_q8 = st->tone ? 256 : in_gain_q8;
+  /* Ganancia unitaria cuando la fuente es INTERNA (tono o chirp enfocado); la
+   * ganancia de entrada, sólo cuando la fuente es el micrófono.
+   *
+   * El chirp enfocado se olvidó de esto en su primera versión y el resultado
+   * fue +16 dB sobre una señal que ya está a −6 dBFS: 1,3 millones de muestras
+   * recortadas y una correlación contra la referencia que daba calidad 37 donde
+   * el mismo chirp por un solo parlante daba 237. El recorte no se oía como
+   * distorsión —el chirp dura 10 ms— pero arruinaba la medición entera. */
+  beam_out_q8 = (st->tone || st->fchirp) ? 256 : in_gain_q8;
   if (!st->af) {                     // leaving AUTOFOCUS aborts any scan
     cal_state = CAL_IDLE;
     cal_capturing = 0;
@@ -5953,7 +6228,26 @@ static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples) {
    * The rx_delay[m] look BACK into history just written/older (≤64 samples,
    * window is 1024) so no wrap hazard. 8 MAC/sample = 3840 MACs per half —
    * negligible (~0.1% CPU). Runs in main-loop context, after mic lines. */
-  if (tone_enabled) {
+  if (fc_enabled) {
+    /* El chirp va a beam_line y el camino de salida le aplica los retardos del
+     * foco. Fuera de la ventana del chirp se escribe silencio, asi que la cola
+     * de la captura mide la sala y no el emisor.
+     *
+     * Va ANTES de la rama de beam_enabled a proposito: el modo lleva .beam = 1
+     * para que corra el steering, y sin esta prioridad el delay-and-sum de los
+     * microfonos escribiria beam_line — o sea, un lazo cerrado con los
+     * microfonos a un metro. */
+    uint32_t k = fc_chirp_pos;
+    for (uint32_t i = 0; i < samples; i++) {
+      int32_t v = 0;
+      if (fc_state == FC_ARM && (k + i) < CAL_CHIRP_LEN) v = cal_chirp[k + i];
+      beam_line[(wp + i) & DELAY_LINE_MASK] = v;
+    }
+    if (fc_state == FC_ARM) {
+      fc_chirp_pos += samples;
+      if (fc_chirp_pos >= CAL_CHIRP_LEN) fc_state = FC_CAPT;
+    }
+  } else if (tone_enabled) {
     /* Internal source: fill beam_line exactly where the RX beam would write
      * it — the TX fills read it back with their focal delays untouched. */
     /* Fase B: dither de frecuencia — triángulo 0→peak→0 sobre la base.

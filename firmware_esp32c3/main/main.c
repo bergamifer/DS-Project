@@ -123,6 +123,9 @@ static void device_identity_init(void)
 // bajan por tramos con el mismo patron que la captura del ADC.
 #define CMD_SET_MICS       0x1E // payload: [ch1:1][ch2:1] — que entradas son los mics
 #define CMD_SET_SPKMAP     0x1F // payload: uint8 (0 directo, 1 cruzado de a pares)
+// Chirp enfocado: mide el sonido DIRECTO en el foco vigente, sin la sala.
+#define CMD_GET_FOCUS      0x24 // payload: none
+#define CMD_FOCUS_DATA     0x25 // STM32 -> ESP32: ds_focus_t
 #define CMD_GET_PHASE_INFO 0x1A // payload: none
 #define CMD_PHASE_INFO     0x1B // STM32 -> ESP32: ds_phase_info_t
 #define CMD_PHASE_READ     0x1C // payload: uint32 offset en bytes
@@ -156,11 +159,24 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    18
+#define PROTO_VERSION    19
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
 #define FW_CHUNK_MAX     (PROTO_MAX_PAYLOAD - 2)
+
+// Espejo de ds_focus_t del STM32 (uart_protocol.h).
+typedef struct __attribute__((packed)) {
+    uint16_t seq;
+    uint8_t  state;
+    uint8_t  n_mic;
+    int32_t  peak[2];
+    int32_t  lag_q8[2];
+    uint16_t q10[2];
+    int16_t  fx_mm, fy_mm, fz_mm;
+    uint16_t retries;
+} ds_focus_t;
+_Static_assert(sizeof(ds_focus_t) == 32, "ds_focus_t debe ser 32 bytes");
 
 // Espejo de ds_phase_info_t del STM32 (uart_protocol.h).
 typedef struct __attribute__((packed)) {
@@ -336,6 +352,8 @@ static uint8_t           last_phase_data[CAP_CHUNK_BYTES];
 static uint32_t          last_phase_off;
 static uint16_t          last_phase_len;
 static SemaphoreHandle_t phase_data_sem;
+static ds_focus_t        last_focus;
+static SemaphoreHandle_t focus_sem;
 static ds_cal_hdr_t      last_cal_hdr;  // valido tras tomar cal_sem
 static ds_cal_ch_t       last_cal_ch[CAL_CHUNK_CH];
 static SemaphoreHandle_t cal_sem;
@@ -496,6 +514,9 @@ static bool frame_feed(uint8_t b)
                 memcpy(&last_cap_info, fr_payload, sizeof(ds_cap_info_t));
                 xSemaphoreGive(cap_info_sem);
             }
+        } else if (fr_cmd == CMD_FOCUS_DATA && fr_len == sizeof(ds_focus_t)) {
+            memcpy(&last_focus, fr_payload, sizeof(ds_focus_t));
+            xSemaphoreGive(focus_sem);
         } else if (fr_cmd == CMD_PHASE_INFO && fr_len == sizeof(ds_phase_info_t)) {
             memcpy(&last_phase_info, fr_payload, sizeof(ds_phase_info_t));
             xSemaphoreGive(phase_info_sem);
@@ -1175,6 +1196,41 @@ static esp_err_t autostart_handler(httpd_req_t *req)
  * Cambia el mapeo del arnes EN CALIENTE, para poder A/B a oido lo que se midio.
  * No se persiste: un reinicio vuelve al mapeo medido, asi que se puede
  * desenfocar el muro a proposito sin riesgo de dejarlo asi. */
+/* GET /foco — la ultima medicion del CHIRP ENFOCADO (modo 23).
+ *
+ * `seq` es lo que hace usable el modo para barrer: despues de mover el foco hay
+ * que esperar a que CAMBIE antes de creerle al nivel. Si no, se lee la medicion
+ * del foco anterior y el barrido entero sale corrido un punto sin que nada
+ * avise. Por eso viaja tambien el foco con el que se midio. */
+static esp_err_t foco_handler(httpd_req_t *req)
+{
+    char buf[320];
+    xSemaphoreTake(focus_sem, 0);
+    uart_send_frame(CMD_GET_FOCUS, NULL, 0);
+    if (xSemaphoreTake(focus_sem, 1200 / portTICK_PERIOD_MS) != pdTRUE) {
+        int n = snprintf(buf, sizeof(buf),
+                 "{\"ok\":false,\"message\":\"el STM32 no contesto\"}");
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, buf, n);
+        return ESP_OK;
+    }
+    ds_focus_t f = last_focus;
+    static const char *st[] = { "idle", "arm", "capt", "corr", "wait" };
+    int n = snprintf(buf, sizeof(buf),
+        "{\"ok\":true,\"seq\":%u,\"state\":\"%s\",\"n_mic\":%u,"
+        "\"peak\":[%ld,%ld],\"lag_q8\":[%ld,%ld],\"q10\":[%u,%u],"
+        "\"focus\":{\"fx\":%d,\"fy\":%d,\"fz\":%d},"
+        "\"retries\":%u,\"q8_per_sample\":256}",
+        (unsigned)f.seq, f.state < 5 ? st[f.state] : "?", (unsigned)f.n_mic,
+        (long)f.peak[0], (long)f.peak[1], (long)f.lag_q8[0], (long)f.lag_q8[1],
+        (unsigned)f.q10[0], (unsigned)f.q10[1],
+        f.fx_mm, f.fy_mm, f.fz_mm, (unsigned)f.retries);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, buf, n);
+    return ESP_OK;
+}
+
 static esp_err_t spkmap_handler(httpd_req_t *req)
 {
     char buf[128];
@@ -2668,6 +2724,7 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/tone",    .method = HTTP_POST, .handler = tone_handler    },
             { .uri = "/mics",    .method = HTTP_POST, .handler = mics_handler    },
             { .uri = "/spkmap",  .method = HTTP_POST, .handler = spkmap_handler  },
+            { .uri = "/foco",    .method = HTTP_GET,  .handler = foco_handler    },
             { .uri = "/reset",   .method = HTTP_POST, .handler = reset_handler   },
             { .uri = "/ingain",  .method = HTTP_POST, .handler = ingain_handler  },
             { .uri = "/status",  .method = HTTP_GET,  .handler = status_handler  },
@@ -2928,6 +2985,7 @@ void app_main(void)
     cap_data_sem = xSemaphoreCreateBinary();
     phase_info_sem = xSemaphoreCreateBinary();
     phase_data_sem = xSemaphoreCreateBinary();
+    focus_sem = xSemaphoreCreateBinary();
     cal_sem = xSemaphoreCreateBinary();
     modes_sem = xSemaphoreCreateBinary();
     status_sem = xSemaphoreCreateBinary();

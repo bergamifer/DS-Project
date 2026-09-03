@@ -524,3 +524,85 @@ Con el signo cambiado el array **desenfoca justo donde debería enfocar**. Lo
 delató la validación contra el perfil medido: r = +0,950 con el signo correcto
 y **−0,389** con el otro. Ahora `signo_de_fase()` lo determina de los datos y
 `sintetizar()` lo pide explícito.
+
+---
+
+## 7. El chirp enfocado (modo 23) — medir el foco sin la sala
+
+Construido el 3-sep-2026 porque §6.6 cerró con «el contraste no se puede medir
+acá». Con esto sí se puede.
+
+### 7.1 Qué hace
+
+El array **entero** emite el chirp del AUTOFOCUS (500 Hz–6 kHz, 10 ms) **con los
+retardos del foco**, el micrófono correlaciona, y se toma el pico de la
+**primera llegada**. Eso mide el sonido directo y descarta las reflexiones por
+construcción: una reflexión llega siempre después.
+
+No hay emisor nuevo. El chirp se escribe en `beam_line` y el camino de salida de
+siempre le aplica `tx_delay_q8[]`, o sea el foco vigente. Mover el foco es un
+`POST /beam` como en cualquier modo; el resultado se lee con `GET /foco`.
+
+### 7.2 Lo que cambia, medido sobre el mismo muro y la misma sala
+
+Mismo barrido de 21 posiciones, mismos dos micrófonos, con media hora de
+diferencia:
+
+| | tono continuo | **chirp enfocado** |
+|---|---|---|
+| contraste simétrico a 247 mm | +2,8 dB | **+17,7 dB** |
+| asimetría entre los dos sentidos | +1,4 dB | **+0,3 dB** |
+| ancho −6 dB del lóbulo | 540 mm | **241 y 267 mm** |
+| pico de c1 (está en +14 mm) | −32 mm | **+17 mm** |
+| pico de c0 (está en −233 mm) | +179 mm ✗ | **−240 mm** ✓ |
+| separación recuperada (real 247) | +78 mm ✗ | **+258 mm** ✓ |
+| tiempo del barrido | 65 s | **23 s** |
+
+El **+0,3 dB de asimetría** es el número que más dice: enfocar en A leyendo B y
+enfocar en B leyendo A dan lo mismo dentro de tres décimas. Eso sólo pasa si lo
+que se mide es el haz y no la sala.
+
+Y el ancho de 241–267 mm contra los **286 mm** que predice λz/D a 2 kHz cierra
+el círculo: el array hace lo que la geometría dice que tiene que hacer.
+
+### 7.3 Cómo se usa
+
+```
+curl -X POST http://<ip>/amps -d '{"on":true}'
+python3 tools/perfil.py --host <ip> --chirp --mics 0 1 \
+        --desde -600 --hasta 400 --paso 50 --sep 247 --grafico
+```
+
+`--chirp` cambia el detector y **todo el análisis de siempre sigue valiendo**:
+perfil, ancho del lóbulo, contraste simétrico y la prueba de respuesta conocida
+de la separación.
+
+### 7.4 Dos trampas que costaron tiempo, anotadas
+
+**La ganancia de entrada se aplicaba al chirp.** El modo lleva `.tone = 0`, y
+`beam_out_q8 = st->tone ? 256 : in_gain_q8` le metía **+16 dB a una señal que ya
+está a −6 dBFS**: 1,3 millones de muestras recortadas y una correlación que daba
+calidad 37 donde el mismo chirp por un solo parlante daba 237. El recorte no se
+oía —el chirp dura 10 ms— pero arruinaba la medición entera. La regla es:
+ganancia unitaria cuando la fuente es interna, ganancia de entrada sólo cuando
+la fuente es el micrófono.
+
+**El umbral de la primera llegada no puede ser sólo relativo al máximo.** Con la
+mitad del máximo como umbral y una medición pobre, el buscador se quedaba con el
+primer grumo de ruido: un micrófono informaba una llegada 184 muestras antes que
+su vecino estando los dos a 6 mm de distancia. Ahora el umbral es
+`max(máximo/2, 6 × promedio)`, así una medición pobre devuelve el máximo global
+—que es defendible— en vez de un accidente.
+
+### 7.5 ⚠️ Pendiente: el ciclo se pierde ~1 de cada 10
+
+La primera versión armaba la captura dentro de `Process_ADC_Half` cuando veía
+`fc_chirp_pos == 0`, lo que ataba el armado al instante del fill; el barrido se
+plantaba en un punto al azar con el estado en `CAPT` para siempre. Armar la
+captura y el emisor **juntos**, desde el main loop, lo mejoró mucho pero **no lo
+eliminó**: en un barrido de 21 puntos el perro guardián tuvo que reintentar 2
+veces.
+
+El contador `retries` de `GET /foco` lo hace visible. **Si crece durante un
+barrido, los puntos no son comparables entre sí.** Falta encontrar la causa de
+raíz.
