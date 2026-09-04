@@ -358,3 +358,121 @@ apunta a más bulk local en el 3V3 y a sacar el diodo serie y el ferrite del
 camino de alimentación principal. Y a **medir los otros rieles**, que hoy siguen
 siendo invisibles: +5V, +5VA y +24V necesitan divisores resistivos a entradas de
 ADC — el 3V3 salió gratis sólo porque el STM32 se mide a sí mismo.
+
+---
+
+## §E — Por qué baja el 3V3 cuando consumen los amplificadores (3-sep-2026)
+
+El §D midió el hundimiento y el reinicio. Faltaba el mecanismo, y la pregunta
+incómoda era: **si los amplificadores están en +5VA, ¿por qué se hunde el
++3V3?** La respuesta, con los valores reales del netlist de producción:
+
+```
++5VA = 0,791 × (1 + 40,2/7,5)  =  5,031 V     ← consigna real del buck
+     − 0,147 V   FB2 (220 mΩ de DCR × 0,67 A)
+     − 0,400 V   D9 (SS34)
+     − 0,040 V   cobre
+     =  4,447 V  en la entrada del LDO de 3V3
+```
+
+Y el LDO **no es el que dice el esquemático**. El campo *Value* dice AP1117-33,
+pero la parte comprada y montada es **AMS1117-3.3** (LCSC C6186): dropout de
+**1,1 V típico y 1,3 V máximo** a 1 A. O sea que necesita 4,30 V a la entrada en
+el caso típico —quedan **+147 mV** de margen— y **4,50 V en el peor rincón**,
+donde hay 4,296: **margen negativo de 204 mV, con los amplificadores en
+silencio.**
+
+**Ahí está el mecanismo.** Un LDO *en regulación* da 50–70 dB de rechazo de
+fuente, y el argumento de «los amps están en otro riel» valdría. Un LDO **en
+dropout no rechaza nada**: se comporta como una resistencia y transmite la caída
+de +5VA directo a +3V3. Por eso la corriente de audio, que entra por +5VA,
+aparece en el riel digital.
+
+### Tres correcciones a documentos que ya estaban escritos
+
+1. **La consigna del buck es 5,031 V**, no 5,15 (§1 de este documento) ni 5,09
+   (`DS12_ALIMENTACION.md` §1). Sale de R34 = 40,2 k, R32 = 7,5 k y VFB = 791 mV.
+   Los dos valores viejos hacen que el presupuesto cierre con margen que no
+   existe.
+2. **FB2 es el mismo bead genérico que filtra las 64 salidas de parlante** —
+   LCSC C21286, 600 Ω, 220 mΩ de DCR, 1,5 A. Los 67 ferrites de la placa son un
+   solo part number, y ese mismo componente lleva la corriente **entera** del
+   riel digital.
+3. **Los seis test points no existen eléctricamente.** TP1..TP6 están dibujados
+   y el netlist del esquemático les asigna red, pero en el PCB fabricado los
+   pads **no tienen red asignada**, están marcados `dnp`, y no hay cobre a menos
+   de 0,6 mm. El §D decía «hacen falta divisores»; el problema es peor: hoy no
+   hay ni dónde pinchar.
+
+### 🎁 Pero J6 salva la situación: telemetría de rieles sin soldar nada
+
+**J6 (JST-SH 1×10, ya poblado en las cinco DS11)** saca cuatro pines del STM32
+que son entradas de ADC hoy sin usar, más las tres referencias que hacen falta:
+
+| J6 | pin U7 | señal | ADC |
+|---|---|---|---|
+| 7 | 24 | PA2 | ADC12_INP14 |
+| 6 | 25 | PA3 | ADC12_INP15 |
+| 4 | 32 | PC4 | ADC12_INP4 *(canal rápido)* |
+| 3 | 33 | PC5 | ADC12_INP8 |
+| 8 / 9 / 10 | — | GND / +3V3 / +5V | — |
+
+Con un latiguillo JST y cuatro resistencias se mide **+5VA y +5V a la vez**, y
+eso solo cierra con número la cadena de arriba. **Cero soldadura en la placa.**
+
+### ⚠️ La trampa que haría dar números confiadamente equivocados
+
+**VREF+ (pin 20) y VDDA (pin 21) son la MISMA red**, alimentada desde +3V3 a
+través de FB1. O sea que **el fondo de escala del ADC es el riel que se hunde**.
+
+Un divisor fijo desde +5V, leído contra ese fondo de escala, da un código que
+**sube cuando el 3V3 baja**. Con la caída medida de 230 mV (7 %), el +5V
+aparecería 7 % *más alto* justo en el instante en que todo se está cayendo — el
+error tiene el signo contrario al del fenómeno.
+
+**La corrección es obligatoria y ya está disponible:** todo divisor se convierte
+a milivoltios usando el `vdda_mv` que `Rail_Poll()` deriva de VREFINT, no una
+constante de 3300. Es el mismo patrón que ya arruinó dos mediciones esta semana:
+un número con la forma correcta y el contenido equivocado.
+
+### Que la medición sobreviva al reinicio
+
+El H743 tiene **32 registros de respaldo de 32 bits** (`RTC->BKP0R..BKP31R`).
+El manual lo dice con esas palabras: *«System reset: not affected»*. Escribirlos
+necesita dos líneas —RTCAPBEN en `RCC_APB4ENR` y DBP en `PWR_CR1`— y **no**
+necesita el reloj del RTC, ni el LSE, ni la llave de `RTC_WPR`.
+
+Se los borra sólo: reset del dominio de respaldo por software (el firmware nunca
+toca BDRST), pérdida real de alimentación, o un evento de *tamper* (no hay
+ninguno configurado). **Nada de eso pasa en el fallo medido.**
+
+⚠️ En la DS11 **VBAT está atado a +3V3** (U7 pin 6 dentro de esa red; no existe
+una red VBAT en la placa). Eso *no* invalida el mecanismo: el dominio de
+respaldo opera de 1,2 a 3,6 V y el riel bajó a 3,05 — factor 2,5 de margen. Y
+hay prueba independiente: el RSR medido, `0x00460000`, tiene **PORRSTF en bajo**,
+o sea que no hubo reset por encendido.
+
+Escribir el mínimo del riel en un BKPxR haría que **«el riel estaba en 3068 mV
+cuando morí» sobreviva a la muerte**, que es justo el dato que hoy se pierde.
+
+### Para la DS12
+
+Por prioridad, con el mecanismo ya identificado:
+
+1. **Sacar D9 y FB2 del camino de alimentación principal.** Entre los dos se
+   comen 547 mV, que es lo que le falta al LDO para tener rechazo de fuente.
+   Es la causa raíz; todo lo demás es paliativo.
+2. **Un LDO con dropout real bajo, o un segundo buck para el 3V3.** El AMS1117
+   con 1,1–1,3 V de dropout no cabe en este presupuesto de tensión.
+3. **Bulk en el nodo correcto.** Hay 1240 µF en +5VA y prácticamente nada en la
+   entrada del LDO.
+4. **Divisores a PA2/PA3/PC4/PC5 para +5VA, +5V y +24V**, con la corrección por
+   `vdda_mv`.
+5. **+24V no tiene fusible ni protección de polaridad inversa**, y el TVS
+   SMBJ24A no protege contra inversión.
+
+**Y sobre la pregunta de si el ESP32 debería supervisar los voltajes: no.** El
+fallo es un transitorio de milisegundos, el ESP32 está del otro lado de un UART
+a 115200, su SAR de 12 bits es conocido por su no linealidad, y —lo decisivo— no
+tiene el contexto: no sabe cuándo se habilitan los amplificadores, qué volumen
+hay ni qué está sonando. **El STM32 mide, el ESP32 reporta.**
