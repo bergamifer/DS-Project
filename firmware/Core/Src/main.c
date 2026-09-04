@@ -252,6 +252,16 @@ static volatile uint16_t vdda_mv      = 0;       /* ultima lectura, en mV */
 static volatile uint16_t vdda_min_mv  = 0xFFFF;  /* minimo desde el ultimo /status */
 static volatile uint16_t vdda_min_abs = 0xFFFF;  /* minimo desde que arranco */
 static volatile int32_t  cpu_temp_x10 = -9990;
+/* "REL1" — firma que distingue un registro de respaldo escrito por nosotros de
+ * la basura que queda tras un corte de alimentacion real. Sin ella, un patron
+ * arbitrario de arranque se leeria como una medicion. */
+#define RAIL_BKP_MAGIC  0x52454C31u
+/* El minimo que tenia el riel JUSTO ANTES del ultimo reinicio. 0 = no hay dato
+ * (primer arranque, o corte de luz que borro el dominio de respaldo). */
+static volatile uint16_t vdda_pre_reset_mv = 0;
+/* Cuantas veces se reinicio la placa con el riel por debajo del umbral del
+ * MAX809. Sobrevive a los reinicios, se pierde con la alimentacion. */
+static volatile uint16_t rail_deaths = 0;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
@@ -2081,6 +2091,41 @@ int main(void)
    * puede descartar. */
   reset_rsr = RCC->RSR;
   RCC->RSR |= RCC_RSR_RMVF;
+
+  /* ===== Rescatar el riel de antes del reinicio =====
+   *
+   * Cuando el 3V3 se hunde por debajo de 3,08 V, IC1 (MAX809T) tira NRST y el
+   * STM32 se reinicia — llevandose a la tumba el minimo retenido que explica
+   * la muerte. Justo el dato que hace falta.
+   *
+   * Los 32 registros de respaldo del H743 no se enteran: el manual dice, con
+   * esas palabras, "System reset: not affected". Se van a cero solo por reset
+   * del dominio de respaldo por software (este firmware nunca toca BDRST),
+   * perdida real de alimentacion, o un evento de tamper (no hay ninguno
+   * configurado). Escribirlos NO necesita el reloj del RTC, ni el LSE, ni la
+   * llave de RTC_WPR: el manual excluye explicitamente a BKPxR de esa
+   * proteccion. Solo hacen falta el reloj de APB del RTC y el permiso DBP.
+   *
+   * ⚠️ En la DS11 VBAT esta atado a +3V3 (U7 pin 6 dentro de esa red; no existe
+   * una red VBAT en la placa), asi que el dominio de respaldo NO tiene
+   * alimentacion independiente. Eso no invalida nada para el fallo medido: el
+   * dominio opera de 1,2 a 3,6 V y el riel bajo a 3,05 — factor 2,5 de margen —
+   * y el RSR medido (0x00460000) tiene PORRSTF en BAJO, o sea que no hubo
+   * reset por encendido. Lo que SI significa es que un corte de luz de verdad
+   * borra el registro, y eso esta bien: ahi la causa es obvia.
+   *
+   * Va ANTES de HAL_Init y de cualquier otra cosa, junto a la lectura del RSR,
+   * porque es el mismo dato: por que arranque. */
+  RCC->APB4ENR |= RCC_APB4ENR_RTCAPBEN;
+  (void)RCC->APB4ENR;
+  PWR->CR1 |= PWR_CR1_DBP;
+  while (!(PWR->CR1 & PWR_CR1_DBP)) { }
+  if (RTC->BKP0R == RAIL_BKP_MAGIC) {
+    vdda_pre_reset_mv = (uint16_t)(RTC->BKP1R & 0xFFFFu);
+    rail_deaths       = (uint16_t)(RTC->BKP2R & 0xFFFFu);
+  }
+  RTC->BKP0R = RAIL_BKP_MAGIC;
+  RTC->BKP1R = 0xFFFFu;          /* minimo de ESTA corrida, todavia sin medir */
   if      (reset_rsr & RCC_RSR_PORRSTF)   reset_tag = "POR";
   else if (reset_rsr & RCC_RSR_BORRSTF)   reset_tag = "BOR";
   else if (reset_rsr & RCC_RSR_IWDG1RSTF) reset_tag = "IWDG";
@@ -3239,6 +3284,10 @@ int main(void)
         st.vdda_mv      = vdda_mv;
         st.vdda_min_mv  = (vdda_min_mv == 0xFFFF) ? vdda_mv : vdda_min_mv;
         st.vdda_min_abs = (vdda_min_abs == 0xFFFF) ? vdda_mv : vdda_min_abs;
+        /* El dato que antes moria con el chip: cuanto tenia el riel justo antes
+         * del ultimo reinicio, rescatado del dominio de respaldo. */
+        st.vdda_pre_reset_mv = (vdda_pre_reset_mv == 0xFFFF) ? 0 : vdda_pre_reset_mv;
+        st.rail_deaths       = rail_deaths;
         vdda_min_mv = 0xFFFF;
         }
         st.master_vol_db = beam_config.master_vol_db;
@@ -4283,7 +4332,15 @@ static void Rail_Poll(void)
   if (mv > 6000) return;                       /* lectura absurda: se descarta */
   vdda_mv = (uint16_t)mv;
   if (mv < vdda_min_mv)  vdda_min_mv  = (uint16_t)mv;
-  if (mv < vdda_min_abs) vdda_min_abs = (uint16_t)mv;
+  if (mv < vdda_min_abs) {
+    vdda_min_abs = (uint16_t)mv;
+    /* Al registro de respaldo SOLO cuando el minimo baja de verdad, que en una
+     * placa sana es un punado de veces por hora. Escribir en cada conversion
+     * serian 200 escrituras por segundo a un registro de otro dominio de reloj,
+     * a cambio de nada. */
+    RTC->BKP1R = mv;
+    if (mv < 3080u) RTC->BKP2R = ++rail_deaths;   /* umbral del MAX809T */
+  }
 }
 
 static int32_t Read_CPU_Temperature(void)

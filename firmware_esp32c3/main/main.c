@@ -159,7 +159,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    21
+#define PROTO_VERSION    22
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -286,8 +286,10 @@ typedef struct __attribute__((packed)) {
     uint16_t vdda_min_mv;    // minimo desde el /status anterior (se limpia al leer)
     uint16_t vdda_min_abs;   // minimo desde que arranco
     uint16_t cpu_adc_x10;    // % de CPU del lado de la ENTRADA, x10
+    uint16_t vdda_pre_reset_mv; // el riel justo ANTES del ultimo reinicio
+    uint16_t rail_deaths;       // reinicios con el riel bajo el umbral
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 97, "ds_status_t debe ser 97 bytes");
+_Static_assert(sizeof(ds_status_t) == 101, "ds_status_t debe ser 101 bytes");
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 #define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
@@ -999,6 +1001,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             "\"reset\":\"%s\",\"reset_rsr\":\"%08lX\","
         "\"vdda_mv\":%u,\"vdda_min_mv\":%u,\"vdda_min_abs\":%u,"
         "\"cpu_adc_pct\":%u.%u,"
+        "\"vdda_pre_reset_mv\":%u,\"rail_deaths\":%u,"
             "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             device_id,
@@ -1035,6 +1038,8 @@ static esp_err_t status_handler(httpd_req_t *req)
             (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->vdda_min_abs : 0u,
             (last_status_len >= sizeof(ds_status_t)) ? (unsigned)(s->cpu_adc_x10 / 10) : 0u,
             (last_status_len >= sizeof(ds_status_t)) ? (unsigned)(s->cpu_adc_x10 % 10) : 0u,
+            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->vdda_pre_reset_mv : 0u,
+            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->rail_deaths : 0u,
             self, (unsigned)last_status_len,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
