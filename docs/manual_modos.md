@@ -771,3 +771,156 @@ adaptador puesto en otro banco, anclar en la 0 daría todo "sin señal".
   quiere un lazo de correlación.
 - Con los adaptadores desconectados el modo corre igual, informa *SIN SENAL* en
   las cuatro sondas y no molesta: **2,5 % de CPU, 0 underruns**.
+
+---
+
+## Modo 18 — TX foco CALIBRADO (el AUTOFOCUS guardado)
+
+Reproduce el mismo tono de 2 kHz del modo 12, pero con los retardos **medidos** por el
+último AUTOFOCUS en vez de los calculados con la geometría nominal. Absorbe error de
+geometría, de mapeo de canales y de polaridad: es el foco real en el punto donde estaba el
+micrófono.
+
+**Existe como modo aparte, y no se aplica solo al arrancar, por una razón:** `cal_delay_q8`
+**no es una corrección general**, es UN foco — el de ese punto. Aplicarlo por defecto
+pisaría el foco de cualquier otro modo con el de un micrófono que ya no está ahí. Las
+**polaridades** sí se aplican siempre, porque son del hardware y no del punto, y se
+restauran en el arranque.
+
+Si no hay calibración guardada, el modo lo dice y cae al foco geométrico de 1 m. No se
+queda mudo ni miente.
+
+> Desde septiembre de 2026 hay una alternativa mejor para casi todos los usos:
+> `tools/focos.py` guarda **posiciones en milímetros** en vez de retardos, y una posición
+> sirve para cualquiera de las 8 fuentes del MULTIFOCUS, se puede editar y mover, y no
+> depende de la geometría del array.
+
+---
+
+## Modo 20 — BARRIDO DE FRECUENCIA (20 Hz – 20 kHz)
+
+No suena para nadie: es un modo de banco. Emite un tono por un canal de cada banco y lo
+detecta **coherentemente** en las ocho entradas, punto por punto sobre una grilla
+log-espaciada de 22 frecuencias. Informa la tabla completa cada ~7 s por el serie.
+
+Multiplicar por seno y coseno de la misma frecuencia y acumular es todo el detector: el
+ruido no correlacionado se promedia a cero y quedan ~40 dB de ganancia de proceso sobre la
+ventana de 9600 muestras.
+
+Cada punto se mide **dos veces**, a *f* y a *f*+40 Hz, para sacar el retardo de grupo de la
+diferencia de fase. La separación no es libre: el retardo se resuelve sin ambigüedad sólo
+si Δφ < π, o sea τ < 1/(2·Δf) = 12,5 ms, contra los ~274 muestras medidas — 2,2× de margen.
+
+Con el cable de J13 mide la cadena DAC → ADC **sin amplificadores ni 24 V**. Con
+micrófonos, mide la respuesta acústica en dos puntos a la vez.
+
+⚠️ **En una sala chica el resultado es la sala, no el array.** Medido el 2026-09-03: este
+modo daba 2,8 dB de contraste entre dos puntos donde el modo 23 daba 17,7. Para medir el
+haz, usar el 23.
+
+---
+
+## Modo 21 — TONO FIJO (medición con instrumentos de afuera)
+
+El mismo emisor del barrido, congelado en un punto (500 Hz por defecto).
+
+Existe porque **todo lo demás que emite un tono no sirve para medir con un téster**: el
+barrido cambia de frecuencia cada medio segundo, y los modos «ondulante» llevan un LFO
+triangular de 3 Hz que modula la frecuencia un ±5 %. Un instrumento de aguja no puede leer
+ni uno ni otro.
+
+> Desde la v15 del protocolo hay una alternativa más flexible: `POST /tone {"hz":N,"dither":0}`
+> fija la frecuencia y apaga el dither en **cualquier** modo de tono. Eso es lo que usan las
+> herramientas de medición automática.
+
+---
+
+## Modo 22 — FASE por parlante (32 × 14 tonos, ~3 min)
+
+**Un tono puro, UN parlante por vez, y detección coherente en las ocho entradas.** Por cada
+par (parlante, frecuencia) quedan la amplitud **y la fase** con que ese parlante llega al
+punto de escucha.
+
+### Por qué no alcanzaba con lo que ya había
+
+- El **AUTOFOCUS** ya recorre los 32 parlantes de a uno, pero correlaciona un chirp:
+  devuelve **un escalar** por parlante —el retardo de grupo promediado sobre 500 Hz–6 kHz— y
+  ahí se termina. Si un parlante llega bien en 1 kHz y mal en 3 kHz, el chirp promedia las
+  dos cosas y el número que sale no describe ninguna.
+- El **modo 20** sí mide fase contra frecuencia, pero con los cuatro bancos emitiendo **a la
+  vez**: lo que mide es la **suma** en el micrófono. Una suma no se puede desarmar — dos
+  parlantes en contrafase dan lo mismo que dos parlantes mudos.
+
+### Qué se puede leer de esto
+
+- **Arribo en fase.** Restándole a cada parlante su fase geométrica (2π·f·d_k/c, y d_k se
+  conoce), lo que queda tiene que ser igual para los 32. La **dispersión** de ese residuo,
+  frecuencia por frecuencia, es literalmente cuánto se desalinean. Y no hace falta
+  desenvolver nada: es una comparación a *f* fija.
+- **Polaridad contra retardo, que el chirp NO distingue.** Un parlante invertido tiene π de
+  desfase **a todas las frecuencias**; uno con el retardo mal tiene un desfase que **crece
+  con f**.
+- **Si un retardo alcanza.** Si el residuo de un parlante es una recta en f, es retardo puro
+  y un solo número lo corrige. Si se curva, **ningún** retardo lo corrige.
+- **Diagnóstico del nodo, de yapa.** Un parlante mudo da amplitud de piso en las 14
+  frecuencias.
+
+### Detalles
+
+Grilla de tercios de octava, **250 Hz a 5 kHz**. Con un solo parlante emitiendo **no hay
+array**, así que **no hay lóbulos de rejilla**: el techo de 2140 Hz que limita a los modos
+enfocados acá no aplica.
+
+Los resultados viven en la AXI SRAM y se bajan con `GET /fase` (binario). Un barrido
+terminado **sobrevive al cambio de modo** — el uso natural es correr los 3 minutos, volver
+al modo 12 para que el muro se calle, y recién ahí bajar.
+
+```
+curl -X POST http://<ip>/mode -d '{"mode":22}'     # ~3,5 min
+python3 tools/fase.py --host <ip> --pares --ch 1 --mic 14 -46 954 --mapa
+```
+
+---
+
+## Modo 23 — CHIRP ENFOCADO (mide el directo, sin la sala)
+
+**El array entero emite el chirp CON los retardos del foco**, el micrófono correlaciona, y
+se toma el pico de la **primera llegada**. Eso mide el sonido directo y descarta las
+reflexiones por construcción: una reflexión llega siempre después.
+
+### Por qué existe
+
+El 2026-09-03, midiendo el perfil del haz con tono continuo en una sala de 3 × 2,5 m, el
+resultado salió inservible: el máximo de un micrófono caía a 400 mm de donde estaba el
+micrófono. La misma noche, el chirp del AUTOFOCUS ubicaba los dos micrófonos con 3 mm de
+error. La diferencia no es la precisión: **la correlación de un chirp se queda con la
+primera llegada y el tono continuo mide la suma de todo lo que hay en la sala.**
+
+Mismo muro, misma sala, media hora de diferencia:
+
+| | modo 20 (tono) | **modo 23 (chirp)** |
+|---|---|---|
+| contraste a 247 mm | +2,8 dB | **+17,7 dB** |
+| asimetría | +1,4 dB | **+0,3 dB** |
+| ancho −6 dB | 540 mm | **241 y 267 mm** |
+| tiempo del barrido | 65 s | **23 s** |
+
+### Cómo se usa
+
+No hay emisor nuevo: el chirp se escribe en `beam_line` y el camino de salida de siempre le
+aplica `tx_delay_q8[]`. Mover el foco es un `POST /beam` como en cualquier otro modo; el
+resultado se lee con `GET /foco`.
+
+```
+curl -X POST http://<ip>/mode -d '{"mode":23}'
+python3 tools/perfil.py --host <ip> --chirp --mics 0 1 --sep 247 --grafico
+```
+
+⚠️ **`seq` no es decorativo.** La placa mide por su cuenta cada 400 ms, así que después de
+mover el foco hay que esperar a que `seq` **cambie** antes de creerle al nivel. Si no, se lee
+la medición del foco anterior y el barrido entero sale corrido un punto sin que nada avise.
+Por eso el foco medido viaja **con** la medición.
+
+⚠️ **`retries` tampoco.** El ciclo se pierde ~1 de cada 100 y el perro guardián reintenta a
+los 400 ms. Si ese contador crece durante un barrido, los puntos **no son comparables entre
+sí**. Falta la causa de raíz.
