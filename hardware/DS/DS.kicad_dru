@@ -1,0 +1,50 @@
+(version 1)
+
+# Reglas de diseño propias de la DS.
+# KiCad lee este archivo solo porque se llama DS.kicad_dru: mismo nombre que el
+# proyecto, misma carpeta. No hay que importarlo ni activarlo en ningún lado.
+# Lo que diga acá tiene prioridad sobre la netclass y sobre el Board Setup.
+#
+# Para editarlo desde la GUI: Board Setup -> Design Rules -> Custom Rules.
+
+# ---------------------------------------------------------------------------
+# IC3 — AK5538VN, QFN-64 de paso 0,50 mm
+#
+# Entre un pad de señal y el pad de masa vecino quedan 0,1414 mm POR GEOMETRIA
+# DEL FOOTPRINT: es la diagonal entre dos pads en esquina, no un ruteo apretado.
+# La regla general de la placa pide 0,18 mm y por eso saltaban tres errores.
+#
+# 0,1414 mm esta por encima del minimo de JLCPCB (0,127 mm entre cobres), asi
+# que el chip es fabricable tal cual. Lo que sobraba era la regla, no el pad.
+#
+# Ojo con el alcance: esto baja el piso SOLO entre dos pads que pertenezcan a
+# IC3. Una pista, una via o un pad de otro componente que pase cerca de IC3
+# sigue exigiendo los 0,18 mm de siempre — la condicion pide que A y B sean
+# los dos de IC3.
+(rule "IC3 AK5538 QFN-64 0,5 mm — pad contra pad del mismo chip"
+	(constraint clearance (min 0.127mm))
+	(condition "A.memberOfFootprint('IC3') && B.memberOfFootprint('IC3')"))
+
+# ---------------------------------------------------------------------------
+# NOTA sobre el QR y la regla "barcode visual separation" (KiCad 10.0.3)
+#
+# No se puede apagar desde aca, y se probo de las cuatro maneras posibles:
+#
+#   1. Regla propia con (min 0mm) sobre el barcode      -> la ignora.
+#   2. Regla propia SIN condicion, global, con 0 mm     -> la ignora.
+#      (esa misma regla si apago los tres errores de IC3, o sea que el archivo
+#       se esta leyendo: es la verificacion del codigo de barras la que no
+#       consulta las reglas del usuario.)
+#   3. (margins 0 0) en el propio objeto barcode        -> no cambia nada.
+#   4. Severidad "ignore" en el Board Setup             -> no existe la entrada:
+#      el error se reporta con el tipo generico `clearance`, asi que ponerlo en
+#      ignore apagaria TODOS los clearance de cobre de la placa. Inaceptable.
+#
+# Los 1,0 mm son un piso interno del programa ("barcode visual separation
+# default"). Una regla propia puede SUBIRLO, nunca bajarlo.
+#
+# Lo unico que funciona es excluir cada violacion una por una (boton derecho
+# sobre el error -> Exclude this violation), que es lo que ya hay guardado en
+# DS.kicad_pro: 25 exclusiones, todas contra el mismo QR.
+#
+# -> Reportar upstream. Ver DS12_AUDITORIA.md, "Dos cosas para reportarle a KiCad".
