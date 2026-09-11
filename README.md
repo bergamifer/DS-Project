@@ -172,6 +172,7 @@ firmware_esp32c3/               # ESP32-C3: WiFi + HTTP + puente UART + UI web e
 tools/                          # Herramientas de host (medicion + hardware) — ver tools/README.md
   check_pcb.sh                  # HOOK: impide commitear gerbers con el cobre desactualizado
   netlist_digest.py             # Convierte DS.txt en tres archivos grepables
+  geometria_array.py            # Las 32 posiciones de parlante + DXF del panel, leidas de main.c
   nivel.py abx.py fase.py ...   # Medicion acustica por HTTP (ninguna enciende amps sola)
 
 docs/

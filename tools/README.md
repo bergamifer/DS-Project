@@ -4,8 +4,9 @@ Dos familias, y conviene no confundirlas:
 
 - **Medición acústica** (las ocho de abajo + `sweep_focus.sh`): hablan con el ESP32 por
   HTTP, con la placa encendida y sonando.
-- **Placa y repositorio** (`check_pcb.sh`, `netlist_digest.py`): trabajan sobre los
-  archivos de KiCad, sin tocar hardware. Están al final.
+- **Placa, madera y repositorio** (`check_pcb.sh`, `netlist_digest.py`,
+  `geometria_array.py`): trabajan sobre los archivos del proyecto —el KiCad y el
+  firmware—, sin tocar hardware. Están al final.
 
 Las de medición no necesitan el cable serie, y **ninguna enciende los amplificadores por su
 cuenta** — encender 32 amplificadores es una acción física y la decide una persona.
@@ -132,9 +133,9 @@ ESP=http://192.168.100.77 STEP=100 ./tools/sweep_focus.sh 800
 
 ---
 
-## Placa y repositorio
+## Placa, madera y repositorio
 
-Estas dos no hablan con la placa: leen los archivos de KiCad.
+Estas tres no hablan con la placa: leen los archivos del proyecto.
 
 ### `check_pcb.sh` — que no salgan gerbers con el cobre viejo
 KiCad **no recalcula los rellenos de zona al plotear**: usa el cobre que está guardado
@@ -173,6 +174,28 @@ Así aparecieron PA11 y PA12 —`USB_DM`/`USB_DP`— flotando.
 ⚠️ **El netlist no es la fuente de verdad del stock ni de los part numbers comprados.**
 Para eso es `hardware/DS/jlcpcb/production_files/BOM-DS.csv`. Los dos no coinciden: para el
 4,7 nF, `DS.txt` dice `C883564` y el BOM dice `C2961271`.
+
+### `geometria_array.py` — dónde va cada parlante, para cortar la madera
+El beamforming supone que cada cono está en un lugar exacto. **Si la madera y el firmware
+no coinciden no hay ningún error**: el haz se forma igual pero apunta a otro lado, y el
+síntoma es «suena raro».
+
+Por eso el script no tiene las medidas adentro: **las lee de los `#define` de `main.c`**,
+los mismos que usa el STM32 para calcular los retardos. Imprime la tabla de las 32
+posiciones, un mapa en ASCII donde se ve la traba, y exporta el panel en DXF —en
+milímetros, con capas separadas para el contorno, los agujeros, las cruces de centrado y
+los números.
+```
+tools/geometria_array.py --layout 2x16 --dxf panel.dxf --diametro 66 --marco 30
+```
+Avisa de dos cosas que sólo se ven cuando ya está cortado: si el retardo compilado **no
+cubre la diagonal** (sale con código 1) y si con ese diámetro **los agujeros se superponen**
+o queda poca madera entre ellos.
+
+⚠️ El diámetro por default (66 mm) es un ejemplo, no la medida de tu parlante: el script lo
+imprime siempre para que no se cuele sin querer. Y los números que pone en el DXF son
+**posiciones físicas**, no canales: hoy `SPK_PAIR_SWAP = 1` y el cono de la posición p lo
+mueve el canal p^1.
 
 ---
 
