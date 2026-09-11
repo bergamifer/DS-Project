@@ -150,6 +150,7 @@ CubeProgrammer (`make todo-cube`). Ver las notas de cada placa en la memoria del
 hardware/DS/                    # Proyecto KiCad completo (historial propio via subtree)
   DS.kicad_pro/.kicad_sch/.kicad_pcb   # Esquematico + PCB activo
   DS.kicad_dru                  # Reglas de diseño propias (el QFN de IC3) — ver el README de ahi
+  DS12_CHECKLIST.md             # LA LISTA PARA TILDAR mientras se dibuja — el indice de los otros tres
   DS12_ALIMENTACION.md          # LA ETAPA DE FUENTE de la DS12: que comprar y como dibujarla
   DS12_PLANNING.md              # Backlog de la DS12 (geometria 2x16, arnes, correcciones)
   DS12_AUDITORIA.md             # Auditoria previa a fabricar: 12 dimensiones, solo lo verificado

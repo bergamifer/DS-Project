@@ -123,6 +123,8 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 
 ### DS12 — lo que se está diseñando ahora
 
+- **[DS12_CHECKLIST.md](DS12_CHECKLIST.md) — la lista para tildar mientras dibujás.**
+  El índice de todo lo de abajo, en orden de dibujo: qué poner y dónde está el porqué
 - [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md) — **La etapa de fuente, lista para dibujar.**
   Qué integrado va en cada lugar, con qué divisor, y por qué. Incluye §6.1: los dos modos
   de falla que *crea* el rediseño y el BAT54 de US$ 0,03 que los cierra

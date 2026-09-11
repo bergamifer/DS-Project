@@ -279,7 +279,7 @@ comportamiento que se quiere en una instalación de 15 nodos.
 | 2 EN | `VIN_B` | **directo, sin divisor** — tiene que arrancar también con 4,1 V en modo USB | — |
 | 6 BST | a SW | C **100 nF** (`C1525`) | no |
 | 5 SW | a L2 | **L2 6,8 µH**, Isat 4,3 A, 31 mΩ — SWPA6045S6R8MT (`C57254`) | sí |
-| 1 FB | divisor | **R1 62 kΩ** de `+3V3` (`C37825`), **R2 20 kΩ** a GND (`C25765`, = R31) → **3,280 V**; **Cff 100 pF** en paralelo con R1 🔧 | el 62 k y el Cff |
+| 1 FB | divisor | **R1 62 kΩ** de `+3V3` (`C37825`), **R2 20 kΩ** a GND (`C25765`, = R31) → **3,280 V**; **Cff 100 pF** (`C327198`) en paralelo con R1 🔧 | **sólo el 62 k**: el 100 pF ya está en la placa |
 | 4 GND | GND | | — |
 | salida | `+3V3` | 2× 22 µF/16 V 0805 (`C45783`) + 100 nF, más el desacople local que ya existe | no |
 
@@ -748,7 +748,8 @@ la DS11. El único agregado es el 62 kΩ:
 | **100 kΩ** | `C25741` | 0402 | pull-up de PG a `+3V3` | R30, R35 |
 | **100 Ω** | `C177347` | 0603 | serie en J7.1 (VTref del ST-Link, §3.7) | R28 |
 | **10 kΩ** | `C25744` | 0402 | pull-down de `PDN_AK` (§3.8) | R8, R14-R17… |
-| **220 pF** | `C39122` | 0402 | Cff de los **dos** divisores de realimentación | C90, C91… |
+| **220 pF** | `C39122` | 0402 | Cff del divisor del **buck A** (§3.2) | C90, C91… (32 unidades) |
+| **100 pF** 🔧 | `C327198` | 0402 | Cff del divisor del **buck B** (§3.3) — verificado en `BOM-DS.csv` el 2026-09-11: existe, 16 unidades | C274-C289 |
 | **100 nF** | `C1525` | 0402 | 2× BST + bypass de VIN | 30 unidades |
 | **22 µF / 16 V** | `C45783` | 0805 | 2× salida buck A + 2× salida buck B | C67, C69, C70, C273 |
 | 🆕 **62 kΩ** | **`C37825`** | 0402 | R1 del divisor FB del buck B | **nuevo** |
