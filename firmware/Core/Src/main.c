@@ -82,16 +82,57 @@
 // Rows 1&3 (r=0,2) aligned; rows 2&4 (r=1,3) shifted +40mm in X.
 // Channel map placeholder: ch = row*8 + col, col 0 = leftmost (row-major) —
 // to be validated with the channel walker on real DS11 hardware.
-#define SPK_ROWS         4
-#define SPK_COLS         8
-#define SPK_X_PITCH_MM   80.0f
-#define SPK_Y_PITCH_MM   160.0f
-#define SPK_ROW_DX_MM    40.0f    // brick offset of rows 2&4 (r=1,3)
-// Array extents: X = 7×80+40 = 600mm (brick offset included), Y = 3×160 =
-// 480mm ⇒ diagonal ≈ 768mm ≈ 108 samples @48kHz. By the triangle inequality
-// no focal point can require a delay spread beyond the diagonal, so 128
-// covers every possible focus. Delay-line bound: delay+480 ≤ 1024 ⇒ ≤544 ✓.
-#define TX_MAX_DELAY_SAMPLES 128
+/* ===== GEOMETRÍA DEL ARRAY =====
+ *
+ * Un solo interruptor. La DS11 es una grilla 8×4; la DS12 pasa a 2 filas × 16
+ * columnas entrelazadas (ver hardware/DS/DS12_PLANNING.md §0.8 y §0.8.1).
+ * El entrelazado NO necesita código nuevo: SPK_ROW_DX_MM ya corre las filas
+ * impares 40 mm, que es justo el paso efectivo que busca el 2×16.
+ *
+ * ⚠️ Cambiar esto con el hardware equivocado NO da error: el haz se forma
+ * igual, pero apuntando a otro lado. Confirmalo con el channel walker. */
+#define SPK_LAYOUT_2X16  0        /* 0 = DS11 (8×4) · 1 = DS12 (2×16) */
+
+#if SPK_LAYOUT_2X16
+  #define SPK_ROWS        2
+  #define SPK_COLS       16
+#else
+  #define SPK_ROWS        4
+  #define SPK_COLS        8
+#endif
+
+#define SPK_X_PITCH_MM_I  80      /* enteros: los usa el _Static_assert de abajo, */
+#define SPK_Y_PITCH_MM_I 160      /* que necesita una expresión constante entera  */
+#define SPK_ROW_DX_MM_I   40      /* (C11 §6.7.10: nada de punto flotante ahí)    */
+
+#define SPK_X_PITCH_MM   ((float)SPK_X_PITCH_MM_I)
+#define SPK_Y_PITCH_MM   ((float)SPK_Y_PITCH_MM_I)
+#define SPK_ROW_DX_MM    ((float)SPK_ROW_DX_MM_I)   // brick offset de las filas impares
+
+/* Extensión del array, DERIVADA — no la escribas a mano, que fue justo el error. */
+#define SPK_SPAN_X_MM_I  ((SPK_COLS - 1) * SPK_X_PITCH_MM_I + SPK_ROW_DX_MM_I)
+#define SPK_SPAN_Y_MM_I  ((SPK_ROWS - 1) * SPK_Y_PITCH_MM_I)
+
+/* Por la desigualdad triangular, ningún foco puede exigir un retardo mayor que
+ * la diagonal del array. 8×4 → 768 mm ≈ 108 muestras; 2×16 → 1250 mm ≈ 175.
+ * Cota superior dura: delay + 480 ≤ 1024 ⇒ ≤ 544.
+ *
+ * 🔧 2026-09-11: esto era 128, un número derivado A MANO de la geometría 8×4.
+ * Con el 2×16 hacen falta 175 y Beam_SetTxFocus RECORTA EN SILENCIO: el haz se
+ * forma igual, pero mal, y nada lo delata. El assert de abajo convierte ese
+ * modo de falla en un error de compilación. */
+#define TX_MAX_DELAY_SAMPLES 192
+
+_Static_assert(
+    (long long)TX_MAX_DELAY_SAMPLES * TX_MAX_DELAY_SAMPLES * 343000LL * 343000LL
+      > ((long long)SPK_SPAN_X_MM_I * SPK_SPAN_X_MM_I
+       + (long long)SPK_SPAN_Y_MM_I * SPK_SPAN_Y_MM_I) * 48000LL * 48000LL,
+    "TX_MAX_DELAY_SAMPLES no cubre la diagonal del array: el foco se recortaria "
+    "en silencio en los extremos. Subilo (cota dura: 544).");
+/* Los 343000 y 48000 son SPEED_OF_SOUND_MM_S y AUDIO_SAMPLE_RATE en entero;
+ * si alguno cambia, cambialo también acá. */
+_Static_assert(TX_MAX_DELAY_SAMPLES + 480 <= 1024,
+    "TX_MAX_DELAY_SAMPLES excede la linea de retardo (delay + 480 <= 1024).");
 
 // ===== Channel walker (sequential per-channel test tone) =====
 #define WALKER_SECONDS_PER_CH 1
@@ -4737,9 +4778,20 @@ static void Beam_InitTxGeometry(void) {
   }
   spk_center_x_mm = sx / BEAM_NUM_CHANNELS;
   spk_center_y_mm = sy / BEAM_NUM_CHANNELS;
-  sprintf(uart_buf, "TX array: 4x8 brick, X0..%d Y0..%d, center (%d,%d) mm\r\n",
-          (int)(7 * SPK_X_PITCH_MM + SPK_ROW_DX_MM), (int)(3 * SPK_Y_PITCH_MM),
-          (int)spk_center_x_mm, (int)spk_center_y_mm);
+  /* Todo derivado de SPK_ROWS/SPK_COLS: antes los "7" y "3" estaban escritos a
+   * mano y mentían apenas se cambiaba la geometría. */
+  sprintf(uart_buf,
+          "TX array: %dx%d brick, X0..%d Y0..%d, center (%d,%d) mm, "
+          "diag %d mm, delay max %d/%d muestras\r\n",
+          (int)SPK_ROWS, (int)SPK_COLS,
+          (int)SPK_SPAN_X_MM_I, (int)SPK_SPAN_Y_MM_I,
+          (int)spk_center_x_mm, (int)spk_center_y_mm,
+          (int)sqrtf((float)SPK_SPAN_X_MM_I * SPK_SPAN_X_MM_I
+                   + (float)SPK_SPAN_Y_MM_I * SPK_SPAN_Y_MM_I),
+          (int)(sqrtf((float)SPK_SPAN_X_MM_I * SPK_SPAN_X_MM_I
+                    + (float)SPK_SPAN_Y_MM_I * SPK_SPAN_Y_MM_I)
+                * (float)AUDIO_SAMPLE_RATE / SPEED_OF_SOUND_MM_S),
+          (int)TX_MAX_DELAY_SAMPLES);
   UART_Print(uart_buf);
   UART_Print(spk_pair_swap
              ? "  ARNES: pares CRUZADOS (canal k -> cono k^1). Medido el "
