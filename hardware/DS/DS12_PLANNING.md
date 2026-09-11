@@ -106,8 +106,11 @@ bien orientados, ninguna de las tres puede backfeed al VBUS ajeno. Pero **J7 pin
 directo a `+3V3`**, sin diodo ni resistencia: es un cable duro entre el riel de la placa
 y el pin de 3,3 V de la sonda. Ver el ítem 2b, que hay que reformular (abajo).
 
-**3. Hot-plug: la entrada es sólo cerámica.** El único bulk de entrada es C56 (22 µF/50 V
-cerámico, que con 20 V de DC bias entrega quizá 8-10 µF reales) + C58. Enchufar en
+**3. Hot-plug.** 🔧 *(corregido 2026-09-11: **C56 NO es cerámico, es un electrolítico de
+aluminio** de 22 µF/50 V — `C72505`, footprint `CP_Elec_6.3x5.4`, 43 mA de rizado @120 Hz.
+La derating por DC bias que decía este párrafo **no aplica**: 22 µF son 22 µF, y la DS11 ya
+tiene amortiguación en la entrada. Ver [DS12_AUDITORIA.md](DS12_AUDITORIA.md) §4.)*
+El bulk de entrada es C56 + C58. Enchufar en
 caliente un ladrillo de 19-20 V por un cable largo es un LC serie sin amortiguar:
 **el pico llega a ~2× la tensión de entrada**, o sea 40 V. Eso está por encima del máximo
 absoluto del MP2315S (26 V) **y** de cualquier buck que pongamos. El TVS clampea a 38,9 V,
@@ -520,6 +523,12 @@ Verificado con el datasheet del D8 (SMBJ24A, C908801) el 2026-07-08:
 ### 2. Tap de línea VOUT + R 1kΩ — NO entró en la DS11
 Estaba planificado (DS11_PLANNING §8.2) pero **no aparece en el BOM final** de la DS11
 (ni la R de 1k ni el header). Se perdió en el cierre. Reincorporar en DS12:
+> **🔧 2026-09-11 — este tap NO cierra el lazo DAC→ADC como está planteado.** Las 8 entradas
+> del AK5538 **ya están ocupadas por J9** (verificado: los 16 pines AINnP/N van todos a
+> `/ADC_AK5538/J9_*`). No hay entrada libre donde inyectar. **Llevarlo a un ADC del STM32**:
+> PC0 (U7 pin 15, ADC123_INP10) está sin conectar. ≈US$0,02 en pasivos y queda además
+> independiente de SAI3_B. Ver [DS12_AUDITORIA.md](DS12_AUDITORIA.md) §4.
+
 - Header 2 pines **DNP** desde VOUT ch0 del PCM1690 (antes del PAM) vía **R serie 1 kΩ** + GND.
 - Habilita: self-test de toda la cadena DAC→ADC (chirp + correlación del AUTOFOCUS),
   verificación empírica de la latencia del nodo, y el **"oscilador en la cabecera"**
@@ -599,7 +608,13 @@ procedimiento exacto está en [../../docs/ds11_errata.md](../../docs/ds11_errata
 
 ## 🟡 Prioridad media
 
-### 3. Línea de timing GPIO4→PC13 (ESP32→STM32)
+### 3. Línea de timing GPIO4→~~PC13~~ (ESP32→STM32) — 🔴 **CAMBIAR DE PIN**
+
+> **🔧 2026-09-11 — PC13 NO SIRVE.** La errata de silicio **ES0392 §2.2.30** dice que en
+> encapsulado LQFP, conmutar PC13 **corrompe el oscilador LSE**, y el workaround declarado
+> es **"ninguno"**. Elegir otro GPIO libre (hay 25; ver [DS12_AUDITORIA.md](DS12_AUDITORIA.md)).
+> Este ítem se escribió antes de cruzar el diseño contra la errata.
+
 Hedge opcional analizado el 2026-07-07 (verificado en netlist). No entró en DS11.
 Para DS12, si se quiere un disparo de timing sin jitter entre procesadores:
 GPIO4 (U5 pin 18) → PC13 (U7 pad 7) con **R serie ~220 Ω** cerca del ESP32; PC13 como
@@ -609,8 +624,11 @@ interrupt-driven en ambos sentidos. Ver [../../docs/esp32_roles.md](../../docs/e
 ### 4. Ferrites de salida de los PAM (64 posiciones) — solo si se quiere full power
 Hoy: un solo bead genérico (C21286, "FerriteBead" 0805) para las 67 posiciones,
 incluidas las 64 de salida de parlante (2 por parlante) + FB2/FB3 de potencia del +5VA.
-Para el uso real (muy por debajo del full output) **está bien** — la corriente es chica,
-no satura, filtra bien. **Solo si DS12 va a correr a plena potencia**: especificar para
+Para el uso real (muy por debajo del full output) **está bien por corriente** — es chica y no
+satura. 🔧 **Pero "filtra bien" es falso**: el datasheet del PAM8302A dice que el filtro de
+ferrite actúa *"de ~1 MHz para arriba"* y la portadora está en **200-300 kHz**, así que la
+fundamental no la atenúa nadie, a ninguna longitud de cable. Importa más ahora que el arnés
+se alarga 1,63× con el layout 2×16 (§0.8.1). **Solo si DS12 va a correr a plena potencia**: especificar para
 las 64 de salida un bead de clase-D con **corriente nominal ≥1.5-2 A y DCR ≤0.1 Ω**
 (el genérico de señal ~0.3 Ω/200-500 mA saturaría y perdería filtrado a ~1 A de pico).
 Dejar el chico solo donde la corriente es de mA (FB1/VREF+).
@@ -740,9 +758,21 @@ a 10 placas es más barato y no depende del proveedor.
 ---
 
 ## ✅ Confirmado OK en la DS11 (no tocar)
-- Sustituciones de BOM validadas: 100pF→C327198 (YAGEO NP0 ±1%), 4.7nF→C2961271
-  (**C0G confirmado por Fernando**), RN1-4→16×75Ω discretas (R133-148, R131=33Ω intacto
-  en MCLK), electrolíticos en rieles ≤5V salvo C56 (50V en +24V), divisor buck 40.2k/7.5k.
+- Sustituciones de BOM validadas **eléctricamente** (⚠️ validado ≠ disponible, ver abajo):
+  100pF→C327198 (YAGEO NP0 ±1%), 4.7nF→C2961271 (**C0G confirmado por Fernando**),
+  RN1-4→16×75Ω discretas (R133-148, R131=33Ω intacto en MCLK), electrolíticos en rieles ≤5V
+  salvo C56 (50V en +24V), divisor buck 40.2k/7.5k.
+
+  > **🔴 2026-09-11 — el 4,7 nF `C2961271` tiene 115 unidades y la tirada de 10 necesita 640.**
+  > Reemplazo: **`C85980`** (Murata GRM1885C1H472JA01D, 4,7 nF 50 V C0G ±5% 0603, 49.830 en
+  > stock) o `C576818` como segunda fuente. Y una regla que sale de esto: **el stock se verifica
+  > contra `jlcpcb/production_files/BOM-DS.csv`, no contra el netlist** — `DS.txt` todavía dice
+  > `C883564` para ese mismo capacitor. Ver [DS12_AUDITORIA.md](DS12_AUDITORIA.md) §1.
+
+  > **🔧 Las 16 resistencias de 75 Ω de MCLK son el valor equivocado** para terminación de
+  > fuente, y además dejan la red asimétrica (75 Ω a los DAC, 33 Ω al ADC). Unificar en **33 Ω**
+  > y —lo que más importa— ponerlas **junto al STM32**, no junto al DAC: hoy están a 40 mm de la
+  > fuente, así que no terminan nada.
 - D8 = SMBJ24A unidireccional legítimo (datasheet verificado).
 - Rotation corrections aplicadas: JST_SH_BM10B=180, AP2125/SOT-23-5, PRTR/SOT-143=90,
   220µF/CP_Elec_6.3x7.7=180.
@@ -806,3 +836,106 @@ que bajar el paso de filas de 160 mm. Con 2 filas no hay steering vertical que
 aliasear: la pregunta desaparece en vez de contestarse. Verificado a oído el
 3-sep-2026 que el movimiento vertical **sí se percibe** en la DS11 — pero ya no
 es lo que se quiere.
+
+---
+
+### 0.8.1 — Verificación del "sin tocar la electrónica" (2026-09-10)
+
+Auditoría de la dimensión `system` sobre el netlist de producción, el PCB y el firmware.
+**La afirmación es correcta para el hardware. NO lo es para el firmware, y el modo de falla
+es silencioso.**
+
+#### 🔴 El buffer de retardos no alcanza — y recorta sin avisar
+
+`main.c:94` define `TX_MAX_DELAY_SAMPLES 128`, y el comentario inmediatamente anterior
+**deriva ese número de la geometría actual**: *"diagonal ≈ 768mm ≈ 108 samples @48kHz […]
+so 128 covers every possible focus"*. Con el array nuevo esa premisa deja de valer:
+
+| disposición | diagonal | muestras @48 kHz | ¿entra en 128? |
+|---|---|---|---|
+| DS11 8×4 (600×480) | 768 mm | 107,5 | ✅ |
+| **DS12 16×2 (1240×160)** | **1250 mm** | **175,0** | ❌ |
+| tira 32×1 @60 mm (1860×0) | 1860 mm | 260,3 | ❌ |
+
+`Beam_SetTxFocus` (`main.c:4780`) recorta en silencio:
+
+```c
+if (dq > (TX_MAX_DELAY_SAMPLES << 8)) dq = TX_MAX_DELAY_SAMPLES << 8;
+```
+
+Los parlantes de los extremos reciben menos retardo del que les corresponde: **el haz se
+forma igual, pero mal, y nada lo delata** — el mismo modo de falla del arnés cruzado.
+
+**Arreglo: `TX_MAX_DELAY_SAMPLES` 128 → 192.** El propio comentario fija la cota superior en
+544 (`delay + 480 ≤ 1024`), así que hay lugar de sobra y no cuesta memoria.
+
+#### ✅ El cambio de geometría en sí son dos líneas
+
+```c
+#define SPK_ROWS  4  →  2
+#define SPK_COLS  8  →  16
+```
+
+**El entrelazado ya está implementado**: `SPK_ROW_DX_MM = 40.0f` corre las filas impares
+40 mm, que es exactamente el paso efectivo que este §0.8 quiere conseguir. No hay que
+escribir lógica nueva.
+
+Arrastra dos cosas menores: el banner de `Beam_InitTxGeometry` tiene `7 *` y `3 *`
+hardcodeados (`COLS−1` y `ROWS−1`), y **`SWEEP_Y_MM = 600` queda mal** — su comentario lo
+justifica con *"la apertura en Y son 480 mm"*, y pasan a ser 160.
+
+#### 🟡 El arnés se alarga, y se suma con el ADC
+
+| | apertura | cable más largo | cable medio | cobre total |
+|---|---|---|---|---|
+| DS11 8×4 | 600 × 480 mm | 384 mm | 242 mm | 7,8 m |
+| DS12 16×2 | 1240 × 160 mm | **625 mm** (1,63×) | **336 mm** (1,39×) | **10,8 m** |
+
+Precisión sobre el datasheet del PAM8302A: los 20 cm son la condición para la solución
+*simple* (sólo bulk); para cables largos pide el bead, **y la placa ya tiene los 64**. No se
+está violando nada. Lo que sí vale: *"the ferrite filter depresses EMI of around 1MHz and
+higher"* mientras `fOSC` = **200-300 kHz** → la portadora no la atenúa nadie, a ninguna
+longitud.
+
+**El riesgo real es la suma con la dimensión `adc`**: 64 conductores sin blindaje, 1,63× más
+largos, radiando 250 kHz, por la misma estructura que el arnés de micrófonos — que entra a un
+ADC cuyo único polo está en 3,39 MHz. Ninguna de las dos dimensiones por separado lo veía.
+
+Los 16 JSPK además salen de un racimo de **71,5 mm** (X≈206/220, Y 47,5→119,0) sobre el borde
+derecho: el arnés abre en abanico desde un solo punto hacia 1240 mm.
+
+#### 📌 La polaridad del conector de parlantes es `+ − − +` — anotarlo de una vez
+
+Confirmado en **los 16** conectores. El mecanismo, porque es fácil leerlo mal:
+
+```
+Amp A1 (par, U12/U14/…):   DAC VOUTn− → IN+   y   pin 5 = AMP1_OUT−   ← doble inversión
+Amp A2 (impar, U13/U15/…): DAC VOUTn+ → IN+   y   pin 5 = AMP2_OUT+   ← directo
+```
+
+Las dos inversiones de A1 **se cancelan**, así que la polaridad acústica es uniforme y
+`speaker_sign[ch] = +1` para todos es correcto. En el conector queda espejado:
+**pines 1 y 4 = positivo, pines 2 y 3 = negativo.**
+
+⚠️ **Trampa de lectura**: el campo `pinfunction` del netlist dice `OUT+_5` / `OUT−_8` en los
+32 amplificadores por igual, porque viene del símbolo. La polaridad real está en los
+**nombres de red**, que sí se invierten entre A1 y A2. Mirar el campo equivocado da `− + − +`
+y es una conclusión incorrecta.
+
+#### 🔴 Las redes de parlante son anónimas — y por eso el cruce sobrevivió
+
+Las 64 salidas están en redes autogeneradas (`Net-(JSPK01-Pin_1)`). **No hay ningún nombre
+contra el cual un cruce sea visible**, ni en el netlist ni en una revisión de esquemático.
+Es la razón estructural de que el swap JSPK09/10 llegara a fabricación.
+
+**Para DS12: nombrar las 64 redes `SPK_CH00_P` / `SPK_CH00_N` …** Convierte toda esa clase de
+error en algo que se detecta con un grep. Vale más que cualquier revisión visual.
+
+#### Estado de los ítems relacionados
+
+- **JSPK09/10 cruzados** (§2d): ✅ **resuelto en el diseño nuevo** (Fernando, 2026-09-10).
+- **Orden 1-16 conectado como 16-1**: era un **error de conexionado circunstancial** de las
+  pruebas con micrófono, no una característica del diseño.
+- **`SPK_PAIR_SWAP = 1`**: es un parche por software para el arnés de la DS11.
+  **Con el arnés corregido tiene que volver a 0** — hay A/B en caliente por `CMD_SET_SPKMAP`
+  y el banner del arranque lo declara, así que la vuelta es verificable sin instrumental.
