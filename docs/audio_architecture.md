@@ -277,7 +277,7 @@ Variable global `test_tone_enabled` (toggle via ESP32 o debug). Cuando activo, `
 - [pin_map.md](pin_map.md) — Mapa completo de pines (DS10/DS11 — idéntico)
 - [pcm1690_ref.md](pcm1690_ref.md) — Referencia DAC PCM1690
 - [ak5538vn_ref.md](ak5538vn_ref.md) — Referencia ADC AK5538VN
-- [ds9_pin_audit.md](historico/ds9_pin_audit.md) — Errores PCB DS9 (histórico)
+- [pin_map.md](pin_map.md) — Mapa de pines vigente. (El viejo `historico/ds9_pin_audit.md`, con los errores de PCB de la DS9, se purgó en agosto de 2026: la DS10 los corrigió todos.)
 - [pin_definitions.h](../firmware/Core/Inc/pin_definitions.h) — Fuente de verdad de pines
 
 ---

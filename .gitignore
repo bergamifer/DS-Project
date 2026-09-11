@@ -128,3 +128,16 @@ firmware/build_boot/
 
 # Digest del netlist — derivado, se regenera con tools/netlist_digest.py
 .ds12_audit/
+
+# Arbol de CMake en la RAIZ. No confundir con firmware/build/: este lo generaba
+# STM32CubeIDE cuando el proyecto era plano, antes de que existiera firmware/.
+# Ya no hay CMakeLists.txt en la raiz, asi que no se puede regenerar ni sirve
+# para nada — estuvo versionado (53 archivos con rutas absolutas) hasta que se
+# borro el 2026-09-11.
+/build/
+
+# Salida por default de tools/captura.py (`-o captura.wav`). Las capturas son
+# datos de una medicion puntual: si una vale la pena, va a docs/datos/ con
+# nombre propio y con el .md que dice que se estaba midiendo.
+captura.wav
+*.wav

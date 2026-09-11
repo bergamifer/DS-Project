@@ -93,7 +93,7 @@ Verificable en el boot: Reg72-79 leen 0xCF en vez de 0xFF.
 (una señal 0dBFS queda justo bajo el clipping del amp). El SNR del DAC baja ~1:1 con
 la atenuación, pero el sistema está limitado por el SNR del PAM (~90dB), así que un
 divisor analógico solo ganaría ~6dB — no justifica los componentes con este amp.
-Ver [ds11_upgrades.md](ds11_upgrades.md).
+Ver [ds11_upgrades.md](../ds11_upgrades.md).
 
 ---
 
