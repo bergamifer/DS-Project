@@ -1,8 +1,14 @@
-# Herramientas de medición
+# Herramientas
 
-Ocho scripts de host. Todos hablan con el ESP32 por HTTP, ninguno necesita el cable serie,
-y ninguno enciende los amplificadores por su cuenta — **encender 32 amplificadores es una
-acción física y la decide una persona.**
+Dos familias, y conviene no confundirlas:
+
+- **Medición acústica** (las ocho de abajo + `sweep_focus.sh`): hablan con el ESP32 por
+  HTTP, con la placa encendida y sonando.
+- **Placa y repositorio** (`check_pcb.sh`, `netlist_digest.py`): trabajan sobre los
+  archivos de KiCad, sin tocar hardware. Están al final.
+
+Las de medición no necesitan el cable serie, y **ninguna enciende los amplificadores por su
+cuenta** — encender 32 amplificadores es una acción física y la decide una persona.
 
 ```
 curl -X POST http://192.168.100.77/amps -d '{"on":true}'
@@ -42,7 +48,7 @@ fase es sobre un array que no está formando nada.
 
 ---
 
-## Las ocho
+## Las de medición, una por una
 
 ### `nivel.py` — poner nivel sin acople
 Mide el piso con el volumen en mute, sube el volumen **de a poco** desde ahí, y dice qué
@@ -112,6 +118,61 @@ Baja las muestras a un `.wav` de 8 canales para mirar cualquier otra cosa.
 ```
 python3 tools/captura.py --host … -n 8192
 ```
+El `.wav` es un dato de una medición puntual y **está fuera de git**. Si una captura vale
+la pena, va a `docs/datos/` con nombre propio y con el `.md` que dice qué se estaba midiendo.
+
+### `sweep_focus.sh` — el barrido a oído (el abuelo de `perfil.py`)
+Mueve el foco en X y uno escucha, parado y quieto, si el nivel sube al pasar por su
+posición. Es anterior al banco de micrófonos y no mide nada: sirve para un chequeo rápido
+sin instrumental.
+```
+ESP=http://192.168.100.77 STEP=100 ./tools/sweep_focus.sh 800
+```
+⚠️ Su IP por default (`192.168.100.143`) es vieja: pasale `ESP=` siempre.
+
+---
+
+## Placa y repositorio
+
+Estas dos no hablan con la placa: leen los archivos de KiCad.
+
+### `check_pcb.sh` — que no salgan gerbers con el cobre viejo
+KiCad **no recalcula los rellenos de zona al plotear**: usa el cobre que está guardado
+dentro del `.kicad_pcb`. Si ese cobre es anterior a las últimas pistas, los gerbers salen
+con planos que nunca abrieron el clearance, y **no se ve en pantalla**, porque pcbnew te
+muestra lo que acaba de recalcular.
+
+Ese mecanismo ya arruinó dos tandas de la DS11 y en septiembre apareció una tercera vez,
+latente: las vías de `I2C1_SCL`/`I2C1_SDA` con 0,0000 mm contra el plano de masa.
+
+Corre el DRC dos veces sobre el mismo archivo —tal como está guardado y con
+`--refill-zones`— y si el primero tiene más violaciones que el segundo, el cobre guardado
+está viejo.
+```
+tools/check_pcb.sh              # verifica y explica
+tools/check_pcb.sh --fix        # ademas refillea y guarda
+tools/check_pcb.sh --install    # lo deja como hook de pre-commit
+```
+**`--install` hay que correrlo una vez por copia del repo**: `.git/hooks/` no se versiona.
+
+Y al exportar: `kicad-cli pcb export gerbers --check-zones`, que viene apagado por default.
+
+### `netlist_digest.py` — el netlist, en tres archivos grepables
+`hardware/DS/DS.txt` son 70.454 líneas. Cualquier pregunta de conectividad obliga a
+parsearlo entero; esto lo hace una vez y deja tres archivos en `.ds12_audit/` (derivado,
+fuera de git).
+
+El dato útil: `redes.txt` trae la **cantidad de nodos** por red, así que buscar pines al
+aire es un `awk`, no una investigación.
+```
+tools/netlist_digest.py
+awk -F'\t' '$2==1' .ds12_audit/redes.txt     # pines que no van a ningun lado
+```
+Así aparecieron PA11 y PA12 —`USB_DM`/`USB_DP`— flotando.
+
+⚠️ **El netlist no es la fuente de verdad del stock ni de los part numbers comprados.**
+Para eso es `hardware/DS/jlcpcb/production_files/BOM-DS.csv`. Los dos no coinciden: para el
+4,7 nF, `DS.txt` dice `C883564` y el BOM dice `C2961271`.
 
 ---
 

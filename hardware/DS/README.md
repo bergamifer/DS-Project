@@ -1,4 +1,4 @@
-# Domosonica DS10
+# Domosónica — la placa DS
 
 Sistema de audio espacial de 32 canales con capacidad de beamforming, diseñado para instalaciones artísticas a gran escala.
 
@@ -12,16 +12,16 @@ El beamforming permite dirigir energía sonora hacia puntos específicos del esp
 
 ### Por qué hardware propio
 
-La escala del proyecto (~500 parlantes) hace inviable el uso de hardware de audio profesional estándar: demasiado costoso, demasiado grande, demasiado dependiente de infraestructura. El DS10 es una solución diseñada específicamente para esta instalación: barato, compacto, reproducible, y capaz de operar en red distribuida.
+La escala del proyecto (~500 parlantes) hace inviable el uso de hardware de audio profesional estándar: demasiado costoso, demasiado grande, demasiado dependiente de infraestructura. La placa DS es una solución diseñada específicamente para esta instalación: barato, compacto, reproducible, y capaz de operar en red distribuida.
 
 ---
 
-## DS10 — Placa de producción
+## La placa, por unidad
 
-Cada unidad DS10 es un nodo de audio autónomo que distribuye 32 canales amplificados hacia 32 parlantes. La instalación completa usa ~18 unidades conectadas en red.
+Cada unidad es un nodo de audio autónomo que distribuye 32 canales amplificados hacia 32 parlantes. La instalación completa usa ~18 unidades conectadas en red.
 
 ```
-                        DS10 (por unidad)
+                         DS (por unidad)
 ┌────────────────────────────────────────────────────────┐
 │                                                        │
 │  24V DC ──> Buck ──> 5V ──> 32x PAM8302A ──> Speakers │
@@ -85,11 +85,15 @@ El STM32H743 corre a 480MHz con DMA audio pipeline y opera los 5 puertos SAI sim
 | ESP32-C3-Mini | WiFi / BLE | UART |
 | MP2315S | Buck 24V→5V 3A | — |
 
+> **En DS12 la etapa de fuente cambia entera:** el buck pasa a **AP63356** y el LDO digital
+> desaparece. Todo el diseño, con valores y con el porqué de cada uno, en
+> [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md).
+
 ### PCB
 
 - 4 capas, FR-4, 1.6mm — stackup JLC04161H-7628
 - Fabricado por JLCPCB
-- Diseñado en KiCad 9.0
+- Diseñado en **KiCad 10.0** (el archivo dice `generator_version "10.0"`)
 
 ### Distribución de audio
 
@@ -97,13 +101,14 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 
 ---
 
-## Estado
+## Estado (2026-09-11)
 
 | Versión | Estado |
 | --- | --- |
-| DS9 | En producción — sistema base, PCM1802 2ch ADC |
-| DS10 | Tanda 1 (3 ensambladas) **defectuosa** — JLCPCB montó 3 de 4 DACs rotados 180°; reclamo por crédito en curso. Ver [DS10_BRINGUP.md](DS10_BRINGUP.md) §6 |
-| **DS11** | **En diseño** — correcciones DS10 + mejoras de usabilidad. Ver [DS11_PLANNING.md](DS11_PLANNING.md) |
+| DS9 | Histórico — sistema base, PCM1802 2ch ADC |
+| DS10 | Histórico. Tanda de 3, **defectuosa**: JLCPCB montó 3 de 4 DACs rotados 180°. Reclamo cerrado (USD 355). Ver [DS10_BRINGUP.md](DS10_BRINGUP.md) §6 |
+| **DS11** | **En operación — 3 placas**, 32 canales poblados y audio limpio. El KiCad de lo que se fabricó está verificado contra los gerbers en [DS11_RELEASE.md](DS11_RELEASE.md) (tag `ds11-release`) |
+| **DS12** | **En diseño — es la tirada de 10 unidades.** Fuente rediseñada, geometría 2×16, auditoría cerrada |
 
 ### Mejoras DS10 respecto a DS9
 
@@ -116,8 +121,46 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 
 ## Documentación técnica
 
-- [DS11_PLANNING.md](DS11_PLANNING.md) — Plan de la revisión DS11: correcciones, nuevas features, gates de fabricación, análisis DS12
-- [DS10_DESIGN_REVIEW.md](DS10_DESIGN_REVIEW.md) — Revisión de diseño, verificación de netlist, referencia de firmware (Sección 11)
-- [DS10_BRINGUP.md](DS10_BRINGUP.md) — Procedimiento de bring-up + defectos confirmados de la tanda 1
-- [DS10_PRE_PRODUCTION_CHECKLIST.md](DS10_PRE_PRODUCTION_CHECKLIST.md) — Checklist pre-producción tanda 1 (histórico), parámetros JLCPCB
-- `versiones/DS10/` — Snapshot del proyecto KiCad tal como se fabricó (tag git `DS10`)
+### DS12 — lo que se está diseñando ahora
+
+- [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md) — **La etapa de fuente, lista para dibujar.**
+  Qué integrado va en cada lugar, con qué divisor, y por qué. Incluye §6.1: los dos modos
+  de falla que *crea* el rediseño y el BAT54 de US$ 0,03 que los cierra
+- [DS12_PLANNING.md](DS12_PLANNING.md) — Backlog: geometría 2×16, arnés, polaridad de los
+  conectores de parlante (`+ − − +`), correcciones al esquemático
+- [DS12_AUDITORIA.md](DS12_AUDITORIA.md) — Auditoría previa a fabricar. Doce dimensiones,
+  y **sólo lo que sobrevivió a verificación**: cada ítem dice cómo se comprobó
+- [DS12_USB_STM32.md](DS12_USB_STM32.md) — El USB del STM32 (PA11/PA12 hoy al aire)
+
+### Histórico
+
+- [DS11_RELEASE.md](DS11_RELEASE.md) — Qué se fabricó exactamente, verificado byte a byte
+- [DS11_PLANNING.md](DS11_PLANNING.md) — Plan de la revisión DS11
+- [DS10_DESIGN_REVIEW.md](DS10_DESIGN_REVIEW.md) — Revisión de diseño y verificación de netlist
+- [DS10_BRINGUP.md](DS10_BRINGUP.md) — Bring-up + defectos confirmados de la tanda 1
+- [DS10_PRE_PRODUCTION_CHECKLIST.md](DS10_PRE_PRODUCTION_CHECKLIST.md) — Checklist y parámetros JLCPCB
+- `Versiones/` — Snapshots del proyecto KiCad tal como se fabricó cada revisión
+
+---
+
+## Cómo está armada la carpeta
+
+| | |
+|---|---|
+| `DS.kicad_pro/.kicad_sch/.kicad_pcb` | El proyecto activo |
+| `DS.kicad_dru` | **Reglas de diseño propias.** Hoy: los 0,1414 mm entre pads del QFN-64 de IC3, que son geometría del footprint y no un ruteo apretado. KiCad lo lee solo por llamarse igual que el proyecto |
+| `jlcpcb/production_files/` | **BOM y CPL reales.** La verdad sobre part numbers comprados vive acá, **no** en el netlist: para el 4,7 nF, `DS.txt` dice `C883564` y el BOM dice `C2961271` |
+| `DS.txt` | Netlist exportado. Entrada de `tools/netlist_digest.py`, que lo convierte en tres archivos grepables |
+| `datasheets/` | Hojas de datos de los componentes de la placa. Las del MCU y los chips de audio están en `../../datasheets/` |
+| `librerias/`, `3d/`, `plot/`, `CNC/` | Símbolos y footprints propios, modelos 3D, PDFs del esquemático, corte de la caja |
+
+### Antes de exportar gerbers
+
+```bash
+tools/check_pcb.sh --install    # una vez por copia del repo
+```
+
+KiCad **no recalcula los rellenos de zona al plotear**: usa el cobre guardado en el
+`.kicad_pcb`. Ese mecanismo ya arruinó dos tandas de la DS11
+([docs/ds11_errata.md](../../docs/ds11_errata.md)) y apareció una tercera vez en septiembre.
+El hook lo verifica solo. Y al exportar: `kicad-cli pcb export gerbers --check-zones`.

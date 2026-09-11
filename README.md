@@ -1,19 +1,36 @@
 # DS-Project — Beamforming Audio (firmware + hardware)
 
 Sistema de audio beamforming de 32 canales basado en **STM32H743** + **ESP32-C3-MINI-1**.
-Control via WiFi (HTTP), pipeline DMA circular, latencia ~20ms extremo a extremo.
+Control via WiFi (HTTP), pipeline DMA circular, latencia ~20 ms extremo a extremo.
+
+Es el hardware de **Domosónica**, una instalación sonora de ~500 parlantes: cada placa es
+un nodo autónomo de 32 canales, y la obra son ~18 nodos en red.
 
 > **Repo unificado (2026-07-03):** este repo (antes `DS-Firmware`, ahora **privado**
 > como `DS-Project`) incorpora el proyecto KiCad de hardware completo en
 > [`hardware/DS/`](hardware/DS/) — historial de commits preservado vía `git subtree`
 > desde el repo `DS` original. Un solo lugar para firmware (STM32 + ESP32) y diseño
-> de PCB (DS9-DS11).
+> de PCB.
 
-> **Placa activa: DS11** (32 canales, en operación desde agosto 2026). DS9 y DS10 son históricos.
-> **¿Primera vez con el equipo? Empezá por la [guía de uso y conexionado](docs/guia_operacion.md)** —
+> **¿Primera vez con el equipo?** Empezá por la [guía de uso y conexionado](docs/guia_operacion.md) —
 > está escrita en lenguaje llano, sin dar por sabido nada de audio ni de electrónica.
-> Reporte del ciclo DS11: [docs/reporte_2026-08.md](docs/reporte_2026-08.md).
-> Manual de los 16 modos: [docs/manual_modos.md](docs/manual_modos.md).
+> Y antes de encender amplificadores con micrófonos enchufados, leé
+> [qué modos hacen acople](tools/README.md).
+
+---
+
+## Dónde está el proyecto hoy (2026-09-11)
+
+| | Estado |
+|---|---|
+| **DS11** | **En operación, 3 placas.** 32 canales poblados, audio limpio, soak de 19,6 h |
+| **DS12** | **En diseño.** Es la tirada de 10 unidades. Etapa de fuente rediseñada, auditoría cerrada |
+| Beamforming | Implementado y **medido**: contraste +17,7 dB dentro/fuera del foco |
+| Banco de medición | Dos micrófonos fijos sobre trama TDM común — el foco se verifica con números, no a oído |
+| App iOS / sitio público | Andando ([`ios/`](ios/), [`sitio/`](sitio/)) |
+
+El registro de por qué se decidió cada cosa está en los reportes mensuales:
+[julio](docs/reporte_2026-07.md) · [agosto](docs/reporte_2026-08.md) · [septiembre](docs/reporte_2026-09.md).
 
 ---
 
@@ -27,26 +44,11 @@ Control via WiFi (HTTP), pipeline DMA circular, latencia ~20ms extremo a extremo
 | ADC | AK5538VN (8ch TDM256) via SAI3_B — I2C3 addr 0x22 (7-bit 0x11) |
 | Amps | 32× PAM8302A Class-D 2.5W (shutdown compartido PD3) |
 | EEPROM | CAT24C256 (I2C4 PB6/PB7 **AF6**, WP=PB5) |
-| Power | 24V → MP2315S buck → 5VA → LDOs → 3.3V/3.3VA (acepta 12V de entrada) |
+| Power | 24V → buck → 5VA → LDOs → 3.3V/3.3VA (acepta 12V de entrada) |
 
----
-
-## Estado (2026-06) — Bring-up DS10 en hardware
-
-| Subsistema | Estado |
-|---|---|
-| CPU 480 MHz + MCLK 24.576 MHz | ✅ VOS0, PLL1/PLL3 |
-| 5× SAI DMA circular (32ch TX + 8ch RX) | ✅ 50 half + 50 full/s, 0 errores, jitter ~0 |
-| PCM1690 DAC0 (U2) TDM8 + audio | ✅ **senoidal limpia verificada en parlantes** |
-| AK5538VN ADC 8ch TDM256 | ✅ **capturando** (TDM configurado por I2C) |
-| EEPROM config persistence | ✅ load/save (I2C4 AF6) |
-| Beamforming 32ch (delay/gain/mute) | ✅ Fill ~127µs, pipeline armado |
-| ESP32 WiFi + UART link | ✅ firmware listo, sin contención con debug (UART7) |
-| HardFault diagnostics | ✅ dump PC/LR/HFSR/CFSR via UART7 + mutea amps |
-
-> **Limitación actual del hardware:** solo 1 de 4 PCM1690 poblado (U1/U3/U4 vinieron
-> rotados 180° de JLCPCB → desoldados, reclamo en curso). El firmware soporta los 32
-> canales; al reponer los DACs funcionan sin cambios. Ver bring-up findings §7.
+> En DS12 la etapa de fuente cambia entera: el buck pasa a **AP63356** y el LDO digital
+> desaparece. El diseño completo, con valores y por qué, está en
+> [`hardware/DS/DS12_ALIMENTACION.md`](hardware/DS/DS12_ALIMENTACION.md).
 
 ---
 
@@ -62,7 +64,7 @@ SAI3_B RX (Master) --- DMA1_Stream4 --> audio_buffer_3b_rx (RAM_D2)
 delay_line[8][1024]   <- circular, 8 canales
     |  Process_ADC_Half() deinterleave + (>>8 a 24-bit)
     v
-Fill_Audio_Beamform()   <- per-channel: delay[0-64] / gain[0-255] / mute
+Fill_Audio_Beamform()   <- per-channel: delay / gain[0-255] / mute
     |                       (test tone -30dBFS cuando test_tone_enabled=1)
     |---> SAI1_A + SAI1_B  (ch 0-15)   DMA1_Stream0 / Stream3
     '---> SAI2_A + SAI2_B  (ch 16-31)  DMA1_Stream1 / Stream2
@@ -71,15 +73,15 @@ Fill_Audio_Beamform()   <- per-channel: delay[0-64] / gain[0-255] / mute
         4× PCM1690 DAC --> 32× PAM8302A --> parlantes
 ```
 
-**Latencia total:** ~20.1 ms (10 ms DMA input + ~0.13 ms compute + 10 ms DMA output)
+**Latencia total:** ~20,1 ms (10 ms DMA input + ~0,13 ms compute + 10 ms DMA output)
 
 > **⚠️ Alineamiento SAI:** con `DataSize=24` el SAI transmite bits [23:0] (right-aligned).
 > Los samples se escriben directo, **sin `<<8`**. El `<<8` erróneo (heredado de DS9) causaba
-> la distorsión "tipo 50kHz" — ver bring-up findings §1.
+> la distorsión "tipo 50 kHz" — ver bring-up findings §1.
 
 ---
 
-## SAI — DS10 pinout (sin workarounds; DS10 corrige los errores de DS9)
+## SAI — pinout DS10/DS11 (idéntico; DS10 corrigió los errores de DS9)
 
 | Bloque | Modo | Pines (AF) | Canales | DMA |
 |---|---|---|---|---|
@@ -104,31 +106,41 @@ Trama binaria @ 115200 8N1 (GPIO0 TX → PA1 RX, GPIO1 RX ← PA0 TX):
 CMD 0x01 = UPDATE_CFG (52 bytes payload)
   Byte  0    : master_gain (0-255)
   Byte  1    : mute_global (0/1)
-  Bytes 2-33 : delays[16] x uint16 LE  (0-64 samples)
+  Bytes 2-33 : delays[16] x uint16 LE
   Bytes 34-49: gains[16]  x uint8      (0-255, 0xFF = unity)
   Bytes 50-51: mutes      x uint16 LE  (bitfield ch0-15)
 ```
 
 HTTP endpoints: `POST /command` (config JSON), `GET /status`, `GET /ping`
 
+> **Trampa de la API:** `POST /reset` **no reinicia el chip** — es un reset de fábrica, y
+> deja la placa en modo 0, que es el del acople. Para reiniciar de verdad: `make ota`.
+
 ---
 
 ## Build & Flash
 
 ```bash
-# STM32 (firmware principal)
+# STM32 (firmware principal) — TARGET = ds11_beamforming
 cd firmware && make -j4
 make flash-stlink            # st-flash --reset (arranca solo)
+make todo-cube               # bootloader + app con CubeProgrammer
+make ota OTA_HOST=192.168.100.77   # por WiFi, sin cables
 
 # Debug serial: UART7 (PE7/PE8) → J7 → VCP del ST-Link
 screen /dev/cu.usbmodemXXXX 115200
-# (~/.screenrc con 'termcapinfo xterm* ti@:te@' para scroll nativo)
 
 # ESP32-C3
 . $HOME/esp/esp-idf/export.sh
-cd firmware_esp32c3
-idf.py flash -p /dev/cu.usbmodemYYYY && idf.py monitor -p /dev/cu.usbmodemYYYY
+cd firmware_esp32c3 && idf.py flash monitor -p /dev/cu.usbmodemYYYY
+# o, desde firmware/:  make esp-flash
 ```
+
+⚠️ **`st-flash` no sirve en todas las placas** — en la segunda y la tercera hay que usar
+CubeProgrammer (`make todo-cube`). Ver las notas de cada placa en la memoria del proyecto.
+
+**La app vive en `0x08020000`, no en `0x08000000`**: hay un bootloader propio adelante
+(ver [docs/ota_wifi.md](docs/ota_wifi.md)).
 
 ---
 
@@ -136,40 +148,76 @@ idf.py flash -p /dev/cu.usbmodemYYYY && idf.py monitor -p /dev/cu.usbmodemYYYY
 
 ```
 hardware/DS/                    # Proyecto KiCad completo (historial propio via subtree)
-  DS.kicad_pro/.kicad_sch/.kicad_pcb   # Esquemático + PCB activo (DS11 en curso)
-  DS11_PLANNING.md              # Plan DS11 + CHECKLIST PRE-JLCPCB UNIFICADO (§8)
-  DS10_DESIGN_REVIEW.md, DS10_BRINGUP.md, PowerSpecs.md, ...  # Docs del diseño
-  DS.txt                        # Último netlist exportado (referencia para análisis)
-firmware/                       # STM32H743 firmware
-  Core/Src/main.c               # Pipeline SAI/DMA + beamforming (fases 0-3) + AUTOFOCUS
-  Core/Src/uart_protocol.c      # Protocolo binario ESP32<->STM32 (config/modo/beam/status)
-  Core/Src/pcm1690.c            # Driver I2C para 4x PCM1690
+  DS.kicad_pro/.kicad_sch/.kicad_pcb   # Esquematico + PCB activo
+  DS.kicad_dru                  # Reglas de diseño propias (el QFN de IC3) — ver el README de ahi
+  DS12_ALIMENTACION.md          # LA ETAPA DE FUENTE de la DS12: que comprar y como dibujarla
+  DS12_PLANNING.md              # Backlog de la DS12 (geometria 2x16, arnes, correcciones)
+  DS12_AUDITORIA.md             # Auditoria previa a fabricar: 12 dimensiones, solo lo verificado
+  DS12_USB_STM32.md             # USB del STM32 (PA11/PA12 hoy al aire)
+  DS11_RELEASE.md               # El KiCad de lo que se fabrico, verificado contra los gerbers
+  DS11_PLANNING.md, DS10_*.md   # Historico de revisiones
+  jlcpcb/production_files/      # BOM y CPL REALES — la verdad sobre part numbers, no el netlist
+  DS.txt                        # Netlist exportado (entrada de tools/netlist_digest.py)
+  datasheets/, librerias/, 3d/, plot/, Versiones/
+
+firmware/                       # STM32H743 — make -j4, TARGET=ds11_beamforming
+  Core/Src/main.c               # Pipeline SAI/DMA + beamforming + AUTOFOCUS + geometria del array
+  Core/Src/uart_protocol.c      # Protocolo binario ESP32<->STM32
+  Core/Src/pcm1690.c            # Driver I2C de los 4 DAC
   Core/Src/eeprom_config.c      # Persistencia de config (I2C4 AF6)
-  Core/Src/stm32h7xx_it.c       # IRQ handlers + HardFault dump (UART7, mutea amps)
-  Core/Inc/pin_definitions.h    # Fuente de verdad de todos los pines DS10
-firmware_esp32c3/               # ESP32-C3 firmware
-  main/main.c                   # WiFi + HTTP + UART bridge + UI web embebida (fase 4)
+  Core/Inc/pin_definitions.h    # Fuente de verdad de todos los pines
+
+firmware_esp32c3/               # ESP32-C3: WiFi + HTTP + puente UART + UI web embebida
+
+tools/                          # Herramientas de host (medicion + hardware) — ver tools/README.md
+  check_pcb.sh                  # HOOK: impide commitear gerbers con el cobre desactualizado
+  netlist_digest.py             # Convierte DS.txt en tres archivos grepables
+  nivel.py abx.py fase.py ...   # Medicion acustica por HTTP (ninguna enciende amps sola)
+
 docs/
-  reporte_2026-07.md            # REPORTE: camino recorrido y registro de decisiones
-  reporte_2026-08.md            # REPORTE: bring-up DS11 (cortos, performance, soak)
-  guia_operacion.md             # GUIA DE USO: conexionado y flasheo, lenguaje llano
-  manual_modos.md               # Los 16 modos de operacion, uno por uno
-  ds11_upgrades.md              # Hallazgos y racional de la revision DS11 (netlist)
-  pin_map.md                    # Mapa completo de pines (DS10/DS11 — idéntico)
-  audio_architecture.md         # Arquitectura de audio
-  ak5538vn_ref.md               # Referencia AK5538VN ADC (config CKS+TDM verificada)
-  pcm1690_ref.md                # Referencia PCM1690 DAC
-  gpio_control.md               # Control GPIO (DAC RST/MUTE, amps, ADC)
-  memory_map.md                 # Layout de RAM del H743 (regla DMA vs DTCM)
-  ds11_errata.md                # Los dos cortos de fabrica de la tirada DS11
-  ds11_perf.md                  # Performance del pipeline (caches, -O2, soak 19,6 h)
-  protocolo_medicion.md         # Metodologia de medicion acustica (mic fijo, foco movil)
-  historico/                    # DS10 bring-up + esquematico DS9
-stm32/                          # Referencia RM0433 (clocks, SAI, DMA, I2C, GPIO)
-webserver/                      # Control web multi-dispositivo (Flask + SQLite) — ver su README
-sitio/                          # Página pública del proyecto (HTML autocontenido, fuente del artifact)
-ios/                            # App iOS "Domosonica" (SwiftUI) — control remoto vía ESP32; ver docs/app_ios.md
+  guia_operacion.md             # GUIA DE USO en lenguaje llano
+  manual_modos.md               # Los modos de operacion, uno por uno
+  reporte_2026-0{7,8,9}.md      # El camino recorrido y por que se decidio cada cosa
+  banco_dos_microfonos.md       # El banco de medicion de dos microfonos
+  protocolo_medicion.md         # Metodologia acustica (mic fijo, foco movil)
+  ds11_errata.md                # Los cortos de fabrica de la DS11 — leer antes de mandar a producir
+  ds11_perf.md                  # Performance del pipeline (caches, -O2, soak)
+  pin_map.md, memory_map.md     # Pines y layout de RAM (regla DMA vs DTCM)
+  ak5538vn_ref.md, pcm1690_ref.md, gpio_control.md, audio_architecture.md
+  ota_wifi.md, multinode.md, app_ios.md, instalacion_15_nodos.md
+  stm32/                        # Referencia RM0433 (clocks, SAI, DMA, I2C, GPIO)
+  datos/                        # Mediciones crudas en JSON + el .md que dice que se medía
+  img_osc/, media/              # Capturas de osciloscopio y video
+  historico/                    # Bring-up DS10 + esquematico DS9
+  pdf/                          # Plantilla y script para generar la guia en PDF
+
+datasheets/                     # Hojas de datos del MCU y los chips de audio
+webserver/                      # Control web multi-dispositivo (Flask + SQLite)
+sitio/                          # Pagina publica del proyecto
+ios/                            # App "Domosonica" (SwiftUI)
+mecenazgo/                      # ~320 MB de comprobantes — FUERA de git a proposito
 ```
+
+**Fuera del repo a propósito:** `firmware/build*/`, `firmware_esp32c3/build/`,
+`webserver/venv/`, `mecenazgo/`, `.ds12_audit/` (derivado del netlist), `*.wav`,
+`docs/pdf/*.pdf` (se regenera con `docs/pdf/hacer_pdf.sh`), y `secrets.h`.
+
+---
+
+## Antes de mandar una placa a producir
+
+```bash
+tools/check_pcb.sh --install    # una sola vez por copia del repo
+```
+
+Instala un hook de pre-commit que corre el DRC dos veces —con los rellenos guardados y
+con `--refill-zones`— y **bloquea el commit si el cobre guardado está viejo**. KiCad no
+recalcula los rellenos al plotear: usa lo que está guardado. Ese mecanismo ya arruinó dos
+tandas de la DS11 ([docs/ds11_errata.md](docs/ds11_errata.md)) y apareció una tercera vez,
+latente, en septiembre.
+
+Al exportar los gerbers, además: `kicad-cli pcb export gerbers --check-zones` (viene
+apagado por default).
 
 ---
 
@@ -177,37 +225,25 @@ ios/                            # App iOS "Domosonica" (SwiftUI) — control rem
 
 | Problema | Estado |
 |---|---|
-| Solo 1/4 PCM1690 poblado (rotación JLCPCB) | Reclamo cerrado (USD 355); DACs de repuesto pedidos a Mouser; firmware soporta los 4 |
-| ~~Beamforming stub~~ | ✅ Fases 0-4 implementadas en `feature/beamforming` (delay-and-sum RX, TX steering, AUTOFOCUS, control web) — pendiente validación en hardware |
-| Skew de fase entre SAI1 y SAI2 (ch0-15 vs 16-31) | Issue #14 — sync por SAI_GCR si hace falta |
-| Protocolo ESP32: config de 16ch / mutes 16-bit | `CMD_SET_BEAM`/`CMD_SET_MODE` ya cubren el uso normal; raw de 32ch pendiente (`CMD_RAW_CFG_32`) |
-| Underruns residuales (~4) en el bloque verboso de cada 10s | Benignos (DMA reusa half-buffer); recortados de ~15 a ~4 |
+| Skew de fase entre SAI1 y SAI2 (ch0-15 vs 16-31) | Medido: **4 µs** entre bancos. Sync por SAI_GCR si algún día molesta |
+| Protocolo ESP32: config de 16ch / mutes 16-bit | `CMD_SET_BEAM`/`CMD_SET_MODE` cubren el uso normal; raw de 32ch pendiente |
+| Underruns residuales (~4) en el bloque verboso de cada 10 s | Benignos (el DMA reusa el half-buffer) |
+| PA11/PA12 (USB_DM/DP del STM32) al aire | Ver [DS12_USB_STM32.md](hardware/DS/DS12_USB_STM32.md) |
+| Prueba de escucha del `-O2` | Pendiente desde la mejora de 43× del pipeline |
 
 ---
 
 ## Próximos Pasos
 
-1. Inyectar señal al ADC (ZOYI ZT-703S DDS) → verificar captura en ch0
-2. Loop completo: `test_tone_enabled=0` → señal inyectada sale por parlantes (ADC→beamform→DAC)
-3. Reponer DACs U1/U3/U4 → verificar 32 canales
-4. Implementar matriz de beamforming real (issue #13)
-5. **Control de volumen/balance per-canal via ESP32** (ver abajo)
-6. Aplicar upgrades DS11 para la placa de producción
-
-### Control de volumen via ESP32 (pendiente)
-
-La atenuación de salida vive en los **registros 72-79 del PCM1690** (per-canal,
-0.5dB, hoy fijos en −24dB vía `PCM1690_ATTEN_DEFAULT`). Para exponerlo como control
-remoto hay que:
-1. **Protocolo** (`uart_protocol.h`): nuevo comando `CMD_SET_ATTEN` (o extender el
-   payload de config) con un valor de atenuación por canal (0-255 → registro PCM1690).
-2. **STM32**: al recibirlo, llamar `PCM1690_SetAttenuation(hi2c1, dac_addr, ch, val)`.
-   Nota: es distinto de `beam_config.gains[]` (que se aplica en software en el
-   beamformer) — la atenuación del DAC es post-mezcla y no pierde resolución.
-3. **ESP32** (`firmware_esp32c3/main/main.c`): pasar el comando nuevo al STM32.
-4. **Webserver** (`webserver/app.py` + templates): sliders de volumen/balance por
-   canal, persistidos en `ds_config.db`.
+1. **Cerrar la DS12 y mandar a producir las 10 placas** — etapa de fuente + los ítems de
+   esquemático del §3 de [DS12_AUDITORIA.md](hardware/DS/DS12_AUDITORIA.md)
+2. Cortar y armar los nodos con la geometría **2×16** (el firmware ya la soporta:
+   `SPK_LAYOUT_2X16` en `main.c`)
+3. Control de volumen/balance per-canal vía ESP32 (registros 72-79 del PCM1690, hoy fijos
+   en −24 dB por `PCM1690_ATTEN_DEFAULT`)
+4. Instalación multi-nodo: [docs/multinode.md](docs/multinode.md) y
+   [docs/instalacion_15_nodos.md](docs/instalacion_15_nodos.md)
 
 ---
 
-**Última actualización:** 2026-06-12 — Bring-up DS10 (audio + ADC funcionando)
+**Última actualización:** 2026-09-11 — auditoría DS12 aplicada, orden del repo, hook de PCB.
