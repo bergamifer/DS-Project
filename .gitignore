@@ -125,3 +125,6 @@ firmware_esp32c3/main/secrets.h
 # edicion del .md y quedaria desincronizado del texto sin que nadie se entere.
 docs/pdf/*.pdf
 firmware/build_boot/
+
+# Digest del netlist — derivado, se regenera con tools/netlist_digest.py
+.ds12_audit/
