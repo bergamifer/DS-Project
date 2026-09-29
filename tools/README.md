@@ -4,9 +4,9 @@ Dos familias, y conviene no confundirlas:
 
 - **Medición acústica** (las ocho de abajo + `sweep_focus.sh`): hablan con el ESP32 por
   HTTP, con la placa encendida y sonando.
-- **Placa, madera y repositorio** (`check_pcb.sh`, `netlist_digest.py`,
-  `geometria_array.py`): trabajan sobre los archivos del proyecto —el KiCad y el
-  firmware—, sin tocar hardware. Están al final.
+- **Placa, madera y repositorio** (`check_pcb.sh`, `sch2net.py`, `pcb_status.py`,
+  `netlist_digest.py`, `netlist_diff.py`, `geometria_array.py`): trabajan sobre los
+  archivos del proyecto —el KiCad y el firmware—, sin tocar hardware. Están al final.
 
 Las de medición no necesitan el cable serie, y **ninguna enciende los amplificadores por su
 cuenta** — encender 32 amplificadores es una acción física y la decide una persona.
@@ -135,7 +135,9 @@ ESP=http://192.168.100.77 STEP=100 ./tools/sweep_focus.sh 800
 
 ## Placa, madera y repositorio
 
-Estas tres no hablan con la placa: leen los archivos del proyecto.
+Estas no hablan con la placa: leen los archivos del proyecto. Y **ninguna necesita
+KiCad instalado salvo `check_pcb.sh`**, así que la revisión de lo que se está dibujando
+se puede hacer desde cualquier máquina —incluida la nube— sin exportar nada a mano.
 
 ### `check_pcb.sh` — que no salgan gerbers con el cobre viejo
 KiCad **no recalcula los rellenos de zona al plotear**: usa el cobre que está guardado
@@ -158,6 +160,36 @@ tools/check_pcb.sh --install    # lo deja como hook de pre-commit
 
 Y al exportar: `kicad-cli pcb export gerbers --check-zones`, que viene apagado por default.
 
+### `sch2net.py` — el netlist derivado del esquemático, sin KiCad
+El netlist exportado (`.net`) está en el `.gitignore`, y sin él no hay forma de
+preguntarle nada al esquemático que se está dibujando. Esto lee los `.kicad_sch` —hojas
+con instancias múltiples, buses, etiquetas de los tres tipos, símbolos de alimentación,
+las doce orientaciones de símbolo— y escribe un netlist en el formato de eeschema, el
+que leen las dos herramientas de abajo.
+
+**Su autoprueba es contra KiCad mismo**: corrido sobre el esquemático de la DS11 y
+comparado con el netlist que exportó KiCad de esa placa, **0 diferencias de conexión en
+2049 pines**. Antes de eso, el primer intento creía que `~{SD}` era un bus.
+```
+tools/sch2net.py hardware/DS/DS.kicad_sch hardware/DS/DS.net      # DS.net queda fuera de git
+tools/netlist_diff.py hardware/DS/DS.txt hardware/DS/DS.net        # DS11 → lo dibujado
+tools/sch2net.py hardware/DS/DS.kicad_sch /tmp/x.net --erc         # pines sueltos, PWR_FLAG que faltan, alias
+```
+No reemplaza al netlist exportado para fabricar: sirve para revisar.
+
+### `pcb_status.py` — qué hay puesto en el PCB y qué falta
+Lee el `.kicad_pcb` y dice: qué huellas están fuera del contorno (las nuevas caen ahí al
+importar), qué redes no tienen un solo tramo de cobre, cuánto cobre quedó sin red
+(huérfano de componentes que se movieron), qué pads ubicados tocan una pista de **otra**
+red, y —con el netlist de `sch2net.py`— qué designadores faltan importar al PCB.
+```
+tools/pcb_status.py hardware/DS/DS.kicad_pcb hardware/DS/DS.net
+tools/netlist_diff.py hardware/DS/DS.net hardware/DS/DS.pcb.net    # esquemático ↔ PCB, red por red
+```
+**Calibrado sobre la DS11 fabricada** (DRC en 0): 0 huellas afuera, 0 redes sin cobre,
+0 cobre huérfano. Sus falsos positivos en ese archivo están anotados en el docstring, y
+hay que descontarlos. No es un DRC: los rellenos los toma como están guardados.
+
 ### `netlist_digest.py` — el netlist, en tres archivos grepables
 `hardware/DS/DS.txt` son 70.454 líneas. Cualquier pregunta de conectividad obliga a
 parsearlo entero; esto lo hace una vez y deja tres archivos en `.ds12_audit/` (derivado,
@@ -166,7 +198,7 @@ fuera de git).
 El dato útil: `redes.txt` trae la **cantidad de nodos** por red, así que buscar pines al
 aire es un `awk`, no una investigación.
 ```
-tools/netlist_digest.py
+tools/netlist_digest.py                        # usa DS.net si existe, si no DS.txt (la DS11)
 awk -F'\t' '$2==1' .ds12_audit/redes.txt     # pines que no van a ningun lado
 ```
 Así aparecieron PA11 y PA12 —`USB_DM`/`USB_DP`— flotando.

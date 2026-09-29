@@ -881,9 +881,9 @@ esquemático.** Esta tabla es para leer el documento con el esquemático al lado
 | R3 / R4 (UVLO) | **R151 / R156** | 470 k / 40,2 k |
 | R1 / R2 (FB buck A) | **R150 / R153** | 40,2 k / 7,5 k |
 | R1 / R2 (FB buck B) | **R155 / R154** | 62 k / 20 k |
-| pull-up de PG | **R152** | 100 k a `+3V3` |
+| pull-up de PG | **R159** | 100 k a `+3V3` (R152 quedó en serie hacia PA10) |
 | 100 Ω de J7.1 | **R31** | serie del VTref |
-| pull-down de `PDN_AK` | **R157** | 🔧 pasa de 10 k a **40,2 k** (§6.1) |
+| serie / pull-down de `PDN_AK` | **R157 / R158** | 10 k / 40,2 k (§6.1) |
 | D8′ (TVS) | **D9** | SMBJ20A |
 | D20 | **D20** | SS34, `VIN_LOCAL` → `VIN_B` |
 | D21 (`+5V_AUX` → `VIN_B`) | **D23** | SS34 |
@@ -892,5 +892,5 @@ esquemático.** Esta tabla es para leer el documento con el esquemático al lado
 | — | **D8 + F3** | nuevo: VBUS del USB del STM32 → `+5V_AUX` — D8 tiene que ser SS34 |
 | D11 (ST-Link) | **D11** | 🔧 SS34 (§3.4) |
 | BAT54 (§6.1) | **D3** | 🔧 BAT54C, no BAT54A |
-| PTC de expansión F3…F6 | **F4…F7** | todavía no dibujados |
+| PTC de expansión F3…F6 | **F4…F7** | dibujados el 29-sep, con `C523825` (1,1 A) en vez del `C883126` (500 mA) del §11.2: decidir |
 
