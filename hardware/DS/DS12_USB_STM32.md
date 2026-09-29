@@ -131,13 +131,20 @@ Un dispositivo **autoalimentado** tiene dos obligaciones frente al host:
 **Recomendación para el puerto nuevo del STM32: que VBUS no alimente absolutamente nada.**
 
 ```
-VBUS ──┬── 100 kΩ ──┬── PA9  (GPIO de entrada: "hay host")
+VBUS ──┬── 62 kΩ ───┬── PA9  (GPIO de entrada: "hay host")
        │            │
-       │           56 kΩ            5 V → 1,79 V (nivel alto seguro con VDD=3,3 V)
-       │            │
-       │          100 nF
-      GND         GND
+       │          100 kΩ            4,75-5,25 V → 2,93-3,24 V
+       │            │   ∥ 100 nF
+      GND          GND
 ```
+
+> 🔧 **Corrección 2026-09-28.** Decía 100 kΩ / 56 kΩ → 1,79 V «nivel alto seguro». **No lo es**:
+> el VIH del STM32H743 es **0,7 × VDD = 2,30 V** (DS12110, Tabla 50, testeado en producción; el
+> 0,47 × VDD + 0,25 = 1,79 V de la otra fila está sólo garantizado por diseño). Y con VBUS en su
+> mínimo de USB, 4,75 V, el divisor viejo daba 1,71 V. Con **62 k arriba / 100 k abajo** —dos
+> valores que ya están en el BOM (`C37825`, `C25741`)— PA9 queda entre **2,93 y 3,24 V** en todo el
+> rango de VBUS: arriba del VIH y **nunca arriba de VDD**, así que ni siquiera hace falta que el
+> pin sea tolerante a 5 V. Con la placa apagada drena 5 V / 162 kΩ ≈ 31 µA.
 
 Ventajas de que ese puerto no tome corriente:
 - Es **incondicionalmente seguro para la PC**: no hay ningún camino, ni de falla, por el que
@@ -317,7 +324,7 @@ funciona pero mete una restricción nueva en un árbol de relojes que ya costó 
 2. **Choque de modo común** en D+/D−, pegado al conector.
 3. **USBLC6-2P6** (C15999) después del choque.
 4. D+ → **PA12**, D− → **PA11**. Sin resistencias serie. Par de 90 Ω, apareado, corto.
-5. VBUS → **divisor 100 k / 56 k + 100 nF** → **PA9**. Sin camino de alimentación.
+5. VBUS → **divisor 62 k / 100 k + 100 nF** → **PA9** (🔧 no 100 k / 56 k: ver §5). Sin camino de alimentación.
 6. Dejar **PB14/PB15 sin usar** si es posible (hoy PB14 = I2S2_SDI hacia J5.5): mantiene
    `USB1_OTG_HS` entero y libre por si alguna vez se hace el Camino B.
 7. Serigrafía que distinga los dos puertos: **`AUDIO/DFU` (STM32)** y **`ESP32`**.

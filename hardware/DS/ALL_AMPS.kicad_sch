@@ -3918,6 +3918,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 182.88 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "f238d778-4e17-4e19-a150-27fe672df29a")
 		)
@@ -4143,6 +4154,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 231.14 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "a129d9ab-60e9-4673-a4ce-72eeec6f194c")
 		)
@@ -4280,6 +4302,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 198.12 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 198.12 87.63 90)
 			(hide yes)
 			(show_name no)
@@ -4515,6 +4548,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 222.25 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "9cd415ed-5a36-4881-9e7e-a17ee011e14f")
 		)
@@ -4652,6 +4696,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 190.5 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 190.5 87.63 90)
 			(hide yes)
 			(show_name no)
@@ -4809,6 +4864,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 214.63 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "dae6d9ae-f13c-4d6d-a824-0efdae2e2cbd")
 		)
@@ -4892,6 +4958,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 194.31 107.95 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 194.31 107.95 0)
 			(hide yes)
 			(show_name no)
@@ -5049,6 +5126,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 205.74 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "aee446f0-1bc7-42a1-b549-3423cda5d9b1")
 		)
@@ -5186,6 +5274,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 238.76 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 238.76 87.63 90)
 			(hide yes)
 			(show_name no)

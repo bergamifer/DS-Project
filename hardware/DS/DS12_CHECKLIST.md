@@ -52,9 +52,9 @@ PFM).
       **sólo R4** a 60,2 kΩ — ver la tabla de AL §3.2.
 - [ ] **COMP → GND** (compensación interna; sin RC externo).
 - [ ] **PG** → `PWR_GOOD_5V`, con **100 kΩ** (`C25741`) a `+3V3`, a un GPIO libre del STM32.
-      **Este net lo usan también los dos BAT54 del punto A.8: no es sólo telemetría.**
+      **Este net lo usa también el BAT54C del punto A.8: no es sólo telemetría.**
 - [ ] **BST** — 100 nF (`C1525`) a SW.
-- [ ] **SW** → **L1 6,8 µH, Isat 8,5 A**, `C408485` (11×10 mm).
+- [ ] **SW** → **L1 6,8 µH, Isat 9,6 A**, `C408485` (10×11 mm, `Inductor_SMD:L_Sunlord_MWSA1004S`).
 - [ ] **FB** — **R1 40,2 kΩ** (`C2933097`) de `+5VA`, **R2 7,5 kΩ** (`C23234`) a GND →
       **5,088 V**. Es literalmente el divisor de la DS11 (R34/R32).
 - [ ] **Cff 220 pF** (`C39122`) de `+5VA` a FB.
@@ -71,7 +71,7 @@ alguna vez no hay: AP63201WU-7 (`C2071044`).
 - [ ] **EN → VIN_B directo, sin divisor.** Tiene que arrancar también con ~4,1 V en modo
       USB: si le ponés UVLO, se pierde el modo de flasheo sin fuente.
 - [ ] **BST** — 100 nF a SW.
-- [ ] **SW** → **L2 6,8 µH**, Isat 4,3 A, `C57254` (6×6 mm).
+- [ ] **SW** → **L2 4,7 µH**, Isat 7,2 A, `C408447` — el MWSA0603S-4R7MT de la DS11 (AL §3.3, 🔧 2026-09-28).
 - [ ] **FB** — **R1 62 kΩ** (`C37825`, **el único valor de resistencia nuevo de todo el
       bloque**) de `+3V3`, **R2 20 kΩ** (`C25765`, = R31) a GND → **3,280 V**.
 - [ ] **Cff 100 pF** (`C327198`) en paralelo con R1 — **no 220 pF**. Con 220 pF el par
@@ -90,12 +90,11 @@ alguna vez no hay: AP63201WU-7 (`C2071044`).
 - [ ] **D20 y D21 no son opcionales**: sin D20 los 5 V del USB salen por J11/J12 a **todas
       las placas de la cadena**; sin D21 los 19,7 V de `VIN_B` vuelven al AP2125, cuyo
       máximo absoluto de entrada son **6 V**.
-- [ ] **F2** — PTC en el VBUS del USB-C. ⚠️ **Decisión abierta**: el de `C269116` es
-      750 mA de hold contra un **pico real de 900 mA** (ESP32 en TX + STM32 + DACs). Si
-      dispara, la placa se apaga y vuelve sola cada ~30 s — indistinguible de un brown-out,
-      que es el cuadro que costó semanas en agosto. Opciones: **(1)** PTC de 1,1 A de hold;
-      **(2)** D2 y D21 a Schottky de menor Vf (SS54/PMEG) → recupera ~200 mV; **(3)** medir
-      el pico antes de congelar. Ver AL §3.4.
+- [ ] **F2 y F3** — PTC en los dos VBUS (USB del ESP32 y USB del STM32): **SMD1206P110TF/16,
+      `C523825`**, 1,1 A hold / 2,2 A trip, footprint 1206 (el mismo que el fusible). 🔧 Decidido
+      el 2026-09-28: el de 750 mA quedaba debajo del pico real de 900 mA. AL §3.4.
+- [ ] **D2, D8 (USB del STM32) y D11 (ST-Link) a SS34** (`C8678`, `D_SMA`): con B5819W el
+      modo sólo-USB se queda sin margen. El de `+5VA` → `+5V_AUX` puede seguir B5819W. AL §3.4.
 
 ### A.5 Riel analógico `+3,3VA` — AL §3.5
 
@@ -126,17 +125,18 @@ alguna vez no hay: AP63201WU-7 (`C2071044`).
 El UVLO del buck A inventa un estado que la DS11 nunca tuvo: el dominio analógico se apaga
 y vuelve **mientras el digital nunca se cae**. Dos cosas dependían de que todo muriera junto.
 
-- [ ] **PDN_AK**: PC7 lo maneja **a través de 10 kΩ**, y un **BAT54 con el cátodo a
-      `PDN_AK` y el ánodo a `PWR_GOOD_5V`**. Cuando PG cae, arrastra PDN_AK; cuando sube, la
-      resistencia deja que PC7 lo maneje normal. Sin esto **el AK5538 no vuelve a resetearse
-      nunca** y puede seguir entregando muestras que parecen válidas.
-- [ ] **Lo mismo sobre `~RST` de los PCM1690** — tienen el mismo problema, porque VCC1/VCC2
-      vienen de `+5VA`.
-- [ ] **Los 32 pines `SD` de los PAM** quedan a 3,3 V con `+5VA` en 0 V, por encima del VDD
-      del propio amplificador. El firmware bajando SD al ver caer PG es una carrera; la
-      versión de hardware es la misma de arriba.
-- [ ] **Pull-down de 10 kΩ (`C25744`) en `PDN_AK` a GND** — AL §3.8. Hoy el net tiene sólo
-      dos nodos y el pin flota hasta que el firmware lo maneja.
+- [ ] **PDN_AK**: PC7 lo maneja **a través de 10 kΩ** (`C25744`), y un **BAT54C** (`C2135`,
+      cátodo común) con el **ánodo (pin 1) en `PDN_AK` y el cátodo (pin 3) en `PWR_GOOD_5V`**.
+      🔴 *La versión anterior lo tenía al revés*: así el diodo quedaba en inverso justo cuando
+      tenía que conducir. Cuando PG cae, arrastra PDN_AK; cuando sube, PC7 manda. Sin esto **el
+      AK5538 no vuelve a resetearse nunca**. AL §6.1.
+- [ ] **Pull-down de `PDN_AK` a GND: 40,2 kΩ** (`C2933097`), **no 10 kΩ** — con la serie de
+      10 kΩ, un pull-down de 10 kΩ deja el alto en 1,65 V, debajo del VIH del AK5538 (2,30 V).
+      AL §3.8 + §6.1.
+- [ ] ~~`~RST` de los PCM1690 con otro diodo~~ → **en firmware** (su power-on-reset vigila VDD,
+      que no se cae). AL §6.1.
+- [ ] ~~`SD` de los PAM con un diodo~~ → **en firmware** por interrupción en PA10: la carrera se
+      gana por milisegundos, y el diodo le sacaría 90 mA a PD3 por los 33 Ω de R20. AL §6.1.
 
 ---
 

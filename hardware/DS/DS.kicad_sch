@@ -404,17 +404,6 @@
 			(embedded_fonts no)
 		)
 	)
-	(text "##Changelog DS11##\nRJ45 x 4 corregida orientacion de conexionado\n"
-		(exclude_from_sim no)
-		(at 46.99 172.72 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "57a88aa3-5fcd-41d7-a6bd-2e7dd159f567")
-	)
 	(bus
 		(pts
 			(xy 200.66 73.66) (xy 200.66 38.1)
@@ -555,6 +544,16 @@
 		)
 		(uuid "7202b72e-c947-4056-b54e-8f4eaa8d0e1c")
 	)
+	(wire
+		(pts
+			(xy 97.79 160.02) (xy 228.6 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "794e5909-a79d-40a2-88ef-4012d73663b8")
+	)
 	(bus
 		(pts
 			(xy 198.12 73.66) (xy 200.66 73.66)
@@ -574,6 +573,16 @@
 			(type default)
 		)
 		(uuid "8936da7b-a66f-4118-8d88-37f0a3c0fc4a")
+	)
+	(wire
+		(pts
+			(xy 231.14 148.59) (xy 228.6 148.59)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8b44c4e2-c0e5-47ac-b3bf-98e8cbce4128")
 	)
 	(wire
 		(pts
@@ -707,6 +716,16 @@
 	)
 	(wire
 		(pts
+			(xy 97.79 153.67) (xy 97.79 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b23cf92c-94ed-41af-91a5-791dfb7292c7")
+	)
+	(wire
+		(pts
 			(xy 161.29 27.94) (xy 163.83 27.94)
 		)
 		(stroke
@@ -804,6 +823,16 @@
 			(type default)
 		)
 		(uuid "e7ba99eb-5812-4045-ab31-2c85f507b54d")
+	)
+	(wire
+		(pts
+			(xy 228.6 148.59) (xy 228.6 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e916a526-5e86-4656-8d6f-b123054ab33b")
 	)
 	(bus
 		(pts
@@ -1101,6 +1130,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 85.09 129.54 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 85.09 129.54 90)
 			(hide yes)
 			(show_name no)
@@ -1652,9 +1692,9 @@
 				(justify right)
 			)
 		)
-		(pin "GPIO8" bidirectional
+		(pin "GPIO4" bidirectional
 			(at 80.01 129.54 0)
-			(uuid "4c1e18b0-15a1-4778-9189-02198c2dfce5")
+			(uuid "270b9dab-daf4-40aa-b40d-fdfa074ebc4f")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2217,7 +2257,6 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(stroke
 			(width 0.1524)
 			(type solid)
@@ -2238,7 +2277,7 @@
 			)
 		)
 		(property "Sheetfile" "stm32_custom.kicad_sch"
-			(at 92.71 154.2546 0)
+			(at 98.806 154.686 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -2478,9 +2517,29 @@
 				(justify left)
 			)
 		)
-		(pin "PC13" bidirectional
+		(pin "PA9" bidirectional
+			(at 95.25 153.67 270)
+			(uuid "9c1d96fc-ca0d-4a09-b034-01b28c049145")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "PWR_GOOD" bidirectional
+			(at 97.79 153.67 270)
+			(uuid "927b3c08-c621-466c-9778-e4a6ceea5c23")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "PD2" bidirectional
 			(at 92.71 129.54 180)
-			(uuid "ef791434-f0a3-43d1-ad3b-313899654816")
+			(uuid "168e349a-0937-4422-a6ef-4c66a9c3dcac")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2532,6 +2591,16 @@
 					(size 1.27 1.27)
 				)
 				(justify left top)
+			)
+		)
+		(pin "PG" input
+			(at 231.14 148.59 180)
+			(uuid "a92bdc7c-73df-4339-8c62-dd83033fef00")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
 			)
 		)
 		(instances

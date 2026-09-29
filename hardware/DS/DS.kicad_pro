@@ -78,10 +78,6 @@
       ],
       "drc_exclusions": [
         [
-          "clearance|136656374|64170272|5863fd60-e716-4377-8e66-2fbb62b7f03e|ff16f3fa-a757-46d7-ac05-532f568b991d",
-          ""
-        ],
-        [
           "clearance|0|0|5863fd60-e716-4377-8e66-2fbb62b7f03e|e836cf7d-63db-463e-95e2-c37197021f85",
           ""
         ],
@@ -155,6 +151,10 @@
         ],
         [
           "clearance|135926000|60749000|5863fd60-e716-4377-8e66-2fbb62b7f03e|63e941f9-835e-429a-b386-f7176bf815e7",
+          ""
+        ],
+        [
+          "clearance|136656374|64170272|5863fd60-e716-4377-8e66-2fbb62b7f03e|ff16f3fa-a757-46d7-ac05-532f568b991d",
           ""
         ],
         [
@@ -994,7 +994,7 @@
         "uuid": "29234817-d0fa-4eb1-a474-1667c7510ed7"
       }
     ],
-    "used_designators": "",
+    "used_designators": "D3,#PWR134,#PWR158,#PWR162,#PWR183,#PWR433,R152,R157-161,C50,C324",
     "variants": []
   },
   "sheets": [
