@@ -7868,7 +7868,7 @@
 	)
 	(rectangle
 		(start 135.89 164.465)
-		(end 176.022 188.722)
+		(end 176.022 196.85)
 		(stroke
 			(width 0)
 			(type dot)
@@ -8126,7 +8126,7 @@
 	)
 	(text "Control DACS"
 		(exclude_from_sim no)
-		(at 168.402 186.69 0)
+		(at 168.402 194.31 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8393,6 +8393,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "db8ec48d-18ba-4f53-a47b-0235a7817aca")
+	)
+	(junction
+		(at 152.4 190.5)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ead971e4-bf8f-4c69-8441-7386768dc748")
 	)
 	(junction
 		(at 269.24 95.25)
@@ -8690,6 +8696,16 @@
 	)
 	(wire
 		(pts
+			(xy 152.4 186.69) (xy 152.4 190.5)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "236267a5-59b3-4df0-81bc-2f161c411119")
+	)
+	(wire
+		(pts
 			(xy 101.6 120.65) (xy 111.76 120.65)
 		)
 		(stroke
@@ -8890,7 +8906,7 @@
 	)
 	(wire
 		(pts
-			(xy 148.59 182.88) (xy 170.18 182.88)
+			(xy 148.59 190.5) (xy 152.4 190.5)
 		)
 		(stroke
 			(width 0)
@@ -9437,6 +9453,16 @@
 			(type default)
 		)
 		(uuid "bcfe896e-4ecf-4a7d-8f61-4bb10a60ae33")
+	)
+	(wire
+		(pts
+			(xy 152.4 190.5) (xy 170.18 190.5)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c0389d47-8b3c-4d8e-aa28-a1f68ad119da")
 	)
 	(wire
 		(pts
@@ -10529,7 +10555,7 @@
 		(uuid "c64d84df-c738-4ef6-8635-e464a4e604e1")
 	)
 	(label "PC10"
-		(at 170.18 182.88 0)
+		(at 170.18 190.5 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -10884,7 +10910,7 @@
 	)
 	(global_label "AMUTEO"
 		(shape output)
-		(at 148.59 182.88 180)
+		(at 148.59 190.5 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -10894,7 +10920,7 @@
 		)
 		(uuid "f0498377-5bed-4b52-ab7f-f758d6d13bdd")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 138.2872 182.88 0)
+			(at 138.2872 190.5 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11224,6 +11250,130 @@
 			(justify right)
 		)
 		(uuid "fdd6a2f5-b78b-4292-b318-e9a4584a346c")
+	)
+	(symbol
+		(lib_id "Device:Fuse_Small")
+		(at 165.1 134.62 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "01937024-1a0e-4577-9e09-9174f7e43703")
+		(property "Reference" "F7"
+			(at 165.1 133.096 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Fuse_Small"
+			(at 165.1 136.144 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Fuse:Fuse_1206_3216Metric"
+			(at 165.1 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://jlc-prod-smt.oss-eu-central-1.aliyuncs.com/smtDataManualFile/8588899536970928128-C136345.pdf?response-content-disposition=attachment%3B%20filename%3DC136345.pdf%3B%20filename%2A%3DUTF-8%27%27C136345.pdf&x-oss-date=20260912T142222Z&x-oss-expires=1800&x-oss-security-token=CAISgAN1q6Ft5B2yfSjIr5r%2FMs%2F3v%2Bhi1JS7YEiFpjgkevxBvIjAiTz2IHhMdHJsAOodtv0%2FmmhT6PkclqRLcbhpcmfjV%2BZHzLB8qcZ031Ag557b16cNrbH4M4H6aXeirtuwDsz9SNTCALjPD3nPii50x5bjaDymRCbLGJaViJlhHLN1Ow6jdmhpCctxLAlvo9NgFxm3D%2Fu2NQPwiWf9FVdhvhEG6Vly8qOi2MaRmFy8yFTx0b0SvJ%2BjYMrmPctoN9JnSdC5mfdzau3a1TJ84gRD0a5wkaVA1zbDs5bfISEIuUzebreLqY03dV4mOvdqIcMe8qigz88fk%2FfIioH6xyxKOexoSCnFTOiiupCcQLPyao9jLu6iayqViY7QaIOTqQohZmkAMwVOasAsI3Ngh4zF97Qt0cVNkXO9gWfLI8DtuMleWqrGm0r9MjvyAFpORa%2Bb5wchMHn6pr9EWOXuJZUIn3b%2FstWNupKq5ldctHSeoXq108CXVnU5PXYIDe4RvqKWD5sagAGUp7IahESquTDrZSx80z8GND8cVkJtKDI1eNVnACO3lZf%2BnE2V3IUUN%2BfUYSJibMCHn%2FyOAAqlUpRs6Vkc45xJ5EWOUM3De8lwDAbQ4YQXBTIvZyNHOcYVz8bwdyZuPUYs6QNxIbFC%2FOuXj6NmpCAq85qUeqPb%2B1w3bpns1oIV7yAA&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-credential=STS.NYJyuCR7CcVPbn4B8qvsmSMkk%2F20260912%2Feu-central-1%2Foss%2Faliyun_v4_request&x-oss-signature=7bd9fc72be2fb145d69d238fdc04b96ac52ed6bdf587f9d8be39efd2d04363f8"
+			(at 165.1 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "-55℃~+125℃ 0.41 1.6mm 2A 3.2mm 50A 63V 63V Surface Mount Fuse 1206 Disposable fuses ROHS"
+			(at 165.1 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C523825"
+			(at 165.1 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Price" "0.06"
+			(at 165.1 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
+			(at 165.1 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer_Part_Number" "SMD1206P110TF/16"
+			(at 165.1 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "439c67e6-0f3b-49f2-a483-27060d882592")
+		)
+		(pin "1"
+			(uuid "138c4428-46ee-4de6-ab58-4ae1184a0e8a")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/be371a88-efb0-4d81-a145-de12e98fac57"
+					(reference "F7")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Device:R_Small")
@@ -14118,6 +14268,130 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:Fuse_Small")
+		(at 139.7 134.62 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "2ae312fd-c94f-4b09-ac4d-054b46da3829")
+		(property "Reference" "F6"
+			(at 139.7 133.096 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Fuse_Small"
+			(at 139.7 136.144 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Fuse:Fuse_1206_3216Metric"
+			(at 139.7 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://jlc-prod-smt.oss-eu-central-1.aliyuncs.com/smtDataManualFile/8588899536970928128-C136345.pdf?response-content-disposition=attachment%3B%20filename%3DC136345.pdf%3B%20filename%2A%3DUTF-8%27%27C136345.pdf&x-oss-date=20260912T142222Z&x-oss-expires=1800&x-oss-security-token=CAISgAN1q6Ft5B2yfSjIr5r%2FMs%2F3v%2Bhi1JS7YEiFpjgkevxBvIjAiTz2IHhMdHJsAOodtv0%2FmmhT6PkclqRLcbhpcmfjV%2BZHzLB8qcZ031Ag557b16cNrbH4M4H6aXeirtuwDsz9SNTCALjPD3nPii50x5bjaDymRCbLGJaViJlhHLN1Ow6jdmhpCctxLAlvo9NgFxm3D%2Fu2NQPwiWf9FVdhvhEG6Vly8qOi2MaRmFy8yFTx0b0SvJ%2BjYMrmPctoN9JnSdC5mfdzau3a1TJ84gRD0a5wkaVA1zbDs5bfISEIuUzebreLqY03dV4mOvdqIcMe8qigz88fk%2FfIioH6xyxKOexoSCnFTOiiupCcQLPyao9jLu6iayqViY7QaIOTqQohZmkAMwVOasAsI3Ngh4zF97Qt0cVNkXO9gWfLI8DtuMleWqrGm0r9MjvyAFpORa%2Bb5wchMHn6pr9EWOXuJZUIn3b%2FstWNupKq5ldctHSeoXq108CXVnU5PXYIDe4RvqKWD5sagAGUp7IahESquTDrZSx80z8GND8cVkJtKDI1eNVnACO3lZf%2BnE2V3IUUN%2BfUYSJibMCHn%2FyOAAqlUpRs6Vkc45xJ5EWOUM3De8lwDAbQ4YQXBTIvZyNHOcYVz8bwdyZuPUYs6QNxIbFC%2FOuXj6NmpCAq85qUeqPb%2B1w3bpns1oIV7yAA&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-credential=STS.NYJyuCR7CcVPbn4B8qvsmSMkk%2F20260912%2Feu-central-1%2Foss%2Faliyun_v4_request&x-oss-signature=7bd9fc72be2fb145d69d238fdc04b96ac52ed6bdf587f9d8be39efd2d04363f8"
+			(at 139.7 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "-55℃~+125℃ 0.41 1.6mm 2A 3.2mm 50A 63V 63V Surface Mount Fuse 1206 Disposable fuses ROHS"
+			(at 139.7 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C523825"
+			(at 139.7 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Price" "0.06"
+			(at 139.7 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
+			(at 139.7 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer_Part_Number" "SMD1206P110TF/16"
+			(at 139.7 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "69289035-f89c-4d2b-8627-8096d3aee738")
+		)
+		(pin "1"
+			(uuid "1c691e05-4bb1-492a-86cc-726572f103b6")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/be371a88-efb0-4d81-a145-de12e98fac57"
+					(reference "F6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:LED_Small")
 		(at 265.43 143.51 90)
 		(unit 1)
@@ -16100,7 +16374,7 @@
 	)
 	(symbol
 		(lib_id "power:+3.3V")
-		(at 142.24 137.16 90)
+		(at 137.16 137.16 90)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -16110,7 +16384,7 @@
 		(dnp no)
 		(uuid "432ca9bd-e3cc-4cca-9ba6-be9d91c179fe")
 		(property "Reference" "#PWR0135"
-			(at 146.05 137.16 0)
+			(at 140.97 137.16 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16121,7 +16395,7 @@
 			)
 		)
 		(property "Value" "+3V3"
-			(at 136.144 137.16 90)
+			(at 131.064 137.16 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -16131,7 +16405,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 142.24 137.16 0)
+			(at 137.16 137.16 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16142,7 +16416,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 142.24 137.16 0)
+			(at 137.16 137.16 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16153,7 +16427,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
-			(at 142.24 137.16 0)
+			(at 137.16 137.16 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18401,8 +18675,132 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:Fuse_Small")
+		(at 165.1 137.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "6342fae9-29ab-47dd-95a0-b20829a9bcdc")
+		(property "Reference" "F5"
+			(at 165.1 135.636 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Fuse_Small"
+			(at 165.1 138.684 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Fuse:Fuse_1206_3216Metric"
+			(at 165.1 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://jlc-prod-smt.oss-eu-central-1.aliyuncs.com/smtDataManualFile/8588899536970928128-C136345.pdf?response-content-disposition=attachment%3B%20filename%3DC136345.pdf%3B%20filename%2A%3DUTF-8%27%27C136345.pdf&x-oss-date=20260912T142222Z&x-oss-expires=1800&x-oss-security-token=CAISgAN1q6Ft5B2yfSjIr5r%2FMs%2F3v%2Bhi1JS7YEiFpjgkevxBvIjAiTz2IHhMdHJsAOodtv0%2FmmhT6PkclqRLcbhpcmfjV%2BZHzLB8qcZ031Ag557b16cNrbH4M4H6aXeirtuwDsz9SNTCALjPD3nPii50x5bjaDymRCbLGJaViJlhHLN1Ow6jdmhpCctxLAlvo9NgFxm3D%2Fu2NQPwiWf9FVdhvhEG6Vly8qOi2MaRmFy8yFTx0b0SvJ%2BjYMrmPctoN9JnSdC5mfdzau3a1TJ84gRD0a5wkaVA1zbDs5bfISEIuUzebreLqY03dV4mOvdqIcMe8qigz88fk%2FfIioH6xyxKOexoSCnFTOiiupCcQLPyao9jLu6iayqViY7QaIOTqQohZmkAMwVOasAsI3Ngh4zF97Qt0cVNkXO9gWfLI8DtuMleWqrGm0r9MjvyAFpORa%2Bb5wchMHn6pr9EWOXuJZUIn3b%2FstWNupKq5ldctHSeoXq108CXVnU5PXYIDe4RvqKWD5sagAGUp7IahESquTDrZSx80z8GND8cVkJtKDI1eNVnACO3lZf%2BnE2V3IUUN%2BfUYSJibMCHn%2FyOAAqlUpRs6Vkc45xJ5EWOUM3De8lwDAbQ4YQXBTIvZyNHOcYVz8bwdyZuPUYs6QNxIbFC%2FOuXj6NmpCAq85qUeqPb%2B1w3bpns1oIV7yAA&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-credential=STS.NYJyuCR7CcVPbn4B8qvsmSMkk%2F20260912%2Feu-central-1%2Foss%2Faliyun_v4_request&x-oss-signature=7bd9fc72be2fb145d69d238fdc04b96ac52ed6bdf587f9d8be39efd2d04363f8"
+			(at 165.1 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "-55℃~+125℃ 0.41 1.6mm 2A 3.2mm 50A 63V 63V Surface Mount Fuse 1206 Disposable fuses ROHS"
+			(at 165.1 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C523825"
+			(at 165.1 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Price" "0.06"
+			(at 165.1 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
+			(at 165.1 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer_Part_Number" "SMD1206P110TF/16"
+			(at 165.1 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "04e08d03-8c7c-4020-adfa-9126a5d2f48e")
+		)
+		(pin "1"
+			(uuid "d49c2e44-7084-4016-97a6-bfc0480bb80f")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/be371a88-efb0-4d81-a145-de12e98fac57"
+					(reference "F5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:+5V")
-		(at 142.24 134.62 90)
+		(at 137.16 134.62 90)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -18412,7 +18810,7 @@
 		(dnp no)
 		(uuid "654dbf15-309b-4e75-ad5d-e51bde19a8d8")
 		(property "Reference" "#PWR0431"
-			(at 146.05 134.62 0)
+			(at 140.97 134.62 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18423,7 +18821,7 @@
 			)
 		)
 		(property "Value" "+5V_AUX"
-			(at 139.192 134.366 90)
+			(at 134.112 134.366 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -18434,7 +18832,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 142.24 134.62 0)
+			(at 137.16 134.62 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18445,7 +18843,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 142.24 134.62 0)
+			(at 137.16 134.62 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18456,7 +18854,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+5V\""
-			(at 142.24 134.62 0)
+			(at 137.16 134.62 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18550,6 +18948,162 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/be371a88-efb0-4d81-a145-de12e98fac57"
 					(reference "#PWR0142")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_Small")
+		(at 154.94 186.69 90)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "662b72ed-e978-4a4d-b0c9-cd17fc3def7f")
+		(property "Reference" "R24"
+			(at 154.94 188.468 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "10k"
+			(at 154.94 184.912 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+			(at 154.94 186.69 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://jlcpcb.com/api/file/downloadByFileSystemAccessId/8556212101498380288"
+			(at 154.94 186.69 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "-55℃~+155℃ 10kΩ 50V 62.5mW Thick Film Resistor ±1% ±100ppm/℃ 0402 Chip Resistor - Surface Mount ROHS"
+			(at 154.94 186.69 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Mouser part" "603-RC0603JR-1310KL"
+			(at 165.862 182.626 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Price" "0.0008"
+			(at 154.94 186.69 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Version" ""
+			(at 154.94 186.69 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer_Part_Number" "0402WGF1002TCE"
+			(at 154.94 186.69 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C25744"
+			(at 154.94 186.69 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Field8" ""
+			(at 154.94 186.69 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
+			(at 154.94 186.69 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "cc55789f-eb4a-4d8a-8cbe-875584281773")
+		)
+		(pin "2"
+			(uuid "39e14614-f80a-4c24-9b26-7409f3c14a31")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/be371a88-efb0-4d81-a145-de12e98fac57"
+					(reference "R24")
 					(unit 1)
 				)
 			)
@@ -18945,7 +19499,7 @@
 	)
 	(symbol
 		(lib_id "power:+5V")
-		(at 162.56 134.62 270)
+		(at 167.64 134.62 270)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -18955,7 +19509,7 @@
 		(dnp no)
 		(uuid "6b6dcea4-4ca7-4473-a344-2a0b66ff684c")
 		(property "Reference" "#PWR0407"
-			(at 158.75 134.62 0)
+			(at 163.83 134.62 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18966,7 +19520,7 @@
 			)
 		)
 		(property "Value" "+5V_AUX"
-			(at 165.354 134.112 90)
+			(at 170.434 134.112 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -18977,7 +19531,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 162.56 134.62 0)
+			(at 167.64 134.62 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18988,7 +19542,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 162.56 134.62 0)
+			(at 167.64 134.62 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18999,7 +19553,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+5V\""
-			(at 162.56 134.62 0)
+			(at 167.64 134.62 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -19590,6 +20144,7 @@
 		)
 		(property "Value" "Fuse_Small"
 			(at 214.63 76.454 0)
+			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -22482,7 +23037,7 @@
 	)
 	(symbol
 		(lib_id "power:+3.3V")
-		(at 162.56 137.16 270)
+		(at 167.64 137.16 270)
 		(mirror x)
 		(unit 1)
 		(body_style 1)
@@ -22493,7 +23048,7 @@
 		(dnp no)
 		(uuid "a579b5f2-4626-455d-a00e-84be03714667")
 		(property "Reference" "#PWR0145"
-			(at 158.75 137.16 0)
+			(at 163.83 137.16 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -22504,7 +23059,7 @@
 			)
 		)
 		(property "Value" "+3V3"
-			(at 168.148 136.652 90)
+			(at 173.228 136.652 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -22514,7 +23069,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 162.56 137.16 0)
+			(at 167.64 137.16 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -22525,7 +23080,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 162.56 137.16 0)
+			(at 167.64 137.16 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -22536,7 +23091,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
-			(at 162.56 137.16 0)
+			(at 167.64 137.16 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -24746,6 +25301,130 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:Fuse_Small")
+		(at 139.7 137.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "c6ad0181-a2fc-4f18-8c99-f31a6e3dc014")
+		(property "Reference" "F4"
+			(at 139.7 135.636 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Fuse_Small"
+			(at 139.7 138.684 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Fuse:Fuse_1206_3216Metric"
+			(at 139.7 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://jlc-prod-smt.oss-eu-central-1.aliyuncs.com/smtDataManualFile/8588899536970928128-C136345.pdf?response-content-disposition=attachment%3B%20filename%3DC136345.pdf%3B%20filename%2A%3DUTF-8%27%27C136345.pdf&x-oss-date=20260912T142222Z&x-oss-expires=1800&x-oss-security-token=CAISgAN1q6Ft5B2yfSjIr5r%2FMs%2F3v%2Bhi1JS7YEiFpjgkevxBvIjAiTz2IHhMdHJsAOodtv0%2FmmhT6PkclqRLcbhpcmfjV%2BZHzLB8qcZ031Ag557b16cNrbH4M4H6aXeirtuwDsz9SNTCALjPD3nPii50x5bjaDymRCbLGJaViJlhHLN1Ow6jdmhpCctxLAlvo9NgFxm3D%2Fu2NQPwiWf9FVdhvhEG6Vly8qOi2MaRmFy8yFTx0b0SvJ%2BjYMrmPctoN9JnSdC5mfdzau3a1TJ84gRD0a5wkaVA1zbDs5bfISEIuUzebreLqY03dV4mOvdqIcMe8qigz88fk%2FfIioH6xyxKOexoSCnFTOiiupCcQLPyao9jLu6iayqViY7QaIOTqQohZmkAMwVOasAsI3Ngh4zF97Qt0cVNkXO9gWfLI8DtuMleWqrGm0r9MjvyAFpORa%2Bb5wchMHn6pr9EWOXuJZUIn3b%2FstWNupKq5ldctHSeoXq108CXVnU5PXYIDe4RvqKWD5sagAGUp7IahESquTDrZSx80z8GND8cVkJtKDI1eNVnACO3lZf%2BnE2V3IUUN%2BfUYSJibMCHn%2FyOAAqlUpRs6Vkc45xJ5EWOUM3De8lwDAbQ4YQXBTIvZyNHOcYVz8bwdyZuPUYs6QNxIbFC%2FOuXj6NmpCAq85qUeqPb%2B1w3bpns1oIV7yAA&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-credential=STS.NYJyuCR7CcVPbn4B8qvsmSMkk%2F20260912%2Feu-central-1%2Foss%2Faliyun_v4_request&x-oss-signature=7bd9fc72be2fb145d69d238fdc04b96ac52ed6bdf587f9d8be39efd2d04363f8"
+			(at 139.7 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "-55℃~+125℃ 0.41 1.6mm 2A 3.2mm 50A 63V 63V Surface Mount Fuse 1206 Disposable fuses ROHS"
+			(at 139.7 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C523825"
+			(at 139.7 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Price" "0.06"
+			(at 139.7 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
+			(at 139.7 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer_Part_Number" "SMD1206P110TF/16"
+			(at 139.7 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "861d030c-aaa1-449f-a5f5-2762670689ed")
+		)
+		(pin "1"
+			(uuid "b851c7f0-df9b-4290-b5c3-911fd1a30edb")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/be371a88-efb0-4d81-a145-de12e98fac57"
+					(reference "F4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 229.87 40.64 0)
 		(unit 1)
@@ -26159,6 +26838,83 @@
 			(project "DS"
 				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/be371a88-efb0-4d81-a145-de12e98fac57"
 					(reference "#PWR0162")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+3.3V")
+		(at 157.48 186.69 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "e928e34d-83dc-4059-aafc-47d2b6c3a46d")
+		(property "Reference" "#PWR0144"
+			(at 153.67 186.69 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3V3"
+			(at 162.56 186.69 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 157.48 186.69 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 157.48 186.69 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 157.48 186.69 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d243765f-7f7b-4692-b08c-fcdef0759559")
+		)
+		(instances
+			(project "DS"
+				(path "/29234817-d0fa-4eb1-a474-1667c7510ed7/be371a88-efb0-4d81-a145-de12e98fac57"
+					(reference "#PWR0144")
 					(unit 1)
 				)
 			)
