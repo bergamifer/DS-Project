@@ -5,7 +5,8 @@
 	(uuid "29234817-d0fa-4eb1-a474-1667c7510ed7")
 	(paper "A4")
 	(title_block
-		(title "Master DS11")
+		(title "Master DS12")
+		(date "2026-09-29")
 	)
 	(lib_symbols
 		(symbol "Device:R_Small"
@@ -2510,16 +2511,6 @@
 		(pin "PA15" input
 			(at 92.71 83.82 180)
 			(uuid "b89ed972-0114-4841-b31a-70a59f349965")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(pin "PA9" bidirectional
-			(at 95.25 153.67 270)
-			(uuid "9c1d96fc-ca0d-4a09-b034-01b28c049145")
 			(effects
 				(font
 					(size 1.27 1.27)

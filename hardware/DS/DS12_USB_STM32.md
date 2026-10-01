@@ -6,6 +6,12 @@
 >
 > Datos verificados ✅ contra `DS.txt` (netlist de producción DS11) y contra
 > `datasheets/stm32h743vi.pdf` (DS12110 Rev 11). Los ⚠️ hay que confirmarlos.
+>
+> 🔧 **Revisión 2026-09-29 — contra el esquemático dibujado.** Tres cosas cambiaron respecto de
+> lo que decía este documento: **(1)** el VBUS del puerto nuevo **sí alimenta** `+5V_AUX`, por
+> F3 + D8, para que el DFU funcione sin fuente (§4.2); **(2)** el orden de la protección es
+> **USBLC6 primero y el choque después**, no al revés (§4.1 y §9); **(3)** el choque ya tiene part
+> number: **FL1 = Murata DLW21SN900HQ2L, `C97855`** (§9).
 
 ---
 
@@ -75,7 +81,7 @@ están integradas. **No hay que poner los 33 Ω que sí lleva el ESP32 en R12/R1
 Detalle importante del encapsulado, también textual: *"Dedicated supply inputs for USB
 (OTG_FS and OTG_HS) are available on all packages **except LQFP100**"* ✅. O sea que en la
 placa actual **el transceptor USB se alimenta de `VDD`**, y el datasheet exige
-`VDD33USB = 3,0 a 3,6 V` cuando se usa USB. Nuestro riel nuevo de 3,30 V ±2 % (3,23-3,37 V)
+`VDD33USB = 3,0 a 3,6 V` cuando se usa USB. Nuestro riel nuevo de 3,28 V (3,20-3,36 V con tolerancias)
 cumple ✅ — y es una razón más para el **MAX809S** en vez del T
 (ver [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md) §3.6): el supervisor debe disparar
 **antes** de que el riel deje de ser válido para USB.
@@ -107,16 +113,27 @@ Hay dos cosas distintas que se llaman "protección USB" y conviene no mezclarlas
 
 ### 4.1 Protección eléctrica de las líneas de datos
 - **ESD**: un **USBLC6-2P6** (SOT-666, LCSC C15999 — el mismo que ya usa el ESP32 en U6) en
-  D+/D−, **entre el conector y el STM32**, lo más cerca posible del conector.
-- **Choque de modo común** (p. ej. Murata DLW21SN900HQ2, 90 Ω @100 MHz) en el par, **entre
-  el conector y el USBLC6**. En una placa con 32 amplificadores clase D esto no es
+  D+/D−, lo más cerca posible del conector: **es lo primero que tiene que encontrar una
+  descarga**.
+- **Choque de modo común** (Murata **DLW21SN900HQ2L**, `C97855`, 90 Ω @100 MHz) en el par,
+  **entre el USBLC6 y el STM32**. En una placa con 32 amplificadores clase D esto no es
   cosmética: es lo que impide que el cable USB se convierta en la antena de salida de la
-  conmutación. ⚠️ Verificar que no degrade el ojo a FS (a 12 Mbit/s no molesta).
+  conmutación. A 12 Mbit/s no molesta: a la señal diferencial le opone menos de 1 Ω.
+
+  > 🔧 **Corrección 2026-09-29 — el orden estaba invertido.** Decía «entre el conector y el
+  > USBLC6». Texas Instruments (SPRABT8A, guía de layout USB): *«If a common mode choke is
+  > needed, it should be placed as close as possible to the USB connector (the ESD clamp device
+  > should be closer)»*. El mecanismo: una descarga entra por el conector con amperes durante
+  > nanosegundos. Si lo primero que encuentra es el choque, pasa por su bobinado (alambre de
+  > 280 mA nominales) y la inductancia demora al protector. Con el USBLC6 primero, la descarga
+  > se va a masa antes de llegar al choque. El ruido se filtra igual, porque el choque sigue en
+  > serie entre la placa y el cable.
 - **Nada de resistencias serie** en D+/D−: el datasheet dice explícitamente que están
   integradas.
 - **Impedancia diferencial 90 Ω**, par apareado, sin vías si se puede, sin stubs.
-- **Malla del conector**: a GND por **1 MΩ ∥ 4,7 nF**. (En J3 hoy hay sólo R9 = 1 MΩ, sin el
-  capacitor — el capacitor es el que da el camino de RF que descarga la malla.)
+- **Malla del conector**: a GND por **1 MΩ ∥ 4,7 nF**. El capacitor es el que da el camino de
+  RF que descarga la malla. ✅ Dibujado el 2026-09-29 en los dos puertos: R18 ∥ C310 en J8, y
+  R9 ∥ C311 en J3 (en la DS11, J3 tenía sólo R9).
 
 ### 4.2 Protección de la *alimentación* de la PC — la que importa y la que hoy falta
 
@@ -124,33 +141,51 @@ Un dispositivo **autoalimentado** tiene dos obligaciones frente al host:
 
 1. **Nunca inyectar corriente en VBUS.** Es requisito del estándar, y es lo que hoy hacen
    bien D2 y D11: son Schottky con el cátodo del lado de la placa, así que la corriente sólo
-   puede entrar. Eso se conserva sin cambios en la topología nueva.
+   puede entrar. Eso se conserva sin cambios en la topología nueva, y el puerto nuevo lo
+   cumple de la misma forma con **D8**.
 2. **No presentarse como conectado si VBUS no está.** Si el pull-up de D+ está activo sin
    VBUS, el host ve un dispositivo fantasma. Por eso hace falta **sensar VBUS**.
 
-**Recomendación para el puerto nuevo del STM32: que VBUS no alimente absolutamente nada.**
+**Lo que quedó dibujado: el VBUS del puerto nuevo se sensa *y* alimenta.**
 
 ```
-VBUS ──┬── 62 kΩ ───┬── PA9  (GPIO de entrada: "hay host")
-       │            │
-       │          100 kΩ            4,75-5,25 V → 2,93-3,24 V
-       │            │   ∥ 100 nF
-      GND          GND
+            ┌── R161 62 kΩ ──┬──► PA5  (GPIO de entrada: "hay host")   4,75-5,25 V → 2,93-3,24 V
+VBUS (J8) ──┤                ├── R160 100 kΩ ── GND
+            │                └── C50 100 nF ─── GND
+            │
+            └── F3 PTC 1,1 A ──►|── D8 SS34 ──► +5V_AUX   (el mismo camino que el USB del ESP32)
 ```
+
+> 🔧 **Corrección 2026-09-29.** Este párrafo recomendaba *«que VBUS no alimente absolutamente
+> nada»*. En el dibujo se decidió lo contrario ([DS12_ALIMENTACION.md](DS12_ALIMENTACION.md) §3.4
+> y §12): VBUS entra a `+5V_AUX` por F3 + D8, y así **el DFU funciona con la placa sin fuente**,
+> que es buena parte de lo que vale este puerto. Las dos obligaciones de arriba se siguen
+> cumpliendo: D8 sólo deja entrar corriente, y PA5 sensa VBUS.
+>
+> 🔧 **El pin es PA5, no PA9 (2026-10-01).** El divisor es una entrada lenta y cualquier GPIO sirve,
+> así que se movió para dejar PA9/PA10 sin nada: son los pines que escucha el *bootloader* de
+> fábrica del STM32 (USART), y el DFU de fábrica del H743 es sensible al ruido en ellos. PA5
+> (pata 29) estaba libre y sin reservas; no tolera 5 V, pero el divisor nunca pasa de 3,24 V. Al
+> enchufar el USB, VBUS llega antes que `+3V3` (~4 ms) y entran ~40 µA por el diodo de protección
+> del pin: inofensivo.
 
 > 🔧 **Corrección 2026-09-28.** Decía 100 kΩ / 56 kΩ → 1,79 V «nivel alto seguro». **No lo es**:
 > el VIH del STM32H743 es **0,7 × VDD = 2,30 V** (DS12110, Tabla 50, testeado en producción; el
 > 0,47 × VDD + 0,25 = 1,79 V de la otra fila está sólo garantizado por diseño). Y con VBUS en su
 > mínimo de USB, 4,75 V, el divisor viejo daba 1,71 V. Con **62 k arriba / 100 k abajo** —dos
-> valores que ya están en el BOM (`C37825`, `C25741`)— PA9 queda entre **2,93 y 3,24 V** en todo el
+> valores que ya están en el BOM (`C37825`, `C25741`)— PA5 queda entre **2,93 y 3,24 V** en todo el
 > rango de VBUS: arriba del VIH y **nunca arriba de VDD**, así que ni siquiera hace falta que el
 > pin sea tolerante a 5 V. Con la placa apagada drena 5 V / 162 kΩ ≈ 31 µA.
 
-Ventajas de que ese puerto no tome corriente:
-- Es **incondicionalmente seguro para la PC**: no hay ningún camino, ni de falla, por el que
-  la placa pueda cargar ese puerto.
-- Con la placa apagada, el divisor drena 5 V / 156 kΩ ≈ **32 µA**, clampeados por el diodo
-  de ESD del pin: no alcanza para alimentar nada ni para dañar nada.
+Qué implica que ese puerto alimente:
+- **La PC sigue protegida.** D8 impide que la placa le inyecte corriente, y F3 (PTC de 1,1 A,
+  `C523825`) abre si la placa tiene un corto, que es la dirección que el limitador del host no
+  controla bien.
+- **La placa le pide a la PC ~0,38 A en modo sólo USB** (nota de abajo), lo mismo que ya pedía
+  por el puerto del ESP32. Con los 20 V presentes, el buck B toma su entrada de `+VIN_LOCAL` y
+  la PC entrega poco o nada.
+- Con la placa apagada, el divisor drena 5 V / 162 kΩ ≈ **31 µA**: no alcanza para alimentar
+  nada ni para dañar nada.
 - Firmware: habilitar el pull-up de D+ (soft-connect del core) **sólo** con VBUS presente.
   Es la conducta que pide el estándar y la que evita el dispositivo fantasma.
 
@@ -158,11 +193,11 @@ Ventajas de que ese puerto no tome corriente:
 > usar el comparador interno del core. Funciona, pero deja 5 V permanentes en un pin del
 > MCU y no aporta nada acá. El divisor + GPIO es más conservador.
 
-**El puerto del ESP32 (J3) se queda como el puerto "que puede alimentar"**, ahora con un
-**PTC de 0,75 A** en serie con VBUS (ver DS12_ALIMENTACION §3.4). No es redundante con el
-limitador del puerto de la PC: el del host protege a la PC de un consumo excesivo, el PTC
-protege a la PC de un **cortocircuito nuestro**, que es la dirección que el host no
-controla bien.
+**Los dos puertos alimentan igual**: J3 (ESP32) por F2 + D2 y J8 (STM32) por F3 + D8, con el
+mismo **PTC de 1,1 A** (`C523825`; 🔧 no de 0,75 A como decía acá: el pico real en modo USB es de
+900 mA, DS12_ALIMENTACION §3.4). No es redundante con el limitador del puerto de la PC: el del
+host protege a la PC de un consumo excesivo, el PTC protege a la PC de un **cortocircuito
+nuestro**, que es la dirección que el host no controla bien.
 
 > Nota de arrastre buena: con el buck nuevo, en modo "sólo USB" la placa le pide a la PC
 > **0,38 A en vez de 0,6 A**, porque el camino pasa de un LDO al 66 % a un buck al 90 %.
@@ -187,9 +222,9 @@ repartidos por una sala, eso es un lazo de masa real.
 | qué | detalle |
 |---|---|
 | Controlador | `USB2_OTG_FS` (OTG_HS2), **AF10** |
-| Pines | PA11 = D−, PA12 = D+, PA9 = VBUS-sense (GPIO) |
+| Pines | PA11 = D−, PA12 = D+, 🔧 PA5 = VBUS-sense (GPIO; antes PA9) |
 | Conector | segundo USB-C receptáculo, **CC1 y CC2 con 5,1 kΩ a GND** (somos dispositivo) |
-| Protección | CM choke → USBLC6-2P6 → STM32; VBUS sólo al divisor |
+| Protección | USBLC6-2P6 → choque (FL1) → STM32 🔧; VBUS al divisor de PA5 y a `+5V_AUX` por F3 + D8 |
 | Reloj | **HSI48 + CRS** sincronizado al SOF del host ✅ — **no toca PLL3** |
 | Alimentación del transceptor | `VDD` (LQFP100 no tiene VDD33USB) → el riel nuevo de 3,30 V ✅ |
 
@@ -319,12 +354,34 @@ funciona pero mete una restricción nueva en un árbol de relojes que ya costó 
 
 ## 9. Cambios de hardware concretos para el Camino A
 
-1. Conector **USB-C receptáculo #2** (mismo modelo que J3 para no sumar footprints), con
-   CC1/CC2 → 5,1 kΩ a GND, malla → 1 MΩ ∥ 4,7 nF a GND.
-2. **Choque de modo común** en D+/D−, pegado al conector.
-3. **USBLC6-2P6** (C15999) después del choque.
-4. D+ → **PA12**, D− → **PA11**. Sin resistencias serie. Par de 90 Ω, apareado, corto.
-5. VBUS → **divisor 62 k / 100 k + 100 nF** → **PA9** (🔧 no 100 k / 56 k: ver §5). Sin camino de alimentación.
+> 🔧 **2026-09-29:** los ✅ están dibujados y verificados en el netlist. El choque (punto 3) es lo
+> único que falta, y el orden de los puntos 2 y 3 se invirtió respecto de la versión anterior (§4.1).
+
+1. ✅ Conector **USB-C receptáculo #2** — **J8**, mismo modelo que J3 (`C22464422`) — con
+   CC1/CC2 → 5,1 kΩ a GND (R23, R22) y malla → 1 MΩ ∥ 4,7 nF a GND (R18 ∥ C310).
+2. ✅ **USBLC6-2P6** (U9, C15999) **pegado al conector, antes que el choque**: D+ → pin 1, D− →
+   pin 3, VBUS → pin 5, GND → pin 2. Los pines 1-6 y 3-4 son el mismo punto adentro del chip.
+3. **Choque de modo común FL1** — Murata **DLW21SN900HQ2L**, LCSC **`C97855`** (90 Ω @100 MHz,
+   280 mA, 0805; *extended* en JLCPCB) — **entre U9 y el STM32**:
+
+   ```
+   U9.6 ── USB_DP_ESD ── FL1.4 ●─ᑌᑌᑌ─ FL1.3 ── PA12 (U7.71)   D+
+   U9.4 ── USB_DN_ESD ── FL1.1 ●─ᑌᑌᑌ─ FL1.2 ── PA11 (U7.70)   D−
+   ```
+
+   - Símbolo `Filter:Choke_CommonMode_FerriteCore_1243`, footprint
+     `DS_local_library:L_CommonModeChoke_Murata_DLW21S` (hecho con la tabla de pads de la
+     especificación de Murata JEFL243C-0010P-01, §16.7).
+   - ⚠️ **Las dos líneas entran por el mismo lado** (pines 1 y 4 hacia U9). Si D− se conecta al
+     revés (3→4), el choque frena los datos y deja pasar el ruido.
+   - ⚠️ **No usar `Inductor_SMD:L_CommonModeChoke_Coilank_ACM2012`** aunque parezca igual: tiene
+     los pads 2 y 4 cambiados respecto de la numeración de Murata, y con esa huella D+ y D−
+     quedan en corto a través de un bobinado.
+4. ✅ D+ → **PA12**, D− → **PA11**. Sin resistencias serie. Par de 90 Ω, apareado, corto.
+5. ✅ VBUS → **divisor 62 k / 100 k + 100 nF** (R161, R160, C50) → **PA5** (🔧 no 100 k / 56 k:
+   ver §4.2), y VBUS → **F3** (PTC 1,1 A) → **D8** (SS34) → `+5V_AUX`. 🔧 Antes decía «sin camino
+   de alimentación»: ver §4.2.
 6. Dejar **PB14/PB15 sin usar** si es posible (hoy PB14 = I2S2_SDI hacia J5.5): mantiene
    `USB1_OTG_HS` entero y libre por si alguna vez se hace el Camino B.
-7. Serigrafía que distinga los dos puertos: **`AUDIO/DFU` (STM32)** y **`ESP32`**.
+7. Serigrafía que distinga los dos puertos: **`AUDIO/DFU` (STM32)** y **`ESP32`**. (El campo
+   `Value` de J8 todavía dice `USB_C_ESP32`, igual que J3.)

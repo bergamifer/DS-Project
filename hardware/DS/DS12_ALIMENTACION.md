@@ -57,6 +57,23 @@
 > 5. El net de entrada se llama **`+20V`** (antes `+24V`): la tensión de sistema quedó decidida.
 > 6. El esquemático usa **designadores distintos** a los de este documento. La tabla de
 >    correspondencia está en el **§12**.
+>
+> ### 🔧 Revisión 2026-09-29 — el esquemático completo, pin por pin contra las hojas de datos
+> Se exportó el netlist del esquemático guardado y se verificó cada pin de la fuente contra la
+> tabla de pines de su fabricante (DS41949, DS42002, DS38144, AOS, UMW y MDD): **no hay ninguna
+> conexión mal**. Cambia esto:
+>
+> 1. 🔴 **PG no puede estar en bajo si el buck A no tiene entrada.** Es un interruptor a masa
+>    dentro del chip, y sin VIN no se puede cerrar: con la placa sólo por USB, R159 lleva PG a
+>    3,3 V y el STM32 leería «`+5VA` bien» con `+5VA` en 0 V. Se agrega una **lectura directa de
+>    `+5VA` en PC1** (R162, R163, C327) y el firmware decide `SD` con ella. Ver §6.1.a.
+> 2. **F1 es un fusible rápido**, no lento: la «F» de JFC1206-1200FS es *fast acting*. Se queda
+>    igual; las cuentas están en el §11.2.
+> 3. La entrada quedó dibujada con **2× 100 µF** (C273, C314) y **3× 10 µF 1210** (C316, C324,
+>    C326) en vez de 1× 100 µF + 22 µF + 2× 10 µF (§3.1). El buck B tiene 2× 10 µF (C319, C325)
+>    más el electrolítico de 22 µF (C60). Es más amortiguación y cumple el «ideal tres» del §7.2.
+> 4. El §12 tenía dos designadores cruzados: el pull-up de PG es **R159** (R152 es la serie a
+>    PA10) y el pull-down de `PDN_AK` es **R158** (R157 es la serie desde PC7).
 
 ---
 
@@ -175,13 +192,13 @@ flasheo sin fuente). Consecuencias en cadena:
 
 | ref | valor | conexión |
 |---|---|---|
-| **F1** | fusible SMD 1206, **2 A**, lento | `+20V` → `VIN_PROT` |
+| **F1** | fusible SMD 1206, **2 A**, 🔧 **rápido** (JFC1206-1200FS; ver §11.2) | `+20V` → `VIN_PROT` |
 | **Q1** | P-MOSFET, **VDS ≥ −40 V**, ID ≥ −3 A, RDS(on) < 50 mΩ | cuerpo/diodo en el sentido de la corriente normal: **drain a `VIN_PROT`, source a `VIN_LOCAL`** |
 | **R1** | 100 kΩ | gate de Q1 → GND (lo enciende: VGS ≈ −20 V) |
 | **DZ1** | zener **10 V**, 500 mW (`C173431`) | gate→source de Q1 (cátodo al source). **Obligatorio**: el AO3401A tiene VGS máx **±12 V** y la entrada es de 20 V. 🔴 **10 V y no 12 V** — un zener de 12 V llega a 12,7 V por tolerancia y se pasa del límite del FET. Ver §11.2 |
 | **D8'** | **SMBJ20A** (SMB) | `VIN_LOCAL` → GND, unidireccional |
-| **C_bulk** | **100 µF / 35 V** electrolítico o polímero, ESR 0,2-0,5 Ω | `VIN_LOCAL` → GND |
-| **C_in1** | 22 µF / 50 V X7R 1210 | `VIN_LOCAL` → GND |
+| **C_bulk** | **100 µF / 35 V** electrolítico, ESR ≈ 0,6 Ω (no polímero: §11.2). 🔧 Dibujados **dos**: C273 y C314 | `VIN_LOCAL` → GND |
+| **C_in1** | ~~22 µF / 50 V X7R 1210~~ 🔧 dibujado como un **tercer 10 µF / 50 V 1210** (C326), junto a los dos del buck A (C316, C324) | `VIN_LOCAL` → GND |
 
 **El orden importa: conector → fusible → P-FET → TVS → bulk.** Con el TVS *después* del
 P-FET, la polaridad invertida simplemente apaga el FET y **no quema el fusible**; y como el
@@ -219,7 +236,7 @@ Power-Good, θJA **25 °C/W** ✅, tON mínimo 100 ns típ / 120 ns máx, VFB 0,
 | 2 EN | divisor de UVLO | **R3 470 kΩ** a `VIN_LOCAL` (`C23178`, = R33 de la DS11), **R4 40,2 kΩ** a GND (`C2933097`, = R34) | **no — las dos ya están** |
 | 3 FB | divisor | **R1 40,2 kΩ** de `+5VA` (`C2933097`), **R2 7,5 kΩ** a GND (`C23234`) → **5,088 V** | **no — es el divisor de la DS11** |
 | 4 COMP | **GND** | ✅ *"Connect the COMP pin to GND to use internal loop compensation"* — sin RC externo | — |
-| 5 PG | `PWR_GOOD_5V` | R **100 kΩ** a `+3V3` (`C25741`) → GPIO libre del STM32 (PA10). 🔧 **El pull-up externo es obligatorio**: el interno es de 5 MΩ (DS41949), y con la fuga del BAT54C del §6.1 (hasta 2 µA) el nivel alto no queda definido | no |
+| 5 PG | `PWR_GOOD_5V` | R **100 kΩ** a `+3V3` (`C25741`) → GPIO libre del STM32 (PA10). 🔧 **El pull-up externo es obligatorio**: el interno es de 5 MΩ (DS41949), y con la fuga del BAT54C del §6.1 (hasta 2 µA) el nivel alto no queda definido. En el esquemático es **R159**; R152 es la serie de PG a PA10. 🔧 **Sin VIN, PG no puede estar en bajo**: el firmware no decide `SD` sólo con PG (§6.1.a) | no |
 | 6 BST | a SW | C **100 nF** (`C1525`) | no |
 | 7 NC | — | sin conexión interna; se puede dejar al aire | — |
 | 8 GND / pad | GND | **vías térmicas bajo el pad** | — |
@@ -558,6 +575,16 @@ convive con la R serie del §6.1 (ver ahí el cálculo).
 
 Los dos últimos renglones son los que hoy no existen y son la razón de todo el rediseño.
 
+> 🔧 **2026-09-29 — lo que lee el STM32 en cada renglón.** PG (PA10) sólo dice la verdad cuando
+> el buck A tiene entrada. La lectura de `+5VA` en PC1 (§6.1.a) la dice siempre:
+>
+> | renglón | `+5VA` | PG en PA10 | PC1 (`+5VA` / 2) |
+> |---|---|---|---|
+> | normal, con o sin USB o sonda | 5,09 V | alto ✅ | 2,54 V ✅ |
+> | sólo USB, o sonda con USB | 0 V | **alto ❌**: el buck A no tiene VIN y no puede bajarlo | 0 V ✅ |
+> | UVLO (entrada entre ~11 y ~14 V) | 0 V | **sin especificar**: con EN en bajo el chip está apagado (1 µA) y DS41949 no dice qué hace PG | 0 V ✅ |
+> | arranque, durante el soft-start | subiendo | bajo ✅ | subiendo ✅ |
+
 ---
 
 ## 6. Análisis de fallas
@@ -570,7 +597,7 @@ Los dos últimos renglones son los que hoy no existen y son la razón de todo el
 | Corto en `+3V3` | AP63301: límite de pico ciclo a ciclo → hiccup 2 ms on / 16 ms off. El buck A sigue | IC4 |
 | Corto en `+5VA` | AP63356: hiccup. **`+3V3` sobrevive** → el STM32 lo ve por PG y lo reporta | IC2 + PG |
 | Corto en `+5V_AUX` | arrastra el AP2125 y la expansión, no el riel digital | F4/F6 |
-| **Corto en la expansión (J5.9 / J6.9)** | 🔧 **arrastra `+3V3`**: STM32, ESP32, 4× PCM1690 y EEPROM. Esos pines llevan el riel digital **directo** | **PTC de expansión — sin ellos no hay nada** (en el esquemático serán F4…F7: F3 lo usa el USB del STM32) |
+| **Corto en la expansión (J5.9 / J6.9)** | 🔧 **arrastra `+3V3`**: STM32, ESP32, 4× PCM1690 y EEPROM. Esos pines llevan el riel digital **directo** | **PTC de expansión — sin ellos no hay nada** (en el esquemático: F4…F7, `C883126`; F3 es el del USB del STM32) |
 | La placa alimentada quiere alimentar al VBUS del host | **imposible**: D2 y D11 están en reverso | D2, D11 |
 | La placa alimentada quiere alimentar el 3V3 de la sonda | limitado a ~33 mA | R 100 Ω en J7.1 |
 | La sonda quiere alimentar la placa por el pin 1 | limitado a ~33 mA: no arranca nada, y **no se apaga el LED del ST-Link** | R 100 Ω en J7.1 |
@@ -601,6 +628,46 @@ de 4,5 V a 3 V, y PG avisa a los 220 µs de cruzar el 90 %. Una interrupción ta
 versión por hardware no conviene acá: el `SD` sale de PD3 por **33 Ω** (R20), y un diodo hacia PG
 le sacaría a PD3 unos 90 mA.
 
+> 🔧 **Corrección 2026-09-29 — PG no alcanza para decidir `SD`.** El arreglo de arriba supone que
+> PG baja cuando `+5VA` no está. **No siempre puede.** PG es un interruptor a masa dentro del
+> AP63356 (salida *open-drain*), y un interruptor sin alimentación no se cierra:
+>
+> - **Con la placa sólo por USB**, que es el modo de flasheo y de puesta en marcha, el buck A no
+>   tiene VIN. R159 lleva PG a 3,3 V, el firmware leería «`+5VA` bien» y soltaría `SD` sobre 32
+>   amplificadores sin alimentación: exactamente la violación de este apartado. Además, PD3
+>   intentaría alimentar los 32 amplificadores a través de sus pines SD. Esto no es una
+>   hipótesis: es lo que hace cualquier salida *open-drain* sin alimentación.
+> - **En la banda de UVLO** probablemente pase lo mismo. Con EN en bajo el chip consume 1 µA (está
+>   apagado), y DS41949 sólo dice que PG baja «durante el soft-start» y «si la salida cae un
+>   10 %». No dice qué hace apagado.
+>
+> **Lo que no sirve: pasar R159 de `+3V3` a `+5VA`.** Parece la solución obvia (sin `+5VA`, PG
+> quedaría en 0 V), pero D3 une `PDN_AK` con PG. Con PC7 en alto, la corriente va de PC7 por la
+> resistencia equivalente de R157 ∥ R158 (8 kΩ), atraviesa el BAT54C y baja por los 100 kΩ de R159
+> hacia el riel muerto: PG queda en ≈2,3 V. Eso cae en la zona donde el STM32 no garantiza leer ni
+> alto (≥ 2,30 V) ni bajo (≤ 0,99 V).
+>
+> **El arreglo: una lectura directa de `+5VA`**, que no depende de lo que el chip haga apagado:
+>
+> ```
+>              R162 100 kΩ (C25741)
+>  +5VA ──────────/\/\/\──────┬─────────────► PC1  (U7 pin 16 · ADC123_INP11)
+>                             ├── R163 100 kΩ (C25741) ── GND
+>                             └── C327 4,7 nF (C2961271) ── GND
+>
+>  +5VA = 5,09 V → PC1 = 2,54 V · peor caso 5,23 V → 2,61 V · sin +5VA → 0 V
+> ```
+>
+> - Las tres piezas ya están en el BOM. PC1 estaba libre; PC0 queda para el tap de VOUT.
+> - Los 4,7 nF son el C0G de las mallas del USB. Filtran el rizado del buck y le dan al ADC una
+>   fuente de baja impedancia para muestrear. La constante de tiempo es 0,24 ms, contra los
+>   0,6-7 ms que tarda el riel en caer: no demora el aviso.
+> - **Regla de firmware:** amplificadores y DACs habilitados sólo si PC1 > 2,25 V (`+5VA` > 4,5 V).
+>   El *analog watchdog* del ADC sobre PC1 baja `SD` en microsegundos cuando el riel empieza a
+>   caer. PG en PA10 queda como aviso adicional.
+> - **PG, R159, R152 y D3 no se tocan.** Siguen haciendo lo que necesita el §6.1.b: el pulso de
+>   reset del AK5538 a la vuelta lo da el soft-start, con el chip alimentado.
+
 ### 6.1.b El AK5538 no vuelve a resetearse nunca
 
 Peor porque es silencioso. Al volver la tensión, el AK5538 recupera AVDD **pero PC7 sigue en
@@ -623,7 +690,7 @@ nada. La corriente tiene que ir de `PDN_AK` hacia PG:
                 10 kΩ (C25744)
  PC7 ───────────/\/\/\───────────┬────────────► AK5538 pin 28 (PDN)   ← este nodo es PDN_AK
                                  │
-                                 ├──►|──────────► PWR_GOOD_5V   (IC4 pin 5 · PA10 · R152)
+                                 ├──►|──────────► PWR_GOOD_5V   (IC4 pin 5 · R152 → PA10 · R159 a +3V3)
                                  │   BAT54C: ánodo (pin 1) al nodo PDN_AK, cátodo común (pin 3) a PG
                                  │
                               40,2 kΩ (C2933097)
@@ -649,6 +716,10 @@ en bajo durante todo el soft-start y 3,5 ms más. El `AVDD` del AK5538 (desde `+
 a `+5VA`) sube mientras tanto. **El pulso de `PDN` que el chip necesita al volver la tensión está
 garantizado por el soft-start**, sin importar qué haga PG mientras el buck está apagado.
 
+🔧 **2026-09-29 — de yapa.** Con la placa sólo por USB, PG queda en alto (§6.1.a), así que
+`PDN_AK` lo maneja PC7, y el AK5538 tiene AVDD desde `+5V_AUX`: **el ADC funciona sin la fuente de
+20 V**. Por eso la lectura de `+5VA` va aparte y PG no se toca.
+
 **Los PCM1690: en firmware, no con otro diodo.** La versión anterior decía que tienen *«exactamente
 el mismo problema»*. No es así: su power-on-reset interno vigila **VDD**, el riel de 3,3 V (*«Initialization
 is triggered automatically at the point where VDD exceeds 2.2 V»*, datasheet §7.3.5), y ese
@@ -662,9 +733,10 @@ y al flanco de subida el firmware pulsa PC11 y reconfigura los DAC por I2C.
 > omite, el síntoma va a ser "a veces el ADC devuelve basura después de un bajón de tensión",
 > que es de las cosas más caras de diagnosticar.
 >
-> **Pendiente de firmware** (para cuando lleguen las placas): interrupción por flanco en PA10.
-> Cuando baja: `SD` a bajo y PC7 a bajo. Cuando sube: esperar, pulsar `~RST` (PC11), reconfigurar
-> los cuatro PCM1690 y el AK5538, y recién ahí liberar `SD`.
+> **Pendiente de firmware** (para cuando lleguen las placas). 🔧 La condición es **PC1**, no
+> sólo PA10 (§6.1.a). Cuando PC1 cae bajo 2,25 V (*analog watchdog* del ADC) o PA10 baja: `SD` a
+> bajo y PC7 a bajo. Cuando PC1 está arriba de 2,25 V **y** PA10 en alto: esperar, pulsar `~RST`
+> (PC11), reconfigurar los cuatro PCM1690 y el AK5538, y recién ahí liberar `SD`.
 
 ---
 
@@ -747,9 +819,12 @@ Antes de mandar a fabricar, sobre una DS11 modificada a mano o sobre el primer p
       del fabricante («V-DFN3020-13 (Type A)») y tiene **9 pads**, no 13. Los pads grandes de VIN
       (1), GND (8) y SW (9) juntan varios terminales del encapsulado, y los nueve coinciden con
       los nueve pines de la tabla de DS41949. Quedan 0,15 mm entre pads.
-- [ ] **PTC en J5/J6.** Recomendado: sí. Part number ya elegido en el §11
-      (BSMD1206-050-30V, `C883126`, 500 mA hold / 1 A trip, 30 V). 🔧 **Cuatro, no dos**: J5 y J6
-      tienen **dos** pines de alimentación cada uno (pin 9 = `+3V3`, pin 10 = `+5V_AUX`).
+- [x] ~~PTC en J5/J6~~ → 🔧 **dibujados (2026-09-29)**: F4…F7, **cuatro**, uno por pin de
+      alimentación (J5.9 y J6.9 = `+3V3`, J5.10 y J6.10 = `+5V_AUX`), con BSMD1206-050-30V
+      (`C883126`, 500 mA hold / 1 A trip, 30 V).
+- [x] ~~Qué hace PG del AP63356 con el chip apagado~~ → DS41949 no lo dice, y sin VIN no puede
+      estar en bajo. 🔧 **Resuelto de otra forma (2026-09-29)**: el firmware decide `SD` con la
+      lectura de `+5VA` en PC1 (§6.1.a), que no depende de eso.
 - [x] ~~Decidir la tensión de sistema~~ → 🔧 **20 V** (2026-09-28). El net se llama `+20V` y el
       UVLO queda en 14,3 V / 11,1 V. El banco a 12 V queda fuera, a propósito.
 - [x] ~~Errata del footprint del SS34~~ → 🔧 **resuelto**: los SS34 de la DS12 ya usan
@@ -788,14 +863,14 @@ respectivamente): cambia el part number en el BOM, no el dibujo.
 |---|---|---|---|---|---|
 | **Q1** | P-MOSFET polaridad inversa, −30 V, 4,2 A, 47 mΩ, SOT-23 | AO3401A | **`C15127`** ⭐**BASIC** | 715 902 | 0,07 |
 | **DZ1** | Zener **10 V** 500 mW, SOD-123 (protege VGS de Q1) | BZT52C10 | **`C173431`** | 128 841 | 0,014 |
-| **F1** | Fusible **2 A / 63 V**, 1206, corte 50 A | JFC1206-1200FS | **`C136345`** | 14 516 | 0,06 |
+| **F1** | Fusible **2 A / 63 V**, 1206, corte 50 A, 🔧 **rápido** (I²t de fusión 0,41 A²s) | JFC1206-1200FS | **`C136345`** | 14 516 | 0,06 |
 | **F2, F3** 🔧 | PTC de los dos VBUS (ESP32 y STM32), **1,1 A hold / 2,2 A trip**, 16 V, 1206 | SMD1206P110TF/16 | **`C523825`** | — | 0,13 |
 | **F4…F7** 🔧 | PTC expansión — **4**: J5.9/J5.10/J6.9/J6.10 | BSMD1206-050-30V | **`C883126`** | 46 724 | 0,06 |
 | **L1** | 6,8 µH, **Isat 9,6 A**, Irms 7,0 A, 25 mΩ, 10×11 mm 🔧 | MWSA1004S-6R8MT | **`C408485`** | 1 981 | 0,25 |
 | **L2** 🔧 | **4,7 µH**, Isat 7,2 A, Irms 5,0 A, 33 mΩ, 6,6×7 mm — **el de la DS11** | MWSA0603S-4R7MT | **`C408447`** | — | — |
 | **D3** 🔧 | Schottky doble, **cátodo común** (§6.1: `PDN_AK` → PG) | BAT54C | **`C2135`** | — | 0,02 |
-| **C_bulk** | **100 µF / 35 V** electrolítico, ESR 600 mΩ, D6,3×7,7 mm | RVE100UF35V67RV0072 | **`C2836437`** | 398 000 | 0,05 |
-| **C_in ×4** | **10 µF / 50 V X7R 1210** (2 por buck) | CL32B106KBJNNNE | **`C138687`** | 28 914 | 0,29 |
+| **C_bulk ×2** 🔧 | **100 µF / 35 V** electrolítico, ESR 600 mΩ, D6,3×7,7 mm (C273, C314) | RVE100UF35V67RV0072 | **`C2836437`** | 398 000 | 0,05 |
+| **C_in ×5** 🔧 | **10 µF / 50 V X7R 1210** (3 en el buck A: C316, C324, C326; 2 en el B: C319, C325) | CL32B106KBJNNNE | **`C138687`** | 28 914 | 0,29 |
 | **R_fb** | **62 kΩ 0402 1 %** — el único valor de resistencia nuevo | 0402WGF6202TCE | **`C37825`** | 26 024 | 0,001 |
 
 **Notas de selección, con el número que las justifica:**
@@ -815,6 +890,17 @@ respectivamente): cambia el part number en el BOM, no el dibujo.
   y los de 2 A son de 12 V (por debajo de la entrada). Además el fusible da la **impedancia
   serie que el TVS necesita para coordinar** (§6). Los 63 V están holgados sobre los 32,4 V
   del clamp.
+- 🔧 **F1 es rápido, no lento (2026-09-29).** En la hoja de JDT, la «F» de JFC1206-1200FS es
+  *fast acting*. Importa por el enchufe en caliente: cargar los ≈255 µF de la entrada disipa
+  ½CV² ≈ 51 mJ en las resistencias del camino, y el fusible recibe entre ≈0,09 A²s (ladrillo con
+  2 m de cable, ≈0,3 Ω) y ≈0,19 A²s (fuente de laboratorio con cables cortos, ≈0,08 Ω). Se funde
+  con **0,41 A²s**: el enchufe usa entre el 22 % y el 46 %. Según las curvas típicas de fatiga de
+  fusibles, eso son decenas de miles de enchufadas con el ladrillo, y del orden de cientos con la
+  fuente de laboratorio. **Se queda el de 2 A.** Uno de 3 A de la misma serie (JFC1206-1300FS,
+  `C136347`, 1,39 A²s) aguantaría más enchufadas, pero ante un corto alimentado por un ladrillo
+  de 65 W (~3,5 A) quedaría al 117 % de su nominal, que un fusible puede aguantar
+  indefinidamente. El de 2 A queda al 175 % y abre en segundos. **En el banco: no enchufar en
+  caliente con la fuente de laboratorio sin límite de corriente.**
 - **L1 tiene Isat 9,6 A** 🔧 (hoja de Sunlord, serie MWSA1004S; la versión anterior tenía Isat e
   Irms cruzados) contra un límite de pico del AP63356 de **4,0 / 5,0 / 6,0 A** (DS41949): **el
   inductor no satura ni durante una falla**. Los 10×11 mm son el precio; el footprint
@@ -839,7 +925,8 @@ la DS11. El único agregado es el 62 kΩ:
 | **40,2 kΩ** | `C2933097` | 0402 | R4 (UVLO inferior) **y** R1 del divisor FB del buck A | R34 |
 | **7,5 kΩ** | `C23234` | 0603 | R2 del divisor FB del buck A → 5,088 V | R32 |
 | **20 kΩ** | `C25765` | 0402 | R2 del divisor FB del buck B → 3,280 V | R31 |
-| **100 kΩ** | `C25741` | 0402 | pull-up de PG a `+3V3` | R30, R35 |
+| **100 kΩ** | `C25741` | 0402 | gate de Q1 (R149), pull-up de PG a `+3V3` (R159), serie de PG a PA10 (R152), divisor de PA5 (R160) y 🔧 **divisor de `+5VA` → PC1** (R162, R163, §6.1.a) | R30, R35 |
+| **4,7 nF C0G** 🔧 | `C2961271` | 0603 | filtro de la lectura de `+5VA` (C327) y mallas de los USB (C310, C311) | los 64 de los filtros RC de entrada de los amplificadores |
 | **100 Ω** | `C177347` | 0603 | serie en J7.1 (VTref del ST-Link, §3.7) | R28 |
 | **10 kΩ** | `C25744` | 0402 | 🔧 **serie** entre PC7 y `PDN_AK` (§6.1) | R8, R14-R17… |
 | **40,2 kΩ** | `C2933097` | 0402 | 🔧 **pull-down** de `PDN_AK` (§3.8 + §6.1) — no 10 kΩ | R34 |
@@ -866,7 +953,7 @@ con la corrección de footprint de la errata del §10.
 
 ---
 
-## 12. Designadores: este documento contra el esquemático (2026-09-28)
+## 12. Designadores: este documento contra el esquemático (2026-09-28, 🔧 revisada el 29-sep)
 
 El documento usa designadores propios, y el esquemático terminó con otros. Además, `R1…R4` del
 documento **chocan con resistencias que ya existen en la placa** (cuatro de 1 kΩ). **Manda el
@@ -881,16 +968,22 @@ esquemático.** Esta tabla es para leer el documento con el esquemático al lado
 | R3 / R4 (UVLO) | **R151 / R156** | 470 k / 40,2 k |
 | R1 / R2 (FB buck A) | **R150 / R153** | 40,2 k / 7,5 k |
 | R1 / R2 (FB buck B) | **R155 / R154** | 62 k / 20 k |
-| pull-up de PG | **R152** | 100 k a `+3V3` |
+| pull-up de PG | **R159** 🔧 | 100 k a `+3V3` (decía R152) |
+| — | **R152** | 100 k, serie de PG a PA10 |
 | 100 Ω de J7.1 | **R31** | serie del VTref |
-| pull-down de `PDN_AK` | **R157** | 🔧 pasa de 10 k a **40,2 k** (§6.1) |
+| serie PC7 → `PDN_AK` | **R157** 🔧 | 10 k (§6.1) |
+| pull-down de `PDN_AK` | **R158** 🔧 | 40,2 k, no 10 k (§6.1; decía R157) |
+| lectura de `+5VA` (§6.1.a) | **R162, R163, C327** 🆕 | 100 k / 100 k / 4,7 nF → PC1 |
+| C_bulk (§3.1) | **C273, C314** | 2× 100 µF / 35 V |
+| 2× 10 µF del buck A + C_in1 | **C316, C324, C326** | 3× 10 µF / 50 V 1210 |
+| 2× 10 µF del buck B | **C319, C325** | + C60 (22 µF electrolítico) y C320 (100 nF) |
 | D8′ (TVS) | **D9** | SMBJ20A |
 | D20 | **D20** | SS34, `VIN_LOCAL` → `VIN_B` |
 | D21 (`+5V_AUX` → `VIN_B`) | **D23** | SS34 |
-| D9 + FB2 (`+5VA` → `+5V_AUX`) | **D19 + FB69** | puede quedar B5819W (§3.4) |
+| D9 + FB2 (`+5VA` → `+5V_AUX`) | **D19 + FB69** | SS34 en el esquemático (podía quedar B5819W, §3.4) |
 | D2 (USB del ESP32) | **D2** | 🔧 tiene que ser SS34 (§3.4) |
 | — | **D8 + F3** | nuevo: VBUS del USB del STM32 → `+5V_AUX` — D8 tiene que ser SS34 |
 | D11 (ST-Link) | **D11** | 🔧 SS34 (§3.4) |
 | BAT54 (§6.1) | **D3** | 🔧 BAT54C, no BAT54A |
-| PTC de expansión F3…F6 | **F4…F7** | todavía no dibujados |
+| PTC de expansión F3…F6 | **F4…F7** | ✅ dibujados, `C883126` |
 

@@ -39,9 +39,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 0.0,
-          "height": 3.5,
-          "width": 2.35
+          "drill": 2.7,
+          "height": 5.4,
+          "width": 5.4
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
@@ -938,7 +938,7 @@
           "show": false
         }
       ],
-      "filter_string": "",
+      "filter_string": "c315",
       "group_symbols": true,
       "include_excluded_from_bom": false,
       "name": "",
@@ -994,7 +994,7 @@
         "uuid": "29234817-d0fa-4eb1-a474-1667c7510ed7"
       }
     ],
-    "used_designators": "#PWR144,R24,F4-7",
+    "used_designators": "TP4,FL1,#PWR109,#PWR163,#PWR466,R162-163,C311-312",
     "variants": []
   },
   "sheets": [
