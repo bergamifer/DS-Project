@@ -5,3 +5,6 @@
 ## comando, y la IP cambia cada vez que el router renueva el DHCP.
 dependencies:
   espressif/mdns: "^1.2"
+  ## cJSON: hasta ESP-IDF 6.0 venía incluida (componente "json"); desde la 6.1
+  ## Espressif la sacó del framework y hay que bajarla del registro.
+  espressif/cjson: "^1.7"

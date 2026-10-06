@@ -469,7 +469,7 @@ ota-esp:
 # ⚠️ st-flash NO sirve en esta Mac: escribe una vez y despues el ST-Link queda
 # enumerado pero no reclamable (libusb pide entitlements o root). Usar estos.
 CUBE ?= /Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI
-ESPTOOL ?= $(HOME)/.espressif/python_env/idf6.0_py3.13_env/bin/esptool.py
+ESPTOOL ?= $(HOME)/.espressif/python_env/idf6.1_py3.13_env/bin/esptool.py
 ESP_PORT ?= /dev/cu.usbmodem21301
 ESP_BUILD ?= ../firmware_esp32c3/build
 
