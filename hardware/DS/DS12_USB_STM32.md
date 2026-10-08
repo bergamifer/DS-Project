@@ -182,8 +182,10 @@ Qué implica que ese puerto alimente:
   `C523825`) abre si la placa tiene un corto, que es la dirección que el limitador del host no
   controla bien.
 - **La placa le pide a la PC ~0,38 A en modo sólo USB** (nota de abajo), lo mismo que ya pedía
-  por el puerto del ESP32. Con los 20 V presentes, el buck B toma su entrada de `+VIN_LOCAL` y
-  la PC entrega poco o nada.
+  por el puerto del ESP32. Con los 20 V presentes, el buck B toma su entrada de `+VIN_LOCAL`,
+  pero 🔧 la PC igual puede entregar entre nada y toda la carga de `+5V_AUX`, según cuál esté
+  más alto: su VBUS o `+5VA` (S1 en [DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md)).
+  Con la expansión cargada pueden ser cientos de mA. Nada vuelve hacia la PC.
 - Con la placa apagada, el divisor drena 5 V / 162 kΩ ≈ **31 µA**: no alcanza para alimentar
   nada ni para dañar nada.
 - Firmware: habilitar el pull-up de D+ (soft-connect del core) **sólo** con VBUS presente.

@@ -66,7 +66,7 @@
 > 1. 🔴 **PG no puede estar en bajo si el buck A no tiene entrada.** Es un interruptor a masa
 >    dentro del chip, y sin VIN no se puede cerrar: con la placa sólo por USB, R159 lleva PG a
 >    3,3 V y el STM32 leería «`+5VA` bien» con `+5VA` en 0 V. Se agrega una **lectura directa de
->    `+5VA` en PC1** (R162, R163, C327) y el firmware decide `SD` con ella. Ver §6.1.a.
+>    `+5VA` en PC1** (R163, R162, C312 🔧: así se llaman en el netlist) y el firmware decide `SD` con ella. Ver §6.1.a.
 > 2. **F1 es un fusible rápido**, no lento: la «F» de JFC1206-1200FS es *fast acting*. Se queda
 >    igual; las cuentas están en el §11.2.
 > 3. La entrada quedó dibujada con **2× 100 µF** (C273, C314) y **3× 10 µF 1210** (C316, C324,
@@ -74,6 +74,19 @@
 >    más el electrolítico de 22 µF (C60). Es más amortiguación y cumple el «ideal tres» del §7.2.
 > 4. El §12 tenía dos designadores cruzados: el pull-up de PG es **R159** (R152 es la serie a
 >    PA10) y el pull-down de `PDN_AK` es **R158** (R157 es la serie desde PC7).
+>
+> ### 🔧 Revisión 2026-10-02 — la revisión de alimentación
+> Este documento pasó por la revisión de alimentación del 1 y 2 de octubre
+> ([DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md)). Se corrigieron sólo los
+> **hechos verificados**. Los cambios de esquemático que propone esa revisión (capacitores y drenaje
+> en `+5V_AUX`, descarga de VBUS, jumper de identidad) **no** están acá hasta que se decidan.
+>
+> 1. **§5, tabla de modos:** con el 20 V puesto, **D2 y D11 no quedan en reverso**: reparten la
+>    carga de `+5V_AUX` según cuál esté más alto, el VBUS de la PC o `+5VA`. Nada vuelve hacia la PC.
+> 2. **§6.1.a:** la DS11 sí tenía la condición de los SD en alto con `+5VA` en 0, en modo sólo-USB.
+> 3. **§6.1.a y §12:** la lectura de `+5VA` es R163 (de `+5VA`), R162 (a GND) y **C312** (C327 no existe).
+> 4. **§11.3:** el bypass de VIN es `C14663` (50 V), no `C1525` (16 V), que queda sólo para los BST.
+>    Y `C45783` es de **25 V**, no de 16 V: es el Samsung CL21A226MAQNNNE.
 
 ---
 
@@ -566,8 +579,8 @@ convive con la R serie del §6.1 (ver ahí el cálculo).
 | 20 V | USB-C | ST-Link | `VIN_B` | `+3V3` | `+5VA` | `+5V_AUX` | comentario |
 |---|---|---|---|---|---|---|---|
 | ✅ | — | — | 19,7 V | 3,28 V | 5,09 V | 4,8 V | **normal. Es el caso que la DS11 nunca pudo hacer.** |
-| ✅ | ✅ | — | 19,7 V | 3,28 V | 5,09 V | 4,8 V | idéntico; D2 en reverso, la PC no entrega nada |
-| ✅ | ✅ | ✅ | 19,7 V | 3,28 V | 5,09 V | 4,8 V | idéntico; D11 en reverso |
+| ✅ | ✅ | — | 19,7 V | 3,28 V | 5,09 V | 4,8 V | 🔧 D2 **conduce** si el VBUS de la PC está cerca de `+5VA` o más alto: la PC entrega de 0 a toda la carga de `+5V_AUX` (45 mA sin expansión, cientos de mA con la expansión cargada). Nada vuelve hacia la PC. Ver S1 en [DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md) |
+| ✅ | ✅ | ✅ | 19,7 V | 3,28 V | 5,09 V | 4,8 V | 🔧 igual con D11: el 5 V del ST-Link reparte con los otros según cuál esté más alto |
 | — | ✅ | — | 4,1-4,4 V | 3,28 V | **0 V** | 4,4-4,7 V | flasheo/bring-up sin fuente. Los amps callados (D9 bloquea) |
 | — | — | ✅ (con USB) | 4,1-4,4 V | 3,28 V | 0 V | 4,4-4,7 V | igual, alimentado por la sonda |
 | — | — | ✅ (sin USB) | 0 V | 0 V | 0 V | 0 V | **la sonda no alimenta nada y la placa no la alimenta a ella** |
@@ -618,8 +631,11 @@ dependían de que todo se cayera junto:
 
 `/ALL_AMPS/SD` une los pines de shutdown de los 32 PAM8302A a un GPIO del STM32. Con el buck A
 en UVLO y el B vivo, esos pines quedan **por encima del VDD del propio amplificador**, lo que
-viola el máximo absoluto del PAM8302A. En la DS11 no pasaba porque `+3V3` colgaba de `+5VA` y
-ambos morían juntos.
+viola el máximo absoluto del PAM8302A. En la DS11 no pasaba **con el UVLO**, porque `+3V3`
+colgaba de `+5VA` y ambos morían juntos. 🔧 **En modo sólo-USB, en cambio, la DS11 tenía
+exactamente la misma condición** (`+3V3` vivo por el AP1117, `+5VA` en 0) y se usó así
+(`docs/loopback_debug.md` §8): en ese estado el problema es heredado. Ver S2 en
+[DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md).
 
 **Arreglo:** el firmware pone `SD` en bajo al ver caer `PWR_GOOD_5V` (interrupción por flanco
 en PA10). 🔧 **2026-09-28: queda en firmware, no en hardware.** La carrera se gana con mucho
@@ -650,10 +666,13 @@ le sacaría a PD3 unos 90 mA.
 > **El arreglo: una lectura directa de `+5VA`**, que no depende de lo que el chip haga apagado:
 >
 > ```
->              R162 100 kΩ (C25741)
+>              R163 100 kΩ (C25741)
 >  +5VA ──────────/\/\/\──────┬─────────────► PC1  (U7 pin 16 · ADC123_INP11)
->                             ├── R163 100 kΩ (C25741) ── GND
->                             └── C327 4,7 nF (C2961271) ── GND
+>                             ├── R162 100 kΩ (C25741) ── GND
+>                             └── C312 4,7 nF (C2961271) ── GND
+>
+>  🔧 2026-10-02: designadores como están en el netlist. Antes decía R162 arriba, R163 abajo y
+>  C327, que no existe. Eléctricamente es lo mismo: las dos resistencias son de 100 kΩ.
 >
 >  +5VA = 5,09 V → PC1 = 2,54 V · peor caso 5,23 V → 2,61 V · sin +5VA → 0 V
 > ```
@@ -926,14 +945,15 @@ la DS11. El único agregado es el 62 kΩ:
 | **7,5 kΩ** | `C23234` | 0603 | R2 del divisor FB del buck A → 5,088 V | R32 |
 | **20 kΩ** | `C25765` | 0402 | R2 del divisor FB del buck B → 3,280 V | R31 |
 | **100 kΩ** | `C25741` | 0402 | gate de Q1 (R149), pull-up de PG a `+3V3` (R159), serie de PG a PA10 (R152), divisor de PA5 (R160) y 🔧 **divisor de `+5VA` → PC1** (R162, R163, §6.1.a) | R30, R35 |
-| **4,7 nF C0G** 🔧 | `C2961271` | 0603 | filtro de la lectura de `+5VA` (C327) y mallas de los USB (C310, C311) | los 64 de los filtros RC de entrada de los amplificadores |
+| **4,7 nF C0G** 🔧 | `C2961271` | 0603 | filtro de la lectura de `+5VA` (C312 🔧; decía C327) y mallas de los USB (C310, C311) | los 64 de los filtros RC de entrada de los amplificadores |
 | **100 Ω** | `C177347` | 0603 | serie en J7.1 (VTref del ST-Link, §3.7) | R28 |
 | **10 kΩ** | `C25744` | 0402 | 🔧 **serie** entre PC7 y `PDN_AK` (§6.1) | R8, R14-R17… |
 | **40,2 kΩ** | `C2933097` | 0402 | 🔧 **pull-down** de `PDN_AK` (§3.8 + §6.1) — no 10 kΩ | R34 |
 | **220 pF** | `C39122` | 0402 | Cff del divisor del **buck A** (§3.2) | C90, C91… (32 unidades) |
 | **100 pF** 🔧 | `C327198` | 0402 | Cff del divisor del **buck B** (§3.3) — verificado en `BOM-DS.csv` el 2026-09-11: existe, 16 unidades | C274-C289 |
-| **100 nF** | `C1525` | 0402 | 2× BST + bypass de VIN | 30 unidades |
-| **22 µF / 16 V** | `C45783` | 0805 | 2× salida buck A + 2× salida buck B | C67, C69, C70, C273 |
+| **100 nF** | `C1525` | 0402 | 2× BST (C317, C61) 🔧 — **no** el bypass de VIN: `C1525` es de 16 V | 30 unidades |
+| **100 nF / 50 V** 🔧 | `C14663` | 0603 | bypass de VIN de los dos bucks (C315 en `+VIN_LOCAL`, C320 en `IN`), que viven en 20 V | nuevo en la DS12 (ya dibujado) |
+| **22 µF** 🔧 **/ 25 V** | `C45783` | 0805 | 2× salida buck A + 2× salida buck B. 🔧 Es el Samsung CL21A226MAQNNNE, de **25 V** (el valor del símbolo dice 16 V). A 5 V conserva 10,7 µF (−51 %, curva de Samsung) | C67, C69, C70, C273 |
 | 🆕 **62 kΩ** | **`C37825`** | 0402 | R1 del divisor FB del buck B | **nuevo** |
 
 Y siguen sirviendo tal cual: los **5× 220 µF/16 V** (`C25503905`) de bulk en `+5VA`, los tres
@@ -973,7 +993,7 @@ esquemático.** Esta tabla es para leer el documento con el esquemático al lado
 | 100 Ω de J7.1 | **R31** | serie del VTref |
 | serie PC7 → `PDN_AK` | **R157** 🔧 | 10 k (§6.1) |
 | pull-down de `PDN_AK` | **R158** 🔧 | 40,2 k, no 10 k (§6.1; decía R157) |
-| lectura de `+5VA` (§6.1.a) | **R162, R163, C327** 🆕 | 100 k / 100 k / 4,7 nF → PC1 |
+| lectura de `+5VA` (§6.1.a) | **R163** (de `+5VA`), **R162** (a GND), **C312** 🔧 | 100 k / 100 k / 4,7 nF → PC1 |
 | C_bulk (§3.1) | **C273, C314** | 2× 100 µF / 35 V |
 | 2× 10 µF del buck A + C_in1 | **C316, C324, C326** | 3× 10 µF / 50 V 1210 |
 | 2× 10 µF del buck B | **C319, C325** | + C60 (22 µF electrolítico) y C320 (100 nF) |

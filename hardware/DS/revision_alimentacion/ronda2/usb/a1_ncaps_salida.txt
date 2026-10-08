@@ -1,0 +1,19 @@
+autoprueba: OK
+
+Pico de +5V_AUX (peor caso sobre 9 cables y C55 efectivo 2/3/4 µF), VBUS 5,25 V
+ n  pieza                 | clamp U9 0,5 Ω | clamp 2 Ω | sin clamp
+ 1  típica, 25 °C         |    6.155 V    |  6.306 V  |  6.380 V
+ 1  −20 %, 85 °C (peor)   |    6.317 V    |  6.533 V  |  6.643 V
+ 2  típica, 25 °C         |    5.783 V    |  5.818 V  |  5.834 V
+ 2  −20 %, 85 °C (peor)   |    5.946 V    |  6.025 V  |  6.062 V
+ 3  típica, 25 °C         |    5.573 V    |  5.574 V  |  5.574 V
+ 3  −20 %, 85 °C (peor)   |    5.732 V    |  5.755 V  |  5.766 V
+ 4  típica, 25 °C         |    5.421 V    |  5.421 V  |  5.421 V
+ 4  −20 %, 85 °C (peor)   |    5.583 V    |  5.585 V  |  5.585 V
+ 5  típica, 25 °C         |    5.319 V    |  5.319 V  |  5.319 V
+ 5  −20 %, 85 °C (peor)   |    5.463 V    |  5.463 V  |  5.463 V
+
+Sensibilidad: VBUS 5,5 V (máximo de vSafe5V), pieza en el peor caso, clamp 2 Ω
+  n = 2: 6.240 V
+  n = 3: 5.943 V
+  n = 4: 5.756 V

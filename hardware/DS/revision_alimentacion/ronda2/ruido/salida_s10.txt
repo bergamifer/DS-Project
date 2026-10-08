@@ -1,0 +1,171 @@
+AUTOPRUEBA
+  OK  descarga a I constante: 2.5000 V (esperado 2.5000)
+  OK  descarga a P constante: 19.069 V (esperado 19.069)
+  OK  EN de IC4: VON 14.27 V, VOFF 11.12 V (doc: 14,3 / 11,1)
+  OK  SS34 explícito: 0.100 A @0,34 V, 1.000 A @0,45 V
+  OK  diodo de cuerpo pasa por sus dos puntos
+  OK  sin cargas, 10 ms: 5.0000 / 4.0000 V (esperado 5 / 4: no inventa descargas)
+
+== amps OFF, DAC típ. · con 3×22 µF + 1 kΩ
+      8.56 ms  IC4 se apaga (EN < VOFF)
+     10.40 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+     10.69 ms  +5VA < 4,5 V (mín. PCM1690)
+     15.12 ms  +3V3 < 3,2 V
+     15.24 ms  U11 se apaga (UVLO 3,06 V)
+     15.26 ms  +3V3 < 2,93 V (MAX809S resetea)
+     19.59 ms  +5VA < 2,1 V (UVLO PAM)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 4.56 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -0.17 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 0.00 ms
+   rebote de VIN_B tras apagarse U11: pico 3.27 V (sin ESR) + ≤0.10 V por ESR = 3.37 V contra el umbral de subida 3,5 V típ. (no rearranca)
+
+== amps OFF, DAC típ. · hoy
+      8.62 ms  IC4 se apaga (EN < VOFF)
+     10.44 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+     10.73 ms  +5VA < 4,5 V (mín. PCM1690)
+     15.17 ms  +3V3 < 3,2 V
+     15.30 ms  U11 se apaga (UVLO 3,06 V)
+     15.31 ms  +3V3 < 2,93 V (MAX809S resetea)
+     19.47 ms  +5VA < 2,1 V (UVLO PAM)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 4.58 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -0.21 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 0.00 ms
+   rebote de VIN_B tras apagarse U11: pico 3.27 V (sin ESR) + ≤0.10 V por ESR = 3.38 V contra el umbral de subida 3,5 V típ. (no rearranca)
+
+== amps en reposo · con 3×22 µF + 1 kΩ
+      7.27 ms  IC4 se apaga (EN < VOFF)
+      8.61 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+      8.82 ms  +5VA < 4,5 V (mín. PCM1690)
+     13.84 ms  +3V3 < 3,2 V
+     13.96 ms  U11 se apaga (UVLO 3,06 V)
+     13.98 ms  +3V3 < 2,93 V (MAX809S resetea)
+     15.26 ms  +5VA < 2,1 V (UVLO PAM)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 5.16 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -0.87 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 1.07 ms
+   rebote de VIN_B tras apagarse U11: pico 3.26 V (sin ESR) + ≤0.10 V por ESR = 3.36 V contra el umbral de subida 3,5 V típ. (no rearranca)
+
+== amps en reposo · hoy
+      7.32 ms  IC4 se apaga (EN < VOFF)
+      8.63 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+      8.84 ms  +5VA < 4,5 V (mín. PCM1690)
+     13.88 ms  +3V3 < 3,2 V
+     14.00 ms  U11 se apaga (UVLO 3,06 V)
+     14.02 ms  +3V3 < 2,93 V (MAX809S resetea)
+     15.16 ms  +5VA < 2,1 V (UVLO PAM)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 5.18 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -0.91 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 1.17 ms
+   rebote de VIN_B tras apagarse U11: pico 3.26 V (sin ESR) + ≤0.10 V por ESR = 3.36 V contra el umbral de subida 3,5 V típ. (no rearranca)
+
+== amps con señal 11,3 W · con 3×22 µF + 1 kΩ
+      1.97 ms  IC4 se apaga (EN < VOFF)
+      2.17 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+      2.20 ms  +5VA < 4,5 V (mín. PCM1690)
+      2.95 ms  +5VA < 2,1 V (UVLO PAM)
+      9.02 ms  +3V3 < 3,2 V
+      9.15 ms  U11 se apaga (UVLO 3,06 V)
+      9.16 ms  +3V3 < 2,93 V (MAX809S resetea)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 6.96 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -2.50 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 6.42 ms
+   rebote de VIN_B tras apagarse U11: pico 3.20 V (sin ESR) + ≤0.10 V por ESR = 3.30 V contra el umbral de subida 3,5 V típ. (no rearranca)
+
+== amps con señal 11,3 W · hoy
+      1.98 ms  IC4 se apaga (EN < VOFF)
+      2.17 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+      2.20 ms  +5VA < 4,5 V (mín. PCM1690)
+      2.95 ms  +5VA < 2,1 V (UVLO PAM)
+      9.01 ms  +3V3 < 3,2 V
+      9.14 ms  U11 se apaga (UVLO 3,06 V)
+      9.15 ms  +3V3 < 2,93 V (MAX809S resetea)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 6.95 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -2.53 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 6.42 ms
+   rebote de VIN_B tras apagarse U11: pico 3.20 V (sin ESR) + ≤0.10 V por ESR = 3.30 V contra el umbral de subida 3,5 V típ. (no rearranca)
+
+== amps OFF, DAC sin corriente (cota) · con 3×22 µF + 1 kΩ
+     14.48 ms  IC4 se apaga (EN < VOFF)
+     21.47 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+     21.66 ms  +5VA < 4,5 V (mín. PCM1690)
+     22.56 ms  +3V3 < 3,2 V
+     23.12 ms  U11 se apaga (UVLO 3,06 V)
+     23.14 ms  +3V3 < 2,93 V (MAX809S resetea)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 1.48 ms
+   diodo de cuerpo: máx 2.3 mA, carga 4.1 µC · D23 máx 499 mA · máx(+5VA − VIN_LOCAL) +0.55 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 0.00 ms
+   rebote de VIN_B tras apagarse U11: pico 3.37 V (sin ESR) + ≤0.15 V por ESR = 3.52 V contra el umbral de subida 3,5 V típ. (REARRANCA)
+
+== amps OFF, DAC sin corriente (cota) · hoy
+     14.64 ms  IC4 se apaga (EN < VOFF)
+     21.66 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+     21.85 ms  +5VA < 4,5 V (mín. PCM1690)
+     22.73 ms  +3V3 < 3,2 V
+     23.28 ms  U11 se apaga (UVLO 3,06 V)
+     23.30 ms  +3V3 < 2,93 V (MAX809S resetea)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 1.45 ms
+   diodo de cuerpo: máx 2.4 mA, carga 4.4 µC · D23 máx 497 mA · máx(+5VA − VIN_LOCAL) +0.55 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 0.00 ms
+   rebote de VIN_B tras apagarse U11: pico 3.38 V (sin ESR) + ≤0.15 V por ESR = 3.53 V contra el umbral de subida 3,5 V típ. (REARRANCA)
+
+== amps OFF, DAC sin corriente, +5VA +20 %, VIN_LOCAL −20 % · con 3×22 µF + 1 kΩ
+     12.28 ms  IC4 se apaga (EN < VOFF)
+     18.58 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+     18.80 ms  +5VA < 4,5 V (mín. PCM1690)
+     19.77 ms  +3V3 < 3,2 V
+     20.40 ms  U11 se apaga (UVLO 3,06 V)
+     20.42 ms  +3V3 < 2,93 V (MAX809S resetea)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 1.62 ms
+   diodo de cuerpo: máx 4.1 mA, carga 8.6 µC · D23 máx 526 mA · máx(+5VA − VIN_LOCAL) +0.57 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 0.00 ms
+   rebote de VIN_B tras apagarse U11: pico 3.39 V (sin ESR) + ≤0.15 V por ESR = 3.54 V contra el umbral de subida 3,5 V típ. (REARRANCA)
+
+== amps OFF, DAC sin corriente, +5VA +20 %, VIN_LOCAL −20 % · hoy
+     12.42 ms  IC4 se apaga (EN < VOFF)
+     18.74 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+     18.95 ms  +5VA < 4,5 V (mín. PCM1690)
+     19.91 ms  +3V3 < 3,2 V
+     20.53 ms  U11 se apaga (UVLO 3,06 V)
+     20.55 ms  +3V3 < 2,93 V (MAX809S resetea)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 1.60 ms
+   diodo de cuerpo: máx 4.2 mA, carga 9.1 µC · D23 máx 525 mA · máx(+5VA − VIN_LOCAL) +0.57 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 0.00 ms
+   rebote de VIN_B tras apagarse U11: pico 3.40 V (sin ESR) + ≤0.15 V por ESR = 3.55 V contra el umbral de subida 3,5 V típ. (REARRANCA)
+
+== amps OFF, bus con 150 µF más por placa · con 3×22 µF + 1 kΩ
+     13.42 ms  IC4 se apaga (EN < VOFF)
+     15.26 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+     15.55 ms  +5VA < 4,5 V (mín. PCM1690)
+     23.69 ms  +3V3 < 3,2 V
+     23.87 ms  U11 se apaga (UVLO 3,06 V)
+     23.89 ms  +3V3 < 2,93 V (MAX809S resetea)
+     24.45 ms  +5VA < 2,1 V (UVLO PAM)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 8.33 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -1.20 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 2.69 ms
+   rebote de VIN_B tras apagarse U11: pico 3.28 V (sin ESR) + ≤0.12 V por ESR = 3.40 V contra el umbral de subida 3,5 V típ. (no rearranca)
+
+== amps OFF, bus con 150 µF más por placa · hoy
+     13.51 ms  IC4 se apaga (EN < VOFF)
+     15.33 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+     15.62 ms  +5VA < 4,5 V (mín. PCM1690)
+     23.78 ms  +3V3 < 3,2 V
+     23.97 ms  U11 se apaga (UVLO 3,06 V)
+     23.98 ms  +3V3 < 2,93 V (MAX809S resetea)
+     24.36 ms  +5VA < 2,1 V (UVLO PAM)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 8.36 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -1.25 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 2.81 ms
+   rebote de VIN_B tras apagarse U11: pico 3.28 V (sin ESR) + ≤0.12 V por ESR = 3.40 V contra el umbral de subida 3,5 V típ. (no rearranca)
+
+== amps con señal, VOFF peor (10,4 V) · con 3×22 µF + 1 kΩ
+      2.08 ms  IC4 se apaga (EN < VOFF)
+      2.28 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+      2.32 ms  +5VA < 4,5 V (mín. PCM1690)
+      3.07 ms  +5VA < 2,1 V (UVLO PAM)
+      8.23 ms  +3V3 < 3,2 V
+      8.35 ms  U11 se apaga (UVLO 3,06 V)
+      8.37 ms  +3V3 < 2,93 V (MAX809S resetea)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 6.05 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -2.38 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 5.51 ms
+   rebote de VIN_B tras apagarse U11: pico 3.19 V (sin ESR) + ≤0.10 V por ESR = 3.30 V contra el umbral de subida 3,5 V típ. (no rearranca)
+
+== amps con señal, VOFF peor (10,4 V) · hoy
+      2.09 ms  IC4 se apaga (EN < VOFF)
+      2.29 ms  +5VA < 4,58 V (PG/UVP, 90 %)
+      2.32 ms  +5VA < 4,5 V (mín. PCM1690)
+      3.07 ms  +5VA < 2,1 V (UVLO PAM)
+      8.22 ms  +3V3 < 3,2 V
+      8.34 ms  U11 se apaga (UVLO 3,06 V)
+      8.36 ms  +3V3 < 2,93 V (MAX809S resetea)
+   → +3V3 sobrevive a +5VA (<4,5 V) por 6.04 ms
+   diodo de cuerpo: máx 0.0 mA, carga 0.0 µC · D23 máx 0 mA · máx(+5VA − VIN_LOCAL) -2.41 V · reencendidos IC4 0, U11 0 · SD sobre VDD de los PAM con MCU vivo: 5.51 ms
+   rebote de VIN_B tras apagarse U11: pico 3.19 V (sin ESR) + ≤0.10 V por ESR = 3.30 V contra el umbral de subida 3,5 V típ. (no rearranca)

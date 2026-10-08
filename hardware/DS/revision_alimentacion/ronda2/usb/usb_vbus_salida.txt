@@ -1,0 +1,51 @@
+autoprueba usb_vbus: OK
+
+1) Fuga de D2/D8 con +5V_AUX = 4,80 V y la red VBUS cerca de 0 (VR = 4,8 V = 12 % de 40 V), µA
+   T [°C]:           25       40       60       75       85
+   típica:          1.4      4.8     24.3     81.8    175.1
+   máx. espec.:     181      229      314      397      448
+
+2) Red VBUS SIN cable, 20 V puestos (V). Típica / máxima
+   J3 hoy (sólo U6 + C31)         4.80/4.80  4.80/4.80  4.80/4.80  4.80/4.80  4.80/4.80
+   J3 + multímetro 10 MΩ          4.79/4.80  4.80/4.80  4.80/4.80  4.80/4.80  4.80/4.80
+   J8 hoy (R161+R160 = 162 kΩ)    0.23/4.79  0.78/4.80  3.86/4.80  4.78/4.80  4.79/4.80
+   J3 o J8 + 1 kΩ (propuesta)     0.00/0.18  0.00/0.23  0.02/0.31  0.08/0.39  0.17/0.44
+     idem con 5,1 kΩ              0.01/0.92  0.02/1.16  0.12/1.58  0.41/1.99  0.88/2.24
+     idem con 10 kΩ               0.01/1.81  0.05/2.27  0.24/3.08  0.80/3.88  1.72/4.35
+     idem con 100 kΩ (C25741)     0.14/4.79  0.48/4.79  2.40/4.79  4.77/4.80  4.79/4.80
+   (columnas: 25 °C, 40 °C, 60 °C, 75 °C, 85 °C)
+
+3) PA5 = V(J8) × 100/162 sin cable (V). Umbrales DS12110 Tabla 60 con VDD = 3,3 V:
+   VIL máx 0,3·VDD = 0,99 (CMOS) / 0,4·VDD−0,1 = 1,22 (diseño); VIH mín 0,47·VDD+0,25 = 1,80 (diseño) / 0,7·VDD = 2,31 (CMOS)
+   hoy (162 kΩ)           0.14/2.96  0.48/2.96  2.38/2.96  2.95/2.96  2.96/2.96
+   con 1 kΩ en paralelo   0.00/0.11  0.00/0.14  0.01/0.19  0.05/0.24  0.11/0.27
+   hoy, fuga típica: PA5 pasa 0,99 V a 50 °C, 1,22 V a 52 °C, 1,80 V a 57 °C, 2,31 V a 60 °C
+   hoy, fuga máxima: PA5 pasa 0,99 V a 0 °C, 1,22 V a 0 °C, 1,80 V a 0 °C, 2,31 V a 0 °C
+
+4) Prueba «Back Voltage» de USB-IF (15 kΩ en VBUS y en D+; límite 400 mV), J3, 25 °C
+   hoy, D+ activo (pull-up 1,1 kΩ): VBUS 2.31 V, D+ 2.92 V, 153 µA por el diodo de U6
+   hoy, D+ activo (1,5 kΩ        ): VBUS 2.20 V, D+ 2.80 V, 145 µA por el diodo de U6
+   hoy, D+ activo (2,2 kΩ        ): VBUS 2.02 V, D+ 2.62 V, 133 µA por el diodo de U6
+   sólo fuga de D2 (típ), sin pull-up: VBUS 0.021 V; con 1 kΩ propio: 0.001 V
+   sólo fuga de D2 (máx), sin pull-up: VBUS 2.693 V; con 1 kΩ propio: 0.169 V
+
+5) J3 contra la descarga de la Mac en AttachWait.SRC (R_src desconocida; D+ de la Mac con 15 kΩ), 25 °C
+   R_src  | hoy (pin 5 en VBUS, D+ activo 1,5 k / 2,2 k) | +1 kΩ, pin 5 en VBUS | +1 kΩ, pin 5 en +3V3 (sólo fuga típ/máx, 85 °C)
+      0.1k |  0.16 /  0.11 V                          |   0.15 V             |  0.016 / 0.041 V
+      0.5k |  0.63 /  0.46 V                          |   0.46 V             |  0.058 / 0.149 V
+      1.0k |  0.99 /  0.76 V                          |   0.63 V             |  0.087 / 0.222 V
+      2.0k |  1.40 /  1.14 V                          |   0.77 V             |  0.116 / 0.295 V
+      5.0k |  1.86 /  1.63 V                          |   0.89 V             |  0.145 / 0.368 V
+     10.0k |  2.10 /  1.90 V                          |   0.94 V             |  0.158 / 0.401 V
+    100.0k |  2.41 /  2.28 V                          |   0.99 V             |  0.172 / 0.437 V
+   sensibilidad al IS del diodo de U6 (R_src 1 kΩ, pull-up 1,5 k): IS 1e-15 → 0.97 V, IS 1e-14 → 0.99 V, IS 1e-12 → 1.04 V
+
+6) N3 en J8: el STM32 con el pull-up de D+ prendido y el host que se va (sin cable o host apagado)
+   hoy, 162 kΩ           : VBUS 2.73 V → PA5 1.69 V  (15 µA por U9)
+   con 1 kΩ en paralelo  : VBUS 1.05 V → PA5 0.65 V  (1059 µA por U9)
+
+7) Arreglo de 1 kΩ con VBUS presente
+   VBUS 4.40 V: 4.40 mA, 19.4 mW en el 1 kΩ 0402; PA5 = 2.716 V (nominal), extremos ±1 %: 2.695–2.737 V
+   VBUS 5.00 V: 5.00 mA, 25.0 mW en el 1 kΩ 0402; PA5 = 3.086 V (nominal), extremos ±1 %: 3.063–3.110 V
+   VBUS 5.25 V: 5.25 mA, 27.6 mW en el 1 kΩ 0402; PA5 = 3.241 V (nominal), extremos ±1 %: 3.216–3.265 V
+   VBUS 5.50 V: 5.50 mA, 30.2 mW en el 1 kΩ 0402; PA5 = 3.395 V (nominal), extremos ±1 %: 3.369–3.421 V

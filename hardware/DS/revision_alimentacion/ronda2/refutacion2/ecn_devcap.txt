@@ -1,0 +1,73 @@
+USB Engineering Change Notice
+
+
+
+                USB ENGINEERING CHANGE NOTICE
+Title:      Device Capacitance
+Applies to: Universal Serial Bus Specification, Revision 2.0
+
+Summary of ECN
+This ECN ensures that all USB peripherals have a detectable change in capacitance on VBus when they
+are attached. This ensures that OTG devices and Embedded Hosts can detect attachment of peripherals
+in the absence of VBus.
+
+In addition the ECN clarifies an inconsistency in the USB 2.0 specification.
+
+Reasons for ECN
+OTG devices and Embedded Hosts are becoming more prevalent in the eco-system and it would improve
+the interoperability and end user ease of use if OTG devices and hosts can properly detect the
+attachment of devices when VBus is turned-off (typically to conserve power).
+
+Impact on Existing Peripherals and Systems:
+It is estimated that around 10% of USB devices going into compliance have less than 1µF capacitance on
+VBUS as measured by the inrush test. All of these are self-powered devices.
+
+With the increased uptake of USB charging and a desire to be detectable via the Attach Detection
+Protocol (ADP), it is anticipated that the number of USB devices with less than 1µF capacitance will
+reduce.
+
+Hardware Implications:
+A small number of USB devices will need to add a 1µF capacitance to their VBUS line in order to be
+detectable via ADP. The majority of USB devices already have a capacitance larger than 1µF on VBUS.
+
+Software Implications:
+Large improvement in usability since USB device attachment/detachment can now be detected reliably.
+
+
+Compliance Testing Implications:
+Method of testing this is inrush. The compliance tests will need to be verified to ensure that the limits on
+the test are still correct.
+
+
+
+
+USB ECN: Device Capacitance                                                                                    1
+USB Engineering Change Notice
+
+
+
+
+Specification Changes
+The last sentence in Section 7.2.4.2 to be modified from:
+
+    “A minimum of 1.0uF is recommended for bypass across Vbus.”
+
+To the following text:
+
+    “A USB device is required to expose a capacitance on the VBUS pin of its connector of CRPB. This
+    capacitance shall be greater than CRPB min for voltages on the VBUS pin from 0V to 5.25V,
+    regardless of whether the USB device is powered or unpowered.”
+
+
+
+
+Table 7-7 entry for CRPB to be modified as follows:
+Upstream Facing Port Bypass CRPB     VBUS to GND across the whole VBUS            1.0   10.0   µF
+Capacitance                          voltage range (0 - 5.25V); Note 9, Section
+                                        7.2.4.1
+
+
+
+
+USB ECN: Device Capacitance                                                                            2
+

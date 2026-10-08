@@ -56,6 +56,12 @@ bajan cerca del consumo. **Tensión alta para transportar, baja para convertir.*
 | **Una placa en banco**, cable corto | **12 V** | menos calor en el buck, más margen al máximo absoluto, cable irrelevante |
 | **Daisy-chain de varias placas** | **19-20 V** | el ahorro del buck no compensa el I²R del cable |
 
+> ⚠️ **2026-10-02 — esta tabla es de la DS11.** En la DS12 **no hay banco a 12 V**: el buck de los
+> amplificadores (AP63356) tiene un UVLO por divisor en su pin EN que lo enciende recién con ≈14,3 V
+> nominales (R151/R156, `hardware/DS/DS12_ALIMENTACION.md` §3.2). Con 12 V el micro arranca, porque el
+> buck digital no tiene UVLO, pero **los amplificadores no encienden nunca**. La DS12 se alimenta con
+> 19–20 V también en el banco (ventana útil: 15–21 V).
+
 Y el calor del buck a 19 V se relativiza: sólo supera el límite de disipación cerca
 de **2 A de salida**, y por el presupuesto de la sección 3 tampoco podemos sostener
 esa carga. **El problema térmico se auto-limita** por el mismo techo de potencia.
