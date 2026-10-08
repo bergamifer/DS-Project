@@ -161,17 +161,21 @@ y vuelve **mientras el digital nunca se cae**. Dos cosas dependían de que todo 
 
 ### A.9 🆕 Revisión de alimentación (octubre) — [DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md) §9
 
-- [ ] 🔴 **Cinco `C45783`** (22 µF, 25 V, X5R, 0805) de `+5V_AUX` a GND. Frenan el golpe de ariete de J8 (S4.f). Con
+> **2026-10-08 — tildado contra el esquemático guardado a las 20:24** (netlist regenerado con `tools/sch2net.py`):
+> cinco `C45783` (C313, C327, C328, C330, C331) y R25 en `+5V_AUX`; R32 y R33 de VBUS a GND; el pin 5 de U6 y U9 en `+3V3`
+> con C56 y C51 a GND; C28 de 1 µF; TDMIN a GND; PE15 → JP3 → R36 → GND; D22 y D24 con R34 y R35; TP9 en `IN`.
+
+- [x] 🔴 **Cinco `C45783`** (22 µF, 25 V, X5R, 0805) de `+5V_AUX` a GND. Frenan el golpe de ariete de J8 (S4.f). Con
       tres o cuatro no se cumple el criterio en el peor caso combinado. Alternativa: tres, más C55 de 2,2 µF (`C23630`), si
       cumple la ECN de USB (ABIERTO).
-- [ ] **1 kΩ 0402 (`C11702`) de `+5V_AUX` a GND**: carga mínima contra la fuga de D23 con el STM32 en blanco (N1).
-- [ ] **1 kΩ (`C11702`) del VBUS de J3 a GND y otro del VBUS de J8 a GND**, del lado del conector (N4/N2). **Va junto con el siguiente.**
-- [ ] **El pin 5 de U6 y de U9 (USBLC6) a `+3V3`**, no a VBUS, con un 100 nF (`C1525`) al lado de cada uno (N3).
-- [ ] **C28 (EN del ESP32) de 0,1 µF a 1 µF** (`C15849`): la rampa de 4 ms del AP63301 deja el RC al límite.
-- [ ] **TDMIN (pin 35 del AK5538) a GND**, como pide la hoja en modo PCM.
-- [ ] **Jumper de identidad: PE15 (pata 45) a GND por 1 kΩ (`C11702`)**. En el BOM no hay 0 Ω.
+- [x] **1 kΩ 0402 (`C11702`) de `+5V_AUX` a GND**: carga mínima contra la fuga de D23 con el STM32 en blanco (N1).
+- [x] **1 kΩ (`C11702`) del VBUS de J3 a GND y otro del VBUS de J8 a GND**, del lado del conector (N4/N2). **Va junto con el siguiente.**
+- [x] **El pin 5 de U6 y de U9 (USBLC6) a `+3V3`**, no a VBUS, con un 100 nF (`C1525`) al lado de cada uno (N3).
+- [x] **C28 (EN del ESP32) de 0,1 µF a 1 µF** (`C15849`): la rampa de 4 ms del AP63301 deja el RC al límite.
+- [x] **TDMIN (pin 35 del AK5538) a GND**, como pide la hoja en modo PCM.
+- [x] **Jumper de identidad: PE15 (pata 45) a GND por 1 kΩ (`C11702`)**. En el BOM no hay 0 Ω.
 - [ ] Decisiones abiertas: LED de tensión D24/D25, TP9 en `IN`, C73–C80 (6,3 V sobre `+5VA`), R20 a 5,1 kΩ (después de la medida M5).
-- [ ] Prolijidad: el valor de C67, C69, C70, C321 y C322 dice «16V», pero `C45783` es de 25 V. Corregirlo, para que nadie lo
+- [x] Prolijidad: el valor de C67, C69, C70, C321 y C322 dice «16V», pero `C45783` es de 25 V. Corregirlo, para que nadie lo
       «arregle» poniendo uno de 16 V.
 
 ---
