@@ -86,6 +86,7 @@ Core/Src/uart_protocol.c \
 Core/Src/eeprom_config.c \
 Core/Src/ota.c \
 Core/Src/fw_version.c \
+Core/Src/power_guard.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc.c \
@@ -415,7 +416,36 @@ clean-boot:
 #######################################
 # Borra los builds de las DOS placas.
 clean:
-	-rm -fR build build_ds12
+	-rm -fR build build_ds12 build_test
+
+#######################################
+# Tests de host: corren en la Mac, sin placa.
+#######################################
+# La guarda de +5VA (Core/Src/power_guard.c). Se compila tres veces: la de
+# verdad tiene que PASAR, y dos rotas a proposito (mutantes) tienen que FALLAR.
+# Si un mutante pasa, el test no esta mirando lo que dice mirar, y el "ok" de
+# la de verdad no vale nada.
+HOST_CC ?= cc
+# En esta Mac las Command Line Tools traen un SDK (macOS 27) que su propio
+# linker no entiende ("tapi error: unknown architecture arm64e.x1"). El SDK de
+# Xcode si linkea; si esta instalado, se usa ese.
+XCODE_SDK := /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+ifneq ($(wildcard $(XCODE_SDK)),)
+HOST_ENV = SDKROOT=$(XCODE_SDK)
+endif
+TEST_CFLAGS = -std=c11 -Wall -Wextra -Werror -ICore/Inc
+PG_MUTANTES = "-DPGD_ESTABLE_MS=0u" "-DPGD_MAX_RESTAUR=200u" "-DPGD_VENTANA_MS=1u"
+test:
+	@mkdir -p build_test
+	@$(HOST_ENV) $(HOST_CC) $(TEST_CFLAGS) tests/test_power_guard.c -o build_test/test_power_guard
+	@./build_test/test_power_guard
+	@for m in $(PG_MUTANTES); do \
+	  $(HOST_ENV) $(HOST_CC) $(TEST_CFLAGS) $$m tests/test_power_guard.c -o build_test/mutante || exit 1; \
+	  if ./build_test/mutante >/dev/null; then \
+	    echo "✗ el mutante $$m PASA: el test no lo detecta"; exit 1; \
+	  else echo "  mutante $$m: detectado"; fi; \
+	done
+.PHONY: test
 
 clean-led:
 	-rm -fR $(LED_BUILD)

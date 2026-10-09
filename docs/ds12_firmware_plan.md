@@ -149,7 +149,51 @@ Mientras tanto, la página muestra el aviso de protocolos distintos.
 - **primero que todo**, con el firmware normal: la línea `PLACA: firmware DS11, jumper PE15 = 1 (espera 1) (ok)` en
   las tres DS11.
 
-### Fase 3 — La guarda de `+5VA` (código listo antes de que llegue la DS12; se prueba en ella)
+### Fase 3 — La guarda de `+5VA` (código listo antes de que llegue la DS12; se prueba en ella) 🟡 código y test de host hechos el 2026-10-09
+
+> **Resultado (compilado y probado en la Mac; falta la DS12):**
+> - **El binario de la DS11 no tiene la guarda.** En su ELF, `ADC_IRQHandler` y `EXTI15_10_IRQHandler` son el handler
+>   por defecto, y no aparece ningún símbolo de `power_guard`.
+> - **Test de host** (`make test`): 14 escenarios simulados de a 1 ms. La propiedad de seguridad se revisa en cada
+>   milisegundo de cada escenario: el pin SD nunca está arriba con `+5VA` bajo el corte o con PG bajo. Escenarios:
+>   - sólo USB;
+>   - caída y vuelta;
+>   - riel que rebota;
+>   - histéresis;
+>   - amplificadores apagados al caer;
+>   - una persona que los apaga durante la caída;
+>   - fuente que tartamudea;
+>   - ventana de 10 min;
+>   - codecs mudos;
+>   - caída durante la reconfiguración;
+>   - PG solo;
+>   - corte sólo por nivel;
+>   - vuelta del tick a los 49,7 días.
+>
+>   **Tres mutantes** (sin los 50 ms, sin límite de restauraciones y con una ventana de 1 ms): el test detecta los
+>   tres. Un "ok" que no puede fallar no prueba nada.
+> - **Decisiones que el plan no traía:**
+>   - **Límite de restauraciones.** Los amplificadores vuelven solos como mucho 3 veces cada 10 minutos. Una fuente
+>     que no da abasto se cae cada vez que suenan, y sin límite la obra sería un tartamudeo de golpes. Pasado el
+>     límite quedan apagados hasta que una persona los encienda, y `/status` lo muestra en `v5a.bloqueo`.
+>   - **Codec que no contesta** después de la caída: la placa queda permitida (el riel está bien), pero no se
+>     restaura sola. Lo decide una persona, igual que en el arranque.
+>   - **387,5 ciclos de muestreo** en el ADC1, unas 10.000 conversiones por segundo. Convirtiendo más seguido, los
+>     50 kΩ del divisor falsean la lectura, porque C312 no llega a recargarse.
+>   - **Los umbrales se calibran una vez, al arrancar.** La HAL exige el ADC parado para cambiarlos. Si `+3V3` se
+>     moviera un 3 % durante la obra, el corte se correría 0,13 V de `+5VA`. `+3V3` sale de otro buck.
+>   - **Después de una caída, el ADC de audio queda apagado (PDN) hasta que vuelva `+5VA`**, aunque en sólo-USB
+>     podría andar.
+>   - **Las esperas del driver del PCM1690 ceden el CPU** (`PCM1690_Yield`) sólo durante una recuperación. Así el
+>     audio no pierde fills en los ~120 ms que tarda, y el arranque queda como era.
+>   - **`/status` lleva `"v5a": {mv, ok, pg, bloqueo, caidas}` en la DS12, y `null` en la DS11.** En la DS11 un
+>     cero se leería como «`+5VA` en 0 V».
+> - **Lo que cambia en la DS11** (no se probó en placa, entra con el banco de la fase 2):
+>   - la configuración del AK5538 pasó a `AK5538_EscribirModo()`, que usan el arranque y la recuperación, con los
+>     mismos cinco registros;
+>   - `Set_Amps` se partió en la decisión y la escritura del pin. La escritura pregunta otra vez con las
+>     interrupciones apagadas, ~10 ciclos;
+>   - en el banner del arranque tiene que seguir apareciendo el readback `R02=0x31 R03=0x40 R04=0x02`.
 
 Va todo detrás de `BOARD_HAS_5VA_SENSE`.
 

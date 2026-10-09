@@ -29,6 +29,7 @@
 #include "pin_definitions.h"
 #include "eeprom_config.h"
 #include "ota.h"
+#include "power_guard.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -1469,6 +1470,26 @@ static uint8_t  autostart_undo = 0;       /* el reset anterior fue nuestro (ver 
  * subir el firmware correcto. Ver ID_JUMPER_PIN en board/board_common.h. */
 static uint8_t  board_mismatch = 0;
 static uint8_t  id_jumper_level = 0xFF;   /* lo leído en PE15 al arrancar */
+
+#if BOARD_HAS_5VA_SENSE
+#if !BOARD_HAS_PG
+  #error "La guarda de +5VA necesita PG (PA10): ver power_guard.h"
+#endif
+/* La guarda de +5VA (DS12). Ver power_guard.h y V5A_Init(). */
+#define V5A_CORTE_MV    4500u   /* +5VA bajo esto: SD abajo (PC1 = 2,25 V) */
+#define V5A_REARME_MV   4700u   /* +5VA sobre esto: puede volver (PC1 = 2,35 V) */
+static ADC_HandleTypeDef hadc1;
+static pgd_t             v5a_guard;
+static volatile uint8_t  v5a_disparo = 0;   /* la ISR cortó; lo consume V5A_Tick */
+static uint16_t          v5a_cod_corte  = 0xFFFF;   /* umbrales en código del ADC */
+static uint16_t          v5a_cod_rearme = 0xFFFF;
+static uint16_t          v5a_vdda_cal   = 0;        /* VDDA con que se calcularon */
+static uint16_t          v5a_mv_ult     = 0;        /* +5VA, última lectura */
+static uint8_t           v5a_pg_ult     = 0;
+#endif
+/* Mientras se reconfiguran los codecs con el audio andando, las esperas del
+ * driver del PCM1690 sirven los fills (PCM1690_Yield). En el arranque no. */
+static uint8_t  codecs_coop = 0;
 static uint32_t autostart_und0 = 0;       /* underruns al armar */
 static uint32_t autostart_sai0 = 0;       /* errores de SAI al armar */
 
@@ -1684,11 +1705,18 @@ static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 static int32_t Read_CPU_Temperature(void);
 static void Rail_Poll(void);
+static void AK5538_EscribirModo(void);
 static void Fill_Audio_Beamform(int32_t *buffer, uint32_t samples, uint32_t ch_offset);
 static void Process_ADC_Half(int32_t *rx_buf, uint32_t samples);
 static void Service_Fills(void);
 static void Set_In_Gain(uint8_t db);
 static void Set_Amps(uint8_t on);
+static void Amps_Escribir(uint8_t on);
+static const char *Amps_MotivoNo(void);
+#if BOARD_HAS_5VA_SENSE
+static void V5A_Init(void);
+static void V5A_Tick(void);
+#endif
 static void Autostart_Tick(void);
 static void Autostart_ManualOverride(uint8_t turning_on);
 static void Config_LoadDefaults(void);
@@ -1748,6 +1776,10 @@ void UART_Protocol_Yield(void) { Service_Fills(); }
  * queda en espera activa sobre el registro de estado del flash. Por eso el
  * borrado se hace con los amplificadores ya apagados. */
 void OTA_Yield(void)           { Service_Fills(); }
+/* Y las esperas del driver del PCM1690, pero sólo durante una recuperación de
+ * +5VA: en el arranque todavía no hay fills que servir, y así el arranque queda
+ * exactamente como era. */
+void PCM1690_Yield(void)       { if (codecs_coop) Service_Fills(); }
 
 /* ============================================================
  * Actualización de firmware por WiFi — lado main loop
@@ -1816,6 +1848,46 @@ static uint32_t ota_reboot_at = 0;
  * un estado del que nadie sabe cómo salir. Treinta segundos son un orden de
  * magnitud más que el tramo más lento. */
 #define OTA_IDLE_TIMEOUT_MS  30000
+
+/** @brief Escribe el modo del AK5538 por I2C: 512fs, TDM256, filtro de retardo
+ *  corto. Lo usan el arranque y la recuperación de +5VA (DS12), así que las
+ *  dos escriben exactamente lo mismo. Bloquea ~2 ms de I2C.
+ *
+ *  Por qué cada registro: ver el comentario del mapa de registros en el
+ *  arranque (main(), "AK5538/AK5578 register map"). */
+static void AK5538_EscribirModo(void)
+{
+  uint8_t v;
+  v = 0x00;  // RSTN=0 — hold in reset while changing clock mode / format
+  HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+  v = 0x31;  // Control1: CKS3-0=0110 (512fs Normal), DIF=00 (24-bit MSB), HPFE=1
+  HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+  v = 0x40;  // Control2: TDM[1:0]=10 → TDM256
+  HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+  /* Control3 (0x04): [DP][0][0][0][0][0][SD][SLOW]
+   * SD=1 → SHORT DELAY, SLOW=0 → sharp roll-off  →  R04 = 0x02.
+   *
+   * Baja el group delay del filtro de diezmado de 19/fs a 5/fs = de 396 µs a
+   * 104 µs a 48 kHz (datasheet §9, fs=48k). **Los 292 µs son gratis**: el
+   * passband (22 kHz) y la atenuación de stopband (85 dB) son IDÉNTICOS entre
+   * SHARP y SHORT DELAY SHARP; lo único que cambia es que el filtro deja de
+   * ser de fase lineal (ΔGD pasa de 0 a 2.8/fs máx.).
+   *
+   * Por qué esa distorsión de fase NO afecta al beamforming: el filtro es el
+   * mismo en los 8 canales, así que es un retardo COMÚN. El patrón del haz lo
+   * fijan los delays RELATIVOS que aplica el STM32, que no se tocan. Sólo
+   * afecta marginalmente al timbre.
+   *
+   * El registro manda sobre el strapping: la placa tiene los pines SD y SLOW a
+   * GND (IC3.48, IC3.47), pero el datasheet §"Operation Mode Control" dice que
+   * "in serial control mode, register settings are prioritized so that all pin
+   * settings except the MSN pin setting are ignored", y estamos en modo I2C
+   * (I2C=H en IC3.54, PSN=L en IC3.53). El readback de abajo lo verifica. */
+  v = 0x02;
+  HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x04, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+  v = 0x01;  // RSTN=1 — release (stable MCLK/BICK/LRCK already running)
+  HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+}
 
 /* ============================================================
  * Autodiagnóstico — lo que los chips REALMENTE tienen adentro
@@ -2629,37 +2701,8 @@ int main(void)
   // Clock/format changes require RSTN=0 (PM2 0x01 bit0) during the write, then
   // RSTN=1 with a stable clock already running (it is).
   {
-    uint8_t v;
     UART_Print("AK5538VN: clock mode (CKS=512fs) + TDM256 via I2C...\r\n");
-    v = 0x00;  // RSTN=0 — hold in reset while changing clock mode / format
-    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
-    v = 0x31;  // Control1: CKS3-0=0110 (512fs Normal), DIF=00 (24-bit MSB), HPFE=1
-    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
-    v = 0x40;  // Control2: TDM[1:0]=10 → TDM256
-    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x03, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
-    /* Control3 (0x04): [DP][0][0][0][0][0][SD][SLOW]
-     * SD=1 → SHORT DELAY, SLOW=0 → sharp roll-off  →  R04 = 0x02.
-     *
-     * Baja el group delay del filtro de diezmado de 19/fs a 5/fs = de 396 µs a
-     * 104 µs a 48 kHz (datasheet §9, fs=48k). **Los 292 µs son gratis**: el
-     * passband (22 kHz) y la atenuación de stopband (85 dB) son IDÉNTICOS entre
-     * SHARP y SHORT DELAY SHARP; lo único que cambia es que el filtro deja de
-     * ser de fase lineal (ΔGD pasa de 0 a 2.8/fs máx.).
-     *
-     * Por qué esa distorsión de fase NO afecta al beamforming: el filtro es el
-     * mismo en los 8 canales, así que es un retardo COMÚN. El patrón del haz lo
-     * fijan los delays RELATIVOS que aplica el STM32, que no se tocan. Sólo
-     * afecta marginalmente al timbre.
-     *
-     * El registro manda sobre el strapping: la placa tiene los pines SD y SLOW a
-     * GND (IC3.48, IC3.47), pero el datasheet §"Operation Mode Control" dice que
-     * "in serial control mode, register settings are prioritized so that all pin
-     * settings except the MSN pin setting are ignored", y estamos en modo I2C
-     * (I2C=H en IC3.54, PSN=L en IC3.53). El readback de abajo lo verifica. */
-    v = 0x02;
-    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x04, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
-    v = 0x01;  // RSTN=1 — release (stable MCLK/BICK/LRCK already running)
-    HAL_I2C_Mem_Write(&hi2c3, AK5538_ADDR, 0x01, I2C_MEMADD_SIZE_8BIT, &v, 1, 50);
+    AK5538_EscribirModo();   /* el detalle de cada registro está en la función */
     HAL_Delay(5);
 
     // Readback verify R01-R03
@@ -2749,6 +2792,12 @@ int main(void)
   HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
   amps_enabled = 0;
   UART_Print("PAM8302A: SD LOW — 32 amps APAGADOS. Habilitar con POST /amps {\"on\":true}\r\n");
+
+#if BOARD_HAS_5VA_SENSE
+  /* La guarda de +5VA, antes de que nadie pueda pedir amplificadores: el
+   * autoarranque se decide unas líneas más abajo. */
+  V5A_Init();
+#endif
 
   /* Identidad de la placa, en el banner. */
   snprintf(uart_buf, sizeof(uart_buf), "PLACA: firmware %s, jumper PE15 = %u (espera %u)%s\r\n",
@@ -2870,6 +2919,10 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
     Service_Fills();
+
+#if BOARD_HAS_5VA_SENSE
+    V5A_Tick();           /* la guarda de +5VA: lo que la interrupción no decide */
+#endif
 
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
     if (autofocus_enabled) Cal_Process();
@@ -3396,7 +3449,17 @@ int main(void)
          * fases siguientes del plan DS12; en la DS11 quedan siempre en 0. */
         st.board_id    = BOARD_ID;
         st.board_flags = (board_mismatch ? BOARD_F_MISMATCH : 0);
+#if BOARD_HAS_5VA_SENSE
+        st.board_flags |= BOARD_F_SENSE
+                        | (v5a_pg_ult ? BOARD_F_PG : 0)
+                        | (pgd_permitido(&v5a_guard) ? BOARD_F_5VA_OK : 0)
+                        | (v5a_guard.bloqueado ? BOARD_F_BLOQUEO : 0);
+        st.v5a_mv      = v5a_mv_ult;
+        st.v5a_caidas  = (v5a_guard.caidas > 255u) ? 255u : (uint8_t)v5a_guard.caidas;
+#else
         st.v5a_mv      = 0;
+        st.v5a_caidas  = 0;
+#endif
         }
         st.master_vol_db = beam_config.master_vol_db;
         st.in_gain_db = in_gain_db;
@@ -4455,6 +4518,330 @@ static int32_t Read_CPU_Temperature(void)
 {
   return cpu_temp_x10;     /* lo actualiza Rail_Poll, sin bloquear */
 }
+
+#if BOARD_HAS_5VA_SENSE
+/* ============================================================
+ * LA GUARDA DE +5VA (DS12) — el lado del hardware
+ * ============================================================
+ *
+ * La máquina de estados vive en power_guard.c, sin HAL, y tiene su test en la
+ * Mac (make test). Acá está lo que toca el silicio:
+ *
+ * 1. MEDIR. PC1 = +5VA / 2 (R163 100k de +5VA, R162 100k a GND, C312 4,7 nF).
+ *    El ADC1 convierte PC1 sin parar, solo, sin CPU. El ADC3 queda como estaba
+ *    (temperatura y VREFINT, por polling).
+ *
+ * 2. CORTAR. El watchdog analógico 1 del ADC1 compara cada conversión con un
+ *    umbral (4,5 V en +5VA) y, si queda debajo, dispara ADC_IRQHandler, que baja
+ *    SD y PDN_AK en microsegundos. Lo mismo el flanco de bajada de PG (PA10),
+ *    que avisa cuando la salida del buck cae un 10 %. Por qué no alcanza con
+ *    revisar desde el main loop: con señal, el riel tarda 0,78 ms en ir de
+ *    4,58 V al UVLO de los PAM (DS12_REVISION_ALIMENTACION.md §9.2).
+ *
+ *    Cuánto tarda en enterarse: el RC de C312 (τ = 50 kΩ × 4,7 nF = 0,24 ms)
+ *    más una conversión (~0,1 ms). El RC estaba en el presupuesto de la revisión.
+ *
+ * 3. VOLVER. Lo decide V5A_Tick() con power_guard.c: +5VA sobre 4,7 V y PG en
+ *    alto durante 50 ms seguidos → reconfigurar los codecs (Codecs_Recuperar)
+ *    → recién ahí, amplificadores, si estaban pedidos.
+ *
+ * POR QUÉ 387,5 CICLOS DE MUESTREO. El ADC carga su capacitor de muestreo
+ * desde C312, y C312 se recarga por 50 kΩ. Cada conversión le saca un poquito
+ * de carga: convirtiendo muy seguido, la caída en los 50 kΩ falsea la lectura
+ * (con 64,5 ciclos, del orden de 25 mV en el pin). Con 387,5 ciclos son
+ * ~10.000 conversiones por segundo, un error de pocos mV, y sigue sobrando
+ * velocidad: una conversión cada ~0,1 ms contra los 0,78 ms del presupuesto.
+ *
+ * LOS UMBRALES SE CALIBRAN UNA VEZ, AL ARRANCAR. El ADC mide contra VDDA
+ * (+3V3), que varía ±2,5 % entre placas: se mide VDDA con VREFINT y se pasa el
+ * umbral de mV a código. Después ya no se puede cambiar: la HAL exige el ADC
+ * parado para tocar los umbrales del watchdog. Si +3V3 se moviera durante la
+ * obra, el corte se correría en la misma proporción (un 3 % de +3V3 = 0,13 V
+ * de +5VA). +3V3 sale de otro buck (U11) y no depende de +5VA.
+ * ============================================================ */
+
+/** VDDA en mV, midiendo VREFINT con el ADC3. Bloqueante (~20 µs): sólo antes
+ *  del main loop, cuando Rail_Poll todavía no tiene una conversión en vuelo.
+ *  0 si no pudo. */
+static uint32_t Rail_MedirVdda(void)
+{
+  uint32_t raw = 0;
+  /* Dos conversiones, y vale la segunda: la primera después de prender VREFINT
+   * puede encontrar la referencia todavía asentándose. */
+  for (int i = 0; i < 2; i++) {
+    Rail_SelectChannel(ADC_CHANNEL_VREFINT, ADC_SAMPLETIME_64CYCLES_5);
+    if (HAL_ADC_Start(&hadc3) != HAL_OK) return 0;
+    uint32_t t0 = HAL_GetTick();
+    while (!__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC)) {
+      if ((HAL_GetTick() - t0) > 5u) { HAL_ADC_Stop(&hadc3); return 0; }
+    }
+    raw = HAL_ADC_GetValue(&hadc3);
+    HAL_ADC_Stop(&hadc3);
+  }
+  uint16_t cal = *VREFINT_CAL_ADDR;
+  if (raw == 0 || cal == 0) return 0;
+  return ((uint32_t)VREFINT_CAL_VREF * cal) / raw;
+}
+
+/* Lo urgente, desde las dos interrupciones. Escribe los registros directo: es
+ * lo más corto que hay entre "el riel se va" y "SD abajo". */
+static inline void V5A_Cortar(void)
+{
+  PAM_SD_PORT->BSRR = (uint32_t)PAM_SD_PIN << 16;    /* SD abajo: 32 amplificadores en shutdown */
+  AK_PDN_PORT->BSRR = (uint32_t)AK_PDN_PIN << 16;    /* PDN_AK abajo: el ADC de audio, en reset */
+  ADC1->IER &= ~ADC_IER_AWD1IE;                      /* una vez alcanza: no volver a entrar */
+  v5a_disparo = 1;
+}
+
+/* ADC1 y ADC2 comparten esta interrupción; el ADC2 no se usa. */
+void ADC_IRQHandler(void)
+{
+  if ((ADC1->ISR & ADC_ISR_AWD1) && (ADC1->IER & ADC_IER_AWD1IE)) V5A_Cortar();
+  ADC1->ISR = ADC_ISR_AWD1;
+}
+
+/* PA10 = PG. Las líneas 10 a 15 comparten interrupción; sólo se usa la 10. */
+void EXTI15_10_IRQHandler(void)
+{
+  if (__HAL_GPIO_EXTI_GET_IT(PG_5VA_PIN)) {
+    __HAL_GPIO_EXTI_CLEAR_IT(PG_5VA_PIN);
+    V5A_Cortar();
+  }
+}
+
+static uint16_t V5A_LeerCodigo(void) { return (uint16_t)(ADC1->DR & 0xFFFFu); }
+
+static uint16_t V5A_CodigoAmV(uint16_t cod)
+{
+  /* +5VA = 2 × PC1. Con el VDDA de ahora (Rail_Poll) si lo hay: es telemetría,
+   * y conviene que siga a +3V3 aunque los umbrales no puedan. */
+  uint32_t vdda = vdda_mv ? vdda_mv : v5a_vdda_cal;
+  return (uint16_t)(((uint32_t)cod * vdda * 2u) / 65535u);
+}
+
+/** Prende el watchdog si la guarda está en OK y todavía no lo estaba. */
+static void V5A_ArmarSiOk(void)
+{
+  if (pgd_permitido(&v5a_guard) && !(ADC1->IER & ADC_IER_AWD1IE)) {
+    ADC1->ISR = ADC_ISR_AWD1;            /* un disparo viejo no cuenta */
+    ADC1->IER |= ADC_IER_AWD1IE;
+  }
+}
+
+static void V5A_Init(void)
+{
+  /* 1. Umbrales en código del ADC, con el VDDA de esta placa. */
+  uint32_t vdda = Rail_MedirVdda();
+  if (vdda < 2900u || vdda > 3600u) {
+    snprintf(uart_buf, sizeof(uart_buf),
+             "V5A: VDDA ilegible (%lu mV): se asume 3300\r\n", (unsigned long)vdda);
+    UART_Print(uart_buf);
+    vdda = 3300u;
+  }
+  v5a_vdda_cal   = (uint16_t)vdda;
+  v5a_cod_corte  = (uint16_t)(((V5A_CORTE_MV  / 2u) * 65535u) / vdda);
+  v5a_cod_rearme = (uint16_t)(((V5A_REARME_MV / 2u) * 65535u) / vdda);
+
+  /* 2. ADC1 convirtiendo PC1 sin parar. El reloj del ADC (per_ck) ya lo eligió
+   *    MX_ADC3_Init: es común a los tres. */
+  __HAL_RCC_ADC12_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  GPIO_InitTypeDef gi = {0};
+  gi.Pin  = V5A_SENSE_PIN;
+  gi.Mode = GPIO_MODE_ANALOG;
+  gi.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(V5A_SENSE_PORT, &gi);
+
+  hadc1.Instance                      = ADC1;
+  hadc1.Init.ClockPrescaler           = ADC_CLOCK_ASYNC_DIV8;
+  hadc1.Init.Resolution               = ADC_RESOLUTION_16B;
+  hadc1.Init.ScanConvMode             = ADC_SCAN_DISABLE;
+  hadc1.Init.EOCSelection             = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.LowPowerAutoWait         = DISABLE;
+  hadc1.Init.ContinuousConvMode       = ENABLE;
+  hadc1.Init.NbrOfConversion          = 1;
+  hadc1.Init.DiscontinuousConvMode    = DISABLE;
+  hadc1.Init.ExternalTrigConv         = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge     = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DR;
+  hadc1.Init.Overrun                  = ADC_OVR_DATA_OVERWRITTEN;  /* nadie lee cada dato */
+  hadc1.Init.LeftBitShift             = ADC_LEFTBITSHIFT_NONE;
+  hadc1.Init.OversamplingMode         = DISABLE;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK) {
+    /* Sin medición no hay guarda: la placa queda en CAIDO para siempre, con
+     * los amplificadores prohibidos. Es lo seguro, y el log dice por qué. */
+    UART_Print("V5A: ADC1 init FAILED — amplificadores bloqueados\r\n");
+    pgd_init(&v5a_guard, HAL_GetTick(), 0, 0);
+    return;
+  }
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_CALIB_OFFSET_LINEARITY, ADC_SINGLE_ENDED);
+
+  ADC_ChannelConfTypeDef ch = {0};
+  ch.Channel      = V5A_SENSE_ADC_CHANNEL;
+  ch.Rank         = ADC_REGULAR_RANK_1;
+  ch.SamplingTime = ADC_SAMPLETIME_387CYCLES_5;
+  ch.SingleDiff   = ADC_SINGLE_ENDED;
+  ch.OffsetNumber = ADC_OFFSET_NONE;
+  HAL_ADC_ConfigChannel(&hadc1, &ch);
+
+  /* Watchdog 1: dispara con PC1 FUERA de [corte, 0xFFFF], o sea, debajo del
+   * corte. Configurado sin interrupción: la prende V5A_ArmarSiOk cuando la
+   * guarda está en OK. */
+  ADC_AnalogWDGConfTypeDef wd = {0};
+  wd.WatchdogNumber = ADC_ANALOGWATCHDOG_1;
+  wd.WatchdogMode   = ADC_ANALOGWATCHDOG_SINGLE_REG;
+  wd.Channel        = V5A_SENSE_ADC_CHANNEL;
+  wd.ITMode         = DISABLE;
+  wd.HighThreshold  = 0xFFFFu;
+  wd.LowThreshold   = v5a_cod_corte;
+  HAL_ADC_AnalogWDGConfig(&hadc1, &wd);
+
+  HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(ADC_IRQn);
+  HAL_ADC_Start(&hadc1);
+
+  /* 3. PG (PA10), flanco de bajada. Sin pull: el pull-up es R159 por R152. */
+  __HAL_RCC_SYSCFG_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  gi.Pin  = PG_5VA_PIN;
+  gi.Mode = GPIO_MODE_IT_FALLING;
+  gi.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(PG_5VA_PORT, &gi);
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
+  /* 4. Primera lectura y estado inicial. */
+  HAL_Delay(2);                                   /* unas 20 conversiones */
+  uint16_t cod = V5A_LeerCodigo();
+  v5a_pg_ult = (HAL_GPIO_ReadPin(PG_5VA_PORT, PG_5VA_PIN) == GPIO_PIN_SET);
+  v5a_mv_ult = V5A_CodigoAmV(cod);
+  pgd_init(&v5a_guard, HAL_GetTick(), cod >= v5a_cod_rearme, v5a_pg_ult);
+  v5a_disparo = 0;
+  V5A_ArmarSiOk();
+
+  snprintf(uart_buf, sizeof(uart_buf),
+           "V5A: +5VA = %u mV, PG = %u (VDDA %lu mV; corte %u, vuelta %u mV)\r\n",
+           (unsigned)v5a_mv_ult, (unsigned)v5a_pg_ult, (unsigned long)vdda,
+           (unsigned)V5A_CORTE_MV, (unsigned)V5A_REARME_MV);
+  UART_Print(uart_buf);
+  UART_Print(pgd_permitido(&v5a_guard)
+               ? "V5A: amplificadores permitidos\r\n"
+               : "V5A: SIN +5VA (¿sólo USB?): amplificadores bloqueados hasta que llegue\r\n");
+}
+
+/** Espera @p ms sirviendo los fills. */
+static void Espera_Coop(uint32_t ms)
+{
+  uint32_t t0 = HAL_GetTick();
+  while ((HAL_GetTick() - t0) < ms + 1u) Service_Fills();
+}
+
+/** @brief Vuelve a configurar los codecs después de una caída de +5VA.
+ *
+ * Por qué hace falta (DS12_ALIMENTACION.md §6.1.b): los PCM1690 y el AK5538
+ * pierden la configuración cuando se va su parte analógica, pero el STM32 sigue
+ * vivo y no se entera. Sin esto, "a veces el ADC devuelve basura después de un
+ * bajón", que es de lo más caro de diagnosticar.
+ *
+ * El mismo orden que el arranque: los DAC con su ~RST compartido, el volumen
+ * guardado, y el AK5538 soltando PDN. Tarda ~120 ms, sirviendo los fills en
+ * todas las esperas; SD está abajo todo el tiempo.
+ *
+ * @return 1 si contestaron los cuatro DAC y el AK5538 quedó en el modo pedido. */
+static uint8_t Codecs_Recuperar(void)
+{
+  codecs_coop = 1;
+
+  /* PCM1690: pulso de ~RST (PC11) a los cuatro, y configuración por I2C. */
+  HAL_GPIO_WritePin(DAC_RST_PORT, DAC_RST_PIN, GPIO_PIN_RESET);
+  Espera_Coop(2);
+  HAL_GPIO_WritePin(DAC_RST_PORT, DAC_RST_PIN, GPIO_PIN_SET);
+  Espera_Coop(12);                                 /* ≥10 ms de POR interno */
+  uint8_t dac_ok = 0;
+  for (uint32_t d = 0; d < 4; d++) {
+    if (PCM1690_Init(&hi2c1, dac_addrs[d], NULL) == PCM1690_OK) dac_ok++;
+    Service_Fills();
+  }
+  (void)Apply_Master_Volume(beam_config.master_vol_db);   /* Init deja -24 dB */
+
+  /* AK5538: soltar PDN (la ISR lo había bajado) y escribirle el modo. */
+  HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_SET);
+  Espera_Coop(15);                                 /* ≥10 ms después de PDN */
+  AK5538_EscribirModo();
+  Espera_Coop(5);
+  uint8_t r2 = 0xEE;
+  HAL_I2C_Mem_Read(&hi2c3, AK5538_ADDR, 0x02, I2C_MEMADD_SIZE_8BIT, &r2, 1, 50);
+
+  codecs_coop = 0;
+  snprintf(uart_buf, sizeof(uart_buf),
+           "V5A: codecs reconfigurados — DAC %u/4, AK5538 R02=0x%02X (%s)\r\n",
+           (unsigned)dac_ok, r2, (r2 == 0x31) ? "ok" : "MAL, quiere 0x31");
+  UART_Print(uart_buf);
+  return (dac_ok == 4u) && (r2 == 0x31u);
+}
+
+/** @brief Una pasada de la guarda desde el main loop. Barata: un registro del
+ *  ADC, un pin y la máquina de power_guard.c. Sólo la recuperación tarda. */
+static void V5A_Tick(void)
+{
+  /* El disparo se lee y se borra sin que la ISR se meta en el medio: perderlo
+   * dejaría a la guarda en OK con SD abajo y el watchdog apagado. */
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  uint8_t disparo = v5a_disparo;
+  v5a_disparo = 0;
+  __set_PRIMASK(primask);
+
+  uint16_t cod = V5A_LeerCodigo();
+  uint8_t  pg  = (HAL_GPIO_ReadPin(PG_5VA_PORT, PG_5VA_PIN) == GPIO_PIN_SET);
+  v5a_pg_ult = pg;
+  v5a_mv_ult = V5A_CodigoAmV(cod);
+  uint32_t ahora = HAL_GetTick();
+
+  pgd_accion_t a = pgd_tick(&v5a_guard, ahora, disparo, cod >= v5a_cod_corte,
+                            cod >= v5a_cod_rearme, pg, amps_enabled);
+  if (a == PGD_CAYO) {
+    /* La ISR ya bajó SD y PDN_AK (salvo que lo haya visto sólo el nivel).
+     * Se repite, y amps_enabled pasa a decir la verdad. */
+    HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(AK_PDN_PORT, AK_PDN_PIN, GPIO_PIN_RESET);
+    amps_enabled = 0;
+    snprintf(uart_buf, sizeof(uart_buf),
+             "V5A: CAYÓ +5VA (%u mV, PG = %u, %s) — SD y PDN_AK abajo. Caída nº %u\r\n",
+             (unsigned)v5a_mv_ult, (unsigned)pg, disparo ? "interrupción" : "nivel",
+             (unsigned)v5a_guard.caidas);
+    UART_Print(uart_buf);
+    if (v5a_guard.amps_pedidos) UART_Print("V5A: estaban encendidos: vuelven solos cuando vuelva +5VA\r\n");
+  } else if (a == PGD_RECUPERAR) {
+    snprintf(uart_buf, sizeof(uart_buf), "V5A: volvió +5VA (%u mV) — reconfigurando codecs\r\n",
+             (unsigned)v5a_mv_ult);
+    UART_Print(uart_buf);
+    uint8_t ok = Codecs_Recuperar();
+    /* Se vuelve a mirar: la recuperación tardó ~120 ms. */
+    cod = V5A_LeerCodigo();
+    pg  = (HAL_GPIO_ReadPin(PG_5VA_PORT, PG_5VA_PIN) == GPIO_PIN_SET);
+    __disable_irq();
+    disparo = v5a_disparo;
+    v5a_disparo = 0;
+    __set_PRIMASK(primask);
+    pgd_accion_t b = pgd_recuperado(&v5a_guard, HAL_GetTick(), ok,
+                                    !disparo && (cod >= v5a_cod_rearme), pg);
+    V5A_ArmarSiOk();
+    if (b == PGD_RESTAURAR) {
+      UART_Print("V5A: estaban encendidos antes de la caída — se vuelven a encender\r\n");
+      Amps_Escribir(1);
+    } else if (b == PGD_BLOQUEADO) {
+      UART_Print(ok ? "V5A: +5VA se cayó demasiadas veces: los amplificadores quedan APAGADOS "
+                      "hasta que una persona los encienda (POST /amps o K2 largo)\r\n"
+                    : "V5A: un codec no contestó: los amplificadores quedan APAGADOS "
+                      "hasta que una persona los encienda\r\n");
+    } else if (!pgd_permitido(&v5a_guard)) {
+      UART_Print("V5A: se volvió a caer durante la reconfiguración\r\n");
+    }
+  }
+  V5A_ArmarSiOk();
+}
+#endif /* BOARD_HAS_5VA_SENSE */
 
 /**
   * @brief I2C3 Initialization Function (AK5538VN ADC — PA8/PC9 AF4)
@@ -6154,6 +6541,22 @@ static void Autostart_Tick(void)
         UART_Print("AUTOARRANQUE: ya estaban encendidos, no hago nada\r\n");
         break;
       }
+      /* Sin +5VA (DS12 sólo por USB, o la fuente que todavía no llegó) se
+       * ESPERA acá, sin contar el intento: no es una falla, es que no hay con
+       * qué. Cuando la guarda vuelve a OK, sigue solo. */
+      {
+        static uint8_t avisado = 0;
+        const char *motivo = Amps_MotivoNo();
+        if (motivo) {
+          if (!avisado) {
+            snprintf(uart_buf, sizeof(uart_buf), "AUTOARRANQUE: esperando — %s\r\n", motivo);
+            UART_Print(uart_buf);
+            avisado = 1;
+          }
+          break;
+        }
+        avisado = 0;
+      }
       /* La marca primero. Bloquea ~12 ms cooperativos (EEPROM_Yield sirve los
        * fills), y todavía no hay nada sonando. */
       beam_config.autostart_fails++;
@@ -6205,11 +6608,40 @@ static void Autostart_Tick(void)
   }
 }
 
+/** @brief Por qué NO se pueden encender los amplificadores ahora; NULL si se
+ *  puede. Una sola función para los cuatro caminos (autoarranque, POST /amps,
+ *  K2 largo, la restauración de la guarda), así que ninguno se la saltea. */
+static const char *Amps_MotivoNo(void) {
+  if (board_mismatch) return "el firmware no es de esta placa (ver PLACA: en el arranque)";
+#if BOARD_HAS_5VA_SENSE
+  if (v5a_disparo || !pgd_permitido(&v5a_guard)) return "no hay +5VA (ver V5A: en el log)";
+#endif
+  return NULL;
+}
+
+/** @brief Pedido de encender o apagar: de una persona (POST /amps, K2) o del
+ *  autoarranque. Encender pasa por la guarda; apagar siempre se puede. */
 static void Set_Amps(uint8_t on) {
-  if (on && board_mismatch) {
-    UART_Print("AMPS: rechazado — el firmware no es de esta placa (ver PLACA: en el arranque)\r\n");
-    return;
+  if (on) {
+    const char *motivo = Amps_MotivoNo();
+    if (motivo) {
+      snprintf(uart_buf, sizeof(uart_buf), "AMPS: rechazado — %s\r\n", motivo);
+      UART_Print(uart_buf);
+      return;
+    }
+#if BOARD_HAS_5VA_SENSE
+    pgd_pedido_encender(&v5a_guard, HAL_GetTick());
+#endif
+  } else {
+#if BOARD_HAS_5VA_SENSE
+    pgd_pedido_apagar(&v5a_guard);
+#endif
   }
+  Amps_Escribir(on);
+}
+
+/** @brief Mueve el pin SD. No decide: eso es de Set_Amps y de la guarda. */
+static void Amps_Escribir(uint8_t on) {
   if (on) {
     /* "on" SIEMPRE pasa por off primero — no es redundante.
      *
@@ -6228,8 +6660,19 @@ static void Set_Amps(uint8_t on) {
     HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, GPIO_PIN_RESET);
     HAL_Delay(2);
   }
-  HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, on ? GPIO_PIN_SET : GPIO_PIN_RESET);
-  amps_enabled = on;
+  /* La última pregunta y el pin, sin que nada se meta en el medio. Si la
+   * interrupción de la guarda bajara SD entre la pregunta y la escritura, esta
+   * línea lo volvería a subir con +5VA cayéndose. Son ~10 ciclos. */
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  uint8_t ok = on && (Amps_MotivoNo() == NULL);
+  HAL_GPIO_WritePin(PAM_SD_PORT, PAM_SD_PIN, ok ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  __set_PRIMASK(primask);
+  amps_enabled = ok;
+  if (on && !ok) {
+    UART_Print("AMPS: rechazado — +5VA se cayó mientras se encendían\r\n");
+    return;
+  }
   snprintf(uart_buf, sizeof(uart_buf), "AMPS: %s\r\n",
            on ? "ON (32 PAM8302A habilitados)" : "OFF (silencio)");
   UART_Print(uart_buf);

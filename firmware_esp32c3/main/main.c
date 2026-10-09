@@ -292,8 +292,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  board_id;          // v23: 11 / 12 — sin el campo, es una DS11
     uint8_t  board_flags;       // v23: BOARD_F_* (ver uart_protocol.h)
     uint16_t v5a_mv;            // v23: +5VA medido en PC1 (DS12), 0 = no se mide
+    uint8_t  v5a_caidas;        // v23: caidas de +5VA desde el arranque (DS12)
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 105, "ds_status_t debe ser 105 bytes");   // v23: +4
+_Static_assert(sizeof(ds_status_t) == 106, "ds_status_t debe ser 106 bytes");   // v23: +5
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 #define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
@@ -1003,6 +1004,19 @@ static esp_err_t status_handler(httpd_req_t *req)
      * espera. Sigue entrando en el poll de 1 s de la pagina. */
     if (xSemaphoreTake(status_sem, 800 / portTICK_PERIOD_MS) == pdTRUE) {
         const ds_status_t *s = &last_status;
+        /* La guarda de +5VA (DS12). null en una placa que no lo mide (DS11), en
+         * vez de ceros que parecerian "+5VA en 0 V": un dato que no existe no
+         * puede verse igual que un riel caido. */
+        char v5a[112] = "null";
+        if (ST_HAS(v5a_caidas) && (s->board_flags & 0x10)) {
+            snprintf(v5a, sizeof(v5a),
+                     "{\"mv\":%u,\"ok\":%s,\"pg\":%s,\"bloqueo\":%s,\"caidas\":%u}",
+                     (unsigned)s->v5a_mv,
+                     (s->board_flags & 0x08) ? "true" : "false",
+                     (s->board_flags & 0x02) ? "true" : "false",
+                     (s->board_flags & 0x20) ? "true" : "false",
+                     (unsigned)s->v5a_caidas);
+        }
         modes_ensure();
         const char *mname = mode_name_of(s->mode_idx);
         snprintf(buf, sizeof(buf),
@@ -1021,7 +1035,7 @@ static esp_err_t status_handler(httpd_req_t *req)
         "\"vdda_mv\":%u,\"vdda_min_mv\":%u,\"vdda_min_abs\":%u,"
         "\"cpu_adc_pct\":%u.%u,"
         "\"vdda_pre_reset_mv\":%u,\"rail_deaths\":%u,"
-        "\"board\":\"DS%u\",\"board_mismatch\":%s,\"v5a_mv\":%u,"
+        "\"board\":\"DS%u\",\"board_mismatch\":%s,\"v5a\":%s,"
             "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             device_id,
@@ -1062,7 +1076,7 @@ static esp_err_t status_handler(httpd_req_t *req)
             ST_HAS(rail_deaths) ? (unsigned)s->rail_deaths : 0u,
             (unsigned)stm32_board(),
             (ST_HAS(board_flags) && (s->board_flags & 0x01)) ? "true" : "false",
-            ST_HAS(v5a_mv) ? (unsigned)s->v5a_mv : 0u,
+            v5a,
             self, (unsigned)last_status_len,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));

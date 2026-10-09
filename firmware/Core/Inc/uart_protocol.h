@@ -626,12 +626,15 @@ typedef struct __attribute__((packed)) {
     uint8_t  board_id;       /* 11, 12 (BOARD_ID) */
     uint8_t  board_flags;    /* BOARD_F_* */
     uint16_t v5a_mv;         /* +5VA medido en PC1 (DS12); 0 = no se mide */
+    uint8_t  v5a_caidas;     /* caídas de +5VA desde el arranque (DS12), satura en 255 */
 } ds_status_t;
 
 #define BOARD_F_MISMATCH   0x01  /* el jumper de identidad dice otra placa: modo seguro */
 #define BOARD_F_PG         0x02  /* PG del buck de los amplificadores en alto (DS12) */
 #define BOARD_F_VBUS       0x04  /* hay VBUS en el USB del STM32 (DS12) */
-#define BOARD_F_5VA_OK     0x08  /* +5VA sobre el umbral de SD (DS12) */
+#define BOARD_F_5VA_OK     0x08  /* la guarda permite los amplificadores (DS12) */
+#define BOARD_F_SENSE      0x10  /* esta placa mide +5VA: los bits 0x02, 0x08 y 0x20 valen */
+#define BOARD_F_BLOQUEO    0x20  /* +5VA se cayó demasiadas veces: no se encienden solos */
 
 /* Estado REAL, no el nominal.
  *
@@ -663,7 +666,7 @@ typedef struct __attribute__((packed)) {
  * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18
  * midiendo underruns, cuando el contador BAJÓ de 6 a 0 — un contador monótono
  * que retrocede es un reboot, y no había con qué confirmarlo. */
-_Static_assert(sizeof(ds_status_t) == 105, "ds_status_t must be 105 bytes");   /* v23: +4 */
+_Static_assert(sizeof(ds_status_t) == 106, "ds_status_t must be 106 bytes");   /* v23: +5 */
 /* ⚠️ Un payload por encima de PROTO_MAX_PAYLOAD hace que el ESP32 descarte la
  * trama por larga y el endpoint quede mudo SIN dar error — de ahí los asserts. */
 _Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,

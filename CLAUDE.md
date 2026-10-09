@@ -37,7 +37,8 @@ Para preguntas de conectividad: `tools/netlist_digest.py` deja tres archivos gre
 ```bash
 cd firmware && make -j4         # DS11 (por defecto) · make -j4 BOARD=ds12 para la DS12
 make flash-stlink               # ⚠️ no anda en todas las placas: si no, make todo-cube
-make ota OTA_HOST=192.168.100.77
+make ota OTA_HOST=192.168.100.77   # pregunta /status y se niega si la placa no es BOARD
+make test                       # tests de host, con mutantes que tienen que fallar
 ```
 
 - **La app vive en `0x08020000`**, no en `0x08000000`: hay un bootloader propio adelante.

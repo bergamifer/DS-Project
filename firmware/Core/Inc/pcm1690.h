@@ -193,4 +193,7 @@ PCM1690_Status PCM1690_ReadReg(I2C_HandleTypeDef *hi2c, uint8_t dev_addr,
  */
 PCM1690_Status PCM1690_Verify(I2C_HandleTypeDef *hi2c, uint8_t dev_addr);
 
+/** Hook para las esperas del driver (ver pcm1690.c). __weak: vacío por defecto. */
+void PCM1690_Yield(void);
+
 #endif /* __PCM1690_H */
