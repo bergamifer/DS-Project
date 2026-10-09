@@ -241,7 +241,7 @@ typedef struct __attribute__((packed)) {
  * bytes del payload llevan el número de tramo. Nada obliga a que sea múltiplo
  * de la palabra de flash (32 B): ota.c acumula en RAM y baja de a 32. */
 #define FW_CHUNK_MAX        (PROTO_MAX_PAYLOAD - 2)
-#define PROTO_VERSION      22   /* v2: + master_vol_db; v3: + in_gain_db y los
+#define PROTO_VERSION      23   /* v2: + master_vol_db; v3: + in_gain_db y los
                                  * dos contadores de saturación; v4: +
                                  * state_flags, y ds_config_t pasa a 32 canales;
                                  * v5: + uptime_ms DEL STM32;
@@ -312,7 +312,10 @@ typedef struct __attribute__((packed)) {
                                  * v22: + vdda_pre_reset_mv / rail_deaths. El
                                  * minimo del riel sobrevive al reinicio en un
                                  * registro de respaldo: antes moria con el
-                                 * chip, que es cuando mas hacia falta. */
+                                 * chip, que es cuando mas hacia falta. 
+                                 * v23: + board_id / board_flags / v5a_mv (DS12:
+                                 * dos placas, un protocolo; ver board/).
+                                 */
 #define ESP_IP_MAXLEN       15      /* "255.255.255.255" */
 
 /**
@@ -617,7 +620,18 @@ typedef struct __attribute__((packed)) {
      * `rail_deaths` cuenta los reinicios con el riel por debajo de 3080 mV. */
     uint16_t vdda_pre_reset_mv;
     uint16_t rail_deaths;
+    /* v23: qué placa es. Desde la DS12 hay dos firmwares para el mismo micro;
+     * `make ota` y el ESP32 lo miran antes de subir uno. Un STM32 que no manda
+     * este campo es anterior: por definición, DS11. */
+    uint8_t  board_id;       /* 11, 12 (BOARD_ID) */
+    uint8_t  board_flags;    /* BOARD_F_* */
+    uint16_t v5a_mv;         /* +5VA medido en PC1 (DS12); 0 = no se mide */
 } ds_status_t;
+
+#define BOARD_F_MISMATCH   0x01  /* el jumper de identidad dice otra placa: modo seguro */
+#define BOARD_F_PG         0x02  /* PG del buck de los amplificadores en alto (DS12) */
+#define BOARD_F_VBUS       0x04  /* hay VBUS en el USB del STM32 (DS12) */
+#define BOARD_F_5VA_OK     0x08  /* +5VA sobre el umbral de SD (DS12) */
 
 /* Estado REAL, no el nominal.
  *
@@ -649,7 +663,7 @@ typedef struct __attribute__((packed)) {
  * reinicio del STM32 era INVISIBLE desde la red. Se descubrió el 2026-08-18
  * midiendo underruns, cuando el contador BAJÓ de 6 a 0 — un contador monótono
  * que retrocede es un reboot, y no había con qué confirmarlo. */
-_Static_assert(sizeof(ds_status_t) == 101, "ds_status_t must be 101 bytes");
+_Static_assert(sizeof(ds_status_t) == 105, "ds_status_t must be 105 bytes");   /* v23: +4 */
 /* ⚠️ Un payload por encima de PROTO_MAX_PAYLOAD hace que el ESP32 descarte la
  * trama por larga y el endpoint quede mudo SIN dar error — de ahí los asserts. */
 _Static_assert(sizeof(ds_status_t) <= PROTO_MAX_PAYLOAD,

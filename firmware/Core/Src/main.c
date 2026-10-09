@@ -1438,6 +1438,18 @@ static volatile uint8_t amps_enabled = 0;
 #define AUTOSTART_ARM_MS      15000u
 #define AUTOSTART_STABLE_MS   60000u
 #define AUTOSTART_MAX_FAILS   3
+/* Un intento que SOBREVIVE este tiempo con los amps encendidos se da por bueno
+ * aunque sigan apareciendo errores esporádicos. La firma de una alimentación
+ * que no aguanta es un REINICIO; sin este techo, un nodo con underruns
+ * ocasionales nunca cerraba el intento, cada apagado nocturno (POR) contaba
+ * como falla, y a la tercera noche quedaba mudo (revisión de alimentación, N6). */
+#define AUTOSTART_MAX_SETTLE_MS 600000u
+/* RTC->BKP3R: "hay un intento de autoarranque en curso". El dominio de respaldo
+ * sobrevive al NRST (y en esta placa no a un corte, porque VBAT cuelga de +3V3).
+ * Si el próximo arranque es por software (SFT: OTA o reflasheo con -rst) y la
+ * marca está, el reinicio fue nuestro y el intento no cuenta como falla. Una
+ * caída del riel resetea por el MAX809 (PIN) o corta todo (POR): esas sí. */
+#define AUTOSTART_BKP_MAGIC   0x41535452u   /* "ASTR" */
 
 typedef enum {
   AS_OFF = 0,      /* desactivado, o ya se rindió */
@@ -1449,6 +1461,14 @@ typedef enum {
 
 static autostart_state_t autostart_state = AS_OFF;
 static uint32_t autostart_t0 = 0;         /* referencia del temporizador */
+static uint32_t autostart_on_t = 0;       /* cuándo se encendieron los amps */
+static uint8_t  autostart_undo = 0;       /* el reset anterior fue nuestro (ver BKP3R) */
+
+/* El firmware es de una placa y el jumper de identidad (PE15) dice otra: modo
+ * seguro. Amplificadores bloqueados; WiFi, OTA y /status andando, para poder
+ * subir el firmware correcto. Ver ID_JUMPER_PIN en board/board_common.h. */
+static uint8_t  board_mismatch = 0;
+static uint8_t  id_jumper_level = 0xFF;   /* lo leído en PE15 al arrancar */
 static uint32_t autostart_und0 = 0;       /* underruns al armar */
 static uint32_t autostart_sai0 = 0;       /* errores de SAI al armar */
 
@@ -2172,6 +2192,10 @@ int main(void)
   }
   RTC->BKP0R = RAIL_BKP_MAGIC;
   RTC->BKP1R = 0xFFFFu;          /* minimo de ESTA corrida, todavia sin medir */
+  /* ¿Quedó un intento de autoarranque a medias, y el reinicio fue nuestro? */
+  autostart_undo = (RTC->BKP3R == AUTOSTART_BKP_MAGIC)
+                && (reset_rsr & RCC_RSR_SFTRSTF) && !(reset_rsr & RCC_RSR_PORRSTF);
+  RTC->BKP3R = 0;
   if      (reset_rsr & RCC_RSR_PORRSTF)   reset_tag = "POR";
   else if (reset_rsr & RCC_RSR_BORRSTF)   reset_tag = "BOR";
   else if (reset_rsr & RCC_RSR_IWDG1RSTF) reset_tag = "IWDG";
@@ -2199,6 +2223,22 @@ int main(void)
   /* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
+
+  /* Jumper de identidad, ANTES de MX_GPIO_Init: ahí PE15 pasa a analógico. En
+   * la DS12, JP3 + R36 (1 kΩ) lo llevan a masa y con el pull-up interno
+   * (30–50 kΩ) lee 0. En la DS11 está al aire y lee 1. Lo leen los dos
+   * firmwares, así que el de una placa cargado en la otra entra en modo seguro. */
+  {
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+    GPIO_InitTypeDef gi = {0};
+    gi.Pin  = ID_JUMPER_PIN;
+    gi.Mode = GPIO_MODE_INPUT;
+    gi.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(ID_JUMPER_PORT, &gi);
+    HAL_Delay(2);   /* con 40 kΩ y unos pF alcanza un µs; sobra */
+    id_jumper_level = (HAL_GPIO_ReadPin(ID_JUMPER_PORT, ID_JUMPER_PIN) == GPIO_PIN_SET) ? 1u : 0u;
+    board_mismatch  = (id_jumper_level != ID_JUMPER_ESPERADO);
+  }
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
@@ -2710,8 +2750,25 @@ int main(void)
   amps_enabled = 0;
   UART_Print("PAM8302A: SD LOW — 32 amps APAGADOS. Habilitar con POST /amps {\"on\":true}\r\n");
 
+  /* Identidad de la placa, en el banner. */
+  snprintf(uart_buf, sizeof(uart_buf), "PLACA: firmware %s, jumper PE15 = %u (espera %u)%s\r\n",
+           BOARD_NAME, (unsigned)id_jumper_level, (unsigned)ID_JUMPER_ESPERADO,
+           board_mismatch ? " → NO COINCIDE: modo seguro, amplificadores bloqueados" : " (ok)");
+  UART_Print(uart_buf);
+
+  /* Un intento de autoarranque cortado por un reinicio NUESTRO (OTA, reflasheo)
+   * no es una falla de alimentación: se descuenta. Ver AUTOSTART_BKP_MAGIC. */
+  if (autostart_undo && beam_config.autostart_fails > 0) {
+    beam_config.autostart_fails--;
+    if (EEPROM_IsAvailable()) EEPROM_SaveConfig(&beam_config, sizeof(beam_config));
+    UART_Print("AUTOARRANQUE: el reinicio anterior fue por software (OTA/reflasheo): "
+               "no cuenta como intento fallido\r\n");
+  }
+
   /* Arranque autónomo: decide acá, con la config ya cargada de la EEPROM. */
-  if (!beam_config.autostart) {
+  if (board_mismatch) {
+    autostart_state = AS_OFF;
+  } else if (!beam_config.autostart) {
     autostart_state = AS_OFF;
   } else if (beam_config.autostart_fails >= AUTOSTART_MAX_FAILS) {
     autostart_state = AS_GAVEUP;
@@ -3335,6 +3392,11 @@ int main(void)
         st.vdda_pre_reset_mv = (vdda_pre_reset_mv == 0xFFFF) ? 0 : vdda_pre_reset_mv;
         st.rail_deaths       = rail_deaths;
         vdda_min_mv = 0xFFFF;
+        /* v23: identidad de la placa. Los bits de PG/VBUS/+5VA los llenan las
+         * fases siguientes del plan DS12; en la DS11 quedan siempre en 0. */
+        st.board_id    = BOARD_ID;
+        st.board_flags = (board_mismatch ? BOARD_F_MISMATCH : 0);
+        st.v5a_mv      = 0;
         }
         st.master_vol_db = beam_config.master_vol_db;
         st.in_gain_db = in_gain_db;
@@ -6101,12 +6163,22 @@ static void Autostart_Tick(void)
       autostart_und0 = underrun_total;
       autostart_sai0 = sai_error_total;
       autostart_t0   = HAL_GetTick();
+      autostart_on_t = autostart_t0;
       autostart_state = AS_SETTLING;
+      RTC->BKP3R = AUTOSTART_BKP_MAGIC;     /* intento en curso */
       UART_Print("AUTOARRANQUE: encendiendo\r\n");
       Set_Amps(1);
       break;
     }
     case AS_SETTLING: {
+      /* Sobrevivió AUTOSTART_MAX_SETTLE_MS sin reiniciarse: la alimentación
+       * aguanta, aunque haya errores esporádicos. Se cierra como bueno. */
+      if ((HAL_GetTick() - autostart_on_t) >= AUTOSTART_MAX_SETTLE_MS) {
+        autostart_t0 = HAL_GetTick() - AUTOSTART_STABLE_MS;   /* fuerza el cierre de abajo */
+        autostart_und0 = underrun_total;
+        autostart_sai0 = sai_error_total;
+        UART_Print("AUTOARRANQUE: 10 min sin reinicios (con errores esporadicos): se da por bueno\r\n");
+      }
       if (underrun_total != autostart_und0 || sai_error_total != autostart_sai0) {
         /* Aparecieron errores con los amps prendidos. No se apaga nada —puede
          * ser ruido y el sonido vale más que la prolijidad—, pero el intento no
@@ -6119,6 +6191,7 @@ static void Autostart_Tick(void)
       }
       if ((HAL_GetTick() - autostart_t0) < AUTOSTART_STABLE_MS) break;
       autostart_state = AS_DONE;
+      RTC->BKP3R = 0;                       /* el intento cerró */
       if (beam_config.autostart_fails) {
         beam_config.autostart_fails = 0;
         if (EEPROM_IsAvailable()) {
@@ -6133,6 +6206,10 @@ static void Autostart_Tick(void)
 }
 
 static void Set_Amps(uint8_t on) {
+  if (on && board_mismatch) {
+    UART_Print("AMPS: rechazado — el firmware no es de esta placa (ver PLACA: en el arranque)\r\n");
+    return;
+  }
   if (on) {
     /* "on" SIEMPRE pasa por off primero — no es redundante.
      *

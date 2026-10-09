@@ -72,7 +72,44 @@ AK5538 al volver `+5VA` lo garantiza el hardware (D3 junto con PG), pero la *rec
 - `make BOARD=ds11` da un `.bin` idéntico al de `main` salvo `fw_id`/`build`; se verifica con `cmp` después de enmascarar esos bytes;
 - `make BOARD=ds12` compila sin warnings nuevos.
 
-### Fase 2 — Identidad y autoarranque (se prueba en una DS11, con los parlantes desenchufados)
+### Fase 2 — Identidad y autoarranque (se prueba en una DS11, con los parlantes desenchufados) 🟡 código hecho el 2026-10-09, falta el banco
+
+> **Resultado (compilado, sin probar en placa):**
+> - `make`, `make BOARD=ds12`, el bootloader y el ESP32 (`idf.py build`) compilan sin warnings nuevos.
+> - **Bloque de identidad.** `fw_ident` quedó en `0x08020400` (se verificó en el `.map`). Los vectores terminan en
+>   `0x298`, y el linker tiene un `ASSERT` por si algún día crecen hasta pisarlo.
+> - **`make ota` se niega, no elige.** Se probó contra un servidor falso en la Mac, sin tocar ninguna placa, con seis
+>   casos:
+>   - ESP32 viejo sin `board` → cuenta como DS11, y deja pasar sólo `BOARD=ds11`;
+>   - DS12 con `BOARD=ds11` → rechazo, y dice el comando correcto;
+>   - DS12 con `BOARD=ds12` → sube;
+>   - STM32 que no contesta → no sube;
+>   - ESP32 que no contesta → no sube.
+>
+>   Compilar "la placa que corresponde" sola, como decía el plan, se descartó: un comando que cambia de binario según
+>   lo que contesta la red es justo lo que no se quiere.
+> - **`/status`** suma `board`, `board_mismatch` y `v5a_mv` (en 0 hasta la fase 3). `PROTO_VERSION` pasa a **23** y
+>   `ds_status_t` crece de 101 a 105 bytes, agregando campos al final.
+>   - El ESP32 nuevo pregunta campo por campo (`ST_HAS`) si la trama los trae: con un STM32 viejo no pierde nada.
+>   - El ESP32 viejo con un STM32 nuevo copia los 101 bytes que conoce, y la página avisa que los protocolos no
+>     coinciden.
+>   - **Anda en los dos órdenes de despliegue.**
+> - **Autoarranque.** La "ventana acotada" quedó así: si los amplificadores llevan **10 minutos** encendidos sin un
+>   reinicio, el intento se da por bueno aunque sigan apareciendo errores esporádicos. No se cuentan minutos sanos:
+>   lo que el contador protege es la alimentación, y la prueba de que aguanta es que la placa no se reinició.
+> - **Qué cuenta como "reinicio nuestro".** Sólo SFT sin POR.
+>   - En la app, los únicos resets por software son el de la OTA y el del ST-Link (`make reset`, `flash-cube`).
+>   - Un HardFault deja el chip colgado: no reinicia.
+>   - En el H7 un reset por software prende también PIN, así que **no** se puede exigir "sin PIN". Lo confirma M8 con
+>     el `reset_rsr` crudo.
+> - **El jumper lo leen los dos firmwares, no sólo el de la DS12.** El plan lo ataba a `BOARD_HAS_ID_JUMPER`, y así
+>   protegía en una sola dirección: el firmware de la DS11 grabado por ST-Link en una DS12 no se daba cuenta.
+>   - En la DS11 fabricada, PE15 está al aire (netlist del tag `ds11-release`: `unconnected-(U7-PE15-Pad45)`) y
+>     con el pull-up lee 1.
+>   - Cada placa declara `ID_JUMPER_ESPERADO`: 1 la DS11, 0 la DS12.
+>   - Costo para las DS11 en servicio: si PE15 leyera 0 por un corto de fábrica, la placa no encendería los
+>     amplificadores, y lo diría en el banner y en `/status`. Es una falla segura y a la vista.
+> - El `board_id` también se escribe en `rsv[0]` de la cabecera de OTA.
 
 1. **F1, bloque de identidad.**
    - 32 bytes en una sección del linker a `app + 0x400`: `magic "DSIM"`, versión, `board_id` (11/12), `proto_ver`, `fw_id`, `build`.
@@ -97,12 +134,20 @@ AK5538 al volver `+5VA` lo garantiza el hardware (D3 junto con PG), pero la *rec
 
    `/status` suma `board` y, si la placa lo informa, `v5va_mv`, `pg`, `vbus` y `board_mismatch`.
 
-**Despliegue a las DS11:** ESP32 primero, STM32 después (el orden de siempre).
+**Despliegue a las DS11:** el orden de siempre, el del Makefile: **`make ota` (STM32) primero, `make ota-esp` después**.
+Mientras tanto, la página muestra el aviso de protocolos distintos.
 
-**Pruebas:**
-- `make reset` y `make flash-cube` leyendo la línea `RESET:` (medida M8): **SFT**;
-- un OTA a mitad de un autoarranque no suma una falla;
-- subir el firmware de la DS12 a una DS11 por `make ota` tiene que ser rechazado en las tres capas.
+**Pruebas (parlantes desenchufados, sin encender amplificadores a mano):**
+- `make reset` y `make flash-cube` leyendo la línea `RESET:` (medida M8): **SFT**. Anotar también `reset_rsr`;
+- un OTA a mitad de un autoarranque no suma una falla: aparece `AUTOARRANQUE` con el contador descontado;
+- subir el firmware de la DS12 a una DS11 tiene que ser rechazado en las tres capas, probando cada una por separado:
+  - `make ota BOARD=ds12` → lo frena el Makefile;
+  - `curl` directo con el `.bin` de la DS12 → 409 del ESP32;
+  - el STM32 sólo se puede probar con el ESP32 viejo, que no chequea → el error `la imagen es para DS12` en `ota_err`;
+- `make flash-cube BOARD=ds12` en una DS11: la línea `PLACA: … NO COINCIDE`, los amplificadores no encienden y la
+  OTA sigue andando para volver a la DS11;
+- **primero que todo**, con el firmware normal: la línea `PLACA: firmware DS11, jumper PE15 = 1 (espera 1) (ok)` en
+  las tres DS11.
 
 ### Fase 3 — La guarda de `+5VA` (código listo antes de que llegue la DS12; se prueba en ella)
 

@@ -14,7 +14,9 @@
 
 #include "ota.h"
 #include "stm32h7xx_hal.h"
+#include "pin_definitions.h"   /* BOARD_ID, BOARD_NAME */
 #include <string.h>
+#include <stdio.h>
 
 /* ============================================================
  * CRC-32 (zlib) por nibbles — tabla de 16 entradas, 64 bytes.
@@ -64,6 +66,17 @@ int8_t OTA_VectorsPlausible(uint32_t img_base, uint32_t len)
     if ((pc & 1U) == 0U) return 0;      /* Thumb: el bit 0 va siempre en 1 */
 
     return 1;
+}
+
+uint8_t OTA_ImageBoard(uint32_t img_base, uint32_t len)
+{
+    /* Una imagen que ni siquiera llega al bloque no puede traerlo: es vieja. */
+    if (len < FW_IDENT_OFFSET + sizeof(fw_ident_t)) return 11;
+
+    const fw_ident_t *id = (const fw_ident_t *)(uintptr_t)(img_base + FW_IDENT_OFFSET);
+    if (id->magic != FW_IDENT_MAGIC) return 11;     /* anterior a 2026-10 = DS11 */
+    if (id->version != FW_IDENT_VERSION) return 0;  /* de un formato que no conozco */
+    return id->board_id;
 }
 
 /* ============================================================
@@ -311,6 +324,23 @@ int8_t OTA_End(uint32_t crc)
         return -1;
     }
 
+    /* ¿Y para ESTA placa? El de la otra arranca igual y lee basura en pines que
+     * acá están al aire (ver fw_ident_t en ota.h). Va antes de la cabecera: sin
+     * cabecera, la imagen equivocada queda inerte, como con un CRC malo. */
+    uint8_t img_board = OTA_ImageBoard(OTA_STAGE_IMG, ota_expected);
+    if (img_board != BOARD_ID) {
+        static char msg[64];
+        HAL_FLASH_Lock();
+        if (img_board == 0)
+            snprintf(msg, sizeof(msg), "bloque de identidad ilegible; esta placa es %s", BOARD_NAME);
+        else
+            snprintf(msg, sizeof(msg), "la imagen es para DS%u y esta placa es %s",
+                     (unsigned)img_board, BOARD_NAME);
+        ota_err = msg;
+        ota_state = OTA_ST_ERROR;
+        return -1;
+    }
+
     /* La cabecera va ÚLTIMA y de una sola vez. Hasta este instante la carga es
      * reversible sin hacer nada; a partir de acá el próximo arranque aplica. */
     ota_hdr_t hdr;
@@ -320,6 +350,7 @@ int8_t OTA_End(uint32_t crc)
     hdr.crc   = crc;
     hdr.fw_id = ota_fw_id;
     hdr.build = ota_build;
+    hdr.rsv[0] = img_board;   /* el bootloader viejo no lo lee; uno nuevo puede */
 
     int8_t rc = stage_program(OTA_STAGE_BASE, (const uint8_t *)&hdr);
     HAL_FLASH_Lock();

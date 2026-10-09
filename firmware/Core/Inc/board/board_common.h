@@ -299,4 +299,14 @@
  * PD2,PD5,PD6,PD14,PD15,PA5,PA9,PA10
  * ============================================================================ */
 
+/* Jumper de identidad: PE15, la MISMA pata en las dos placas, y la leen los dos
+ * firmwares. En la DS12 va a masa por JP3 (cerrado) y R36 1k, así que con el
+ * pull-up interno (30–50 kΩ) lee 0. En la DS11 está al aire (netlist del tag
+ * ds11-release: unconnected-(U7-PE15-Pad45)) y lee 1. Cada placa declara qué
+ * espera (ID_JUMPER_ESPERADO); si no coincide, modo seguro. Así salta en las dos
+ * direcciones: el firmware de la DS12 en una DS11 y el de la DS11 en una DS12.
+ * Hay que leerlo ANTES de que MX_GPIO_Init lo pase a analógico. */
+#define ID_JUMPER_PIN           GPIO_PIN_15     // PE15 pata 45
+#define ID_JUMPER_PORT          GPIOE
+
 #endif /* __BOARD_COMMON_H */

@@ -23,6 +23,7 @@
 #define BOARD_HAS_USB_FS        1
 #define BOARD_HAS_TIMING_LINE   1
 #define BOARD_HAS_ID_JUMPER     1
+#define ID_JUMPER_ESPERADO      0   /* PE15 a masa por JP3 + R36 (board_common.h) */
 
 /* Lectura de +5VA: R163 100k (de +5VA) / R162 100k (a GND) / C312 4,7 nF.
  * PC1 = +5VA / 2. ADC123_INP11, FT_ha (DS12110). Umbral de SD: 2,25 V en el
@@ -42,12 +43,6 @@
  * divisor) y nunca con el DAC ni el ADC. */
 #define VBUS_SENSE_PIN          GPIO_PIN_5      // PA5  pata 29
 #define VBUS_SENSE_PORT         GPIOA
-
-/* Jumper de identidad: PE15 → JP3 (cerrado) → R36 1k → GND. Con el pull-up
- * interno (30–50 kΩ) lee 0 en la DS12; en la DS11 está al aire y lee 1.
- * Hay que leerlo ANTES de que la inicialización de GPIO lo pase a analógico. */
-#define ID_JUMPER_PIN           GPIO_PIN_15     // PE15 pata 45
-#define ID_JUMPER_PORT          GPIOE
 
 /* Línea de timing desde el ESP32: GPIO4 → R132 200 Ω → PD2. Entrada (EXTI). */
 #define TIMING_LINE_PIN         GPIO_PIN_2      // PD2  pata 83

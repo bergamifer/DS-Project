@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include "freertos/FreeRTOS.h"
@@ -159,7 +160,7 @@ static void device_identity_init(void)
 // coincidir. Se publica en /status como "proto_esp" junto al "proto_ver" que
 // reporta el STM32: si difieren, la pagina lo dice y avisa CUAL hay que
 // actualizar, en vez de mostrar un timeout indistinguible de una placa muerta.
-#define PROTO_VERSION    22
+#define PROTO_VERSION    23
 
 // Datos por tramo de firmware: 126, no 128, porque los dos primeros bytes del
 // payload llevan el numero de tramo.
@@ -288,8 +289,11 @@ typedef struct __attribute__((packed)) {
     uint16_t cpu_adc_x10;    // % de CPU del lado de la ENTRADA, x10
     uint16_t vdda_pre_reset_mv; // el riel justo ANTES del ultimo reinicio
     uint16_t rail_deaths;       // reinicios con el riel bajo el umbral
+    uint8_t  board_id;          // v23: 11 / 12 — sin el campo, es una DS11
+    uint8_t  board_flags;       // v23: BOARD_F_* (ver uart_protocol.h)
+    uint16_t v5a_mv;            // v23: +5VA medido en PC1 (DS12), 0 = no se mide
 } ds_status_t;
-_Static_assert(sizeof(ds_status_t) == 101, "ds_status_t debe ser 101 bytes");
+_Static_assert(sizeof(ds_status_t) == 105, "ds_status_t debe ser 105 bytes");   // v23: +4
 #define STATE_F_AMPS    0x01
 #define STATE_F_CUSTOM  0x02
 #define STATE_F_CALIB   0x04   // v7: hay calibracion de AUTOFOCUS en EEPROM
@@ -344,6 +348,18 @@ static SemaphoreHandle_t status_sem;   // CMD_STATUS recibido
 static volatile bool     last_ack_ok = false;
 static ds_status_t       last_status;  // valido tras tomar status_sem
 static uint16_t          last_status_len; // largo REAL de la trama (puede != sizeof)
+// ¿La ultima trama trae este campo entero? Se pregunta CAMPO POR CAMPO y no
+// contra sizeof(ds_status_t): cada version del protocolo agrega campos al final,
+// y comparar contra el tamaño total haria que un STM32 una sola version atras
+// perdiera TODOS los campos recientes, no solo el que le falta.
+#define ST_HAS(f) (last_status_len >= offsetof(ds_status_t, f) + sizeof(((ds_status_t *)0)->f))
+// La placa del STM32. Un firmware que no manda board_id es anterior a la DS12:
+// por definicion, DS11.
+static uint8_t stm32_board(void)
+{
+    uint8_t b = ST_HAS(board_id) ? last_status.board_id : 0;
+    return (b == 11 || b == 12) ? b : 11;
+}
 static ds_health_t       last_health;   // valido tras tomar health_sem
 static SemaphoreHandle_t health_sem;
 static ds_cap_info_t     last_cap_info; // valido tras tomar cap_info_sem
@@ -954,10 +970,13 @@ static int esp_self_json(char *out, size_t n)
  * fabrica, y el firmware afirmaba que si. */
 static const char *reset_name(uint32_t rsr)
 {
-    if (rsr & (1u << 19)) return "POR";    /* PORRSTF  */
+    /* Posiciones de stm32h743xx.h (RCC_RSR_*_Pos). Hasta 2026-10 POR usaba el
+     * bit 19 (que es D1RSTF) y WWDG el 25 (reservado): acertaba de casualidad,
+     * porque un arranque en frio prende D1RSTF junto con PORRSTF. */
+    if (rsr & (1u << 23)) return "POR";    /* PORRSTF  */
     if (rsr & (1u << 21)) return "BOR";    /* BORRSTF  */
     if (rsr & (1u << 26)) return "IWDG";   /* IWDG1RSTF */
-    if (rsr & (1u << 25)) return "WWDG";   /* WWDG1RSTF */
+    if (rsr & (1u << 28)) return "WWDG";   /* WWDG1RSTF */
     if (rsr & (1u << 30)) return "LPWR";   /* LPWRRSTF */
     if (rsr & (1u << 24)) return "SFT";    /* SFTRSTF  */
     if (rsr & (1u << 22)) return "PIN";    /* PINRSTF  */
@@ -975,7 +994,7 @@ static esp_err_t status_handler(httpd_req_t *req)
     /* 768: el JSON ronda los 550 chars con los campos de la v8. snprintf trunca
      * en silencio, y un JSON truncado hace que la pagina entera se quede en
      * "sin conexion" sin decir por que — asi que conviene el margen. */
-    char buf[960];
+    char buf[1100];
     /* 800 ms, no 400. El STM32 manda el status byte a byte sirviendo los fills
      * de audio entre medio (para no meter un pop de 6 ms), asi que en el modo
      * mas pesado —el 15, 8 fuentes x 32 salidas— la trama entera puede tardar
@@ -1002,6 +1021,7 @@ static esp_err_t status_handler(httpd_req_t *req)
         "\"vdda_mv\":%u,\"vdda_min_mv\":%u,\"vdda_min_abs\":%u,"
         "\"cpu_adc_pct\":%u.%u,"
         "\"vdda_pre_reset_mv\":%u,\"rail_deaths\":%u,"
+        "\"board\":\"DS%u\",\"board_mismatch\":%s,\"v5a_mv\":%u,"
             "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             device_id,
@@ -1026,20 +1046,23 @@ static esp_err_t status_handler(httpd_req_t *req)
             s->ota_state, s->ota_pct,
             /* Vale sólo si la trama llego completa: un STM32 con firmware
              * viejo manda 83 bytes y este campo seria basura de pila. */
-            (last_status_len >= sizeof(ds_status_t)) ? (int)s->dma_phase : -1,
+            ST_HAS(dma_phase) ? (int)s->dma_phase : -1,
             (s->state_flags & STATE_F_AUTOSTART) ? "true" : "false",
             (s->state_flags & STATE_F_AUTO_HELD) ? "true" : "false",
             reset_name(s->reset_rsr), (unsigned long)s->reset_rsr,
             /* Solo valen si la trama es de la version que los trae: un firmware
              * viejo del STM32 llenaria estos campos con basura del final del
              * buffer. Mismo criterio que dma_phase, arriba. */
-            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->vdda_mv : 0u,
-            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->vdda_min_mv : 0u,
-            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->vdda_min_abs : 0u,
-            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)(s->cpu_adc_x10 / 10) : 0u,
-            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)(s->cpu_adc_x10 % 10) : 0u,
-            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->vdda_pre_reset_mv : 0u,
-            (last_status_len >= sizeof(ds_status_t)) ? (unsigned)s->rail_deaths : 0u,
+            ST_HAS(vdda_mv) ? (unsigned)s->vdda_mv : 0u,
+            ST_HAS(vdda_min_mv) ? (unsigned)s->vdda_min_mv : 0u,
+            ST_HAS(vdda_min_abs) ? (unsigned)s->vdda_min_abs : 0u,
+            ST_HAS(cpu_adc_x10) ? (unsigned)(s->cpu_adc_x10 / 10) : 0u,
+            ST_HAS(cpu_adc_x10) ? (unsigned)(s->cpu_adc_x10 % 10) : 0u,
+            ST_HAS(vdda_pre_reset_mv) ? (unsigned)s->vdda_pre_reset_mv : 0u,
+            ST_HAS(rail_deaths) ? (unsigned)s->rail_deaths : 0u,
+            (unsigned)stm32_board(),
+            (ST_HAS(board_flags) && (s->board_flags & 0x01)) ? "true" : "false",
+            ST_HAS(v5a_mv) ? (unsigned)s->v5a_mv : 0u,
             self, (unsigned)last_status_len,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));
@@ -1953,9 +1976,26 @@ static uint32_t crc32_up(uint32_t crc, const uint8_t *p, int len)
 #define FW_TO_DATA    3000
 #define FW_TO_END    20000
 
+// Bloque de identidad de la imagen del STM32 (fw_ident_t en firmware/Core/Inc/
+// ota.h): 32 bytes en un lugar fijo del .bin que dicen para que placa es. Sin
+// el bloque, la imagen es anterior a 2026-10: por definicion, DS11.
+#define FW_IDENT_MAGIC   0x4D495344UL   // "DSIM"
+#define FW_IDENT_OFFSET  0x400
+static uint8_t fw_image_board(const uint8_t id[32])
+{
+    uint32_t magic = (uint32_t)id[0] | ((uint32_t)id[1] << 8)
+                   | ((uint32_t)id[2] << 16) | ((uint32_t)id[3] << 24);
+    if (magic != FW_IDENT_MAGIC) return 11;
+    if (id[4] != 1) return 0;           // version del bloque que no conozco
+    return id[5];
+}
+
 static esp_err_t firmware_handler(httpd_req_t *req)
 {
     char resp[224];
+    uint8_t ident[32];                  // los bytes [0x400, 0x420) de la imagen
+    int     pos = 0;                    // bytes de imagen ya recibidos
+    int     ident_checked = 0;
     int  total = req->content_len;
 
     if (total <= 0 || total > FW_MAX_BYTES) {
@@ -2015,6 +2055,38 @@ static esp_err_t firmware_handler(httpd_req_t *req)
             }
             got += r;
         }
+
+        // ¿Es una imagen para la placa que tiene este ESP32? Se mira apenas llega
+        // el bloque de identidad, ANTES de mandar ese tramo: una imagen de la
+        // otra placa se corta ahi, y lo que ya se mando lo descarta el STM32
+        // (sin la trama final no aplica nada). El STM32 lo vuelve a verificar
+        // en OTA_End; esta es la capa que puede contestar 409 con un mensaje.
+        for (int k = 0; k < got; k++) {
+            int a = pos + k;
+            if (a >= FW_IDENT_OFFSET && a < FW_IDENT_OFFSET + 32)
+                ident[a - FW_IDENT_OFFSET] = chunk[2 + k];
+        }
+        if (!ident_checked && pos + got >= FW_IDENT_OFFSET + 32) {
+            ident_checked = 1;
+            uint8_t img = fw_image_board(ident), me = stm32_board();
+            if (img != me) {
+                uart_send_and_wait_ack(CMD_FW_ABORT, NULL, 0, 500);
+                if (img == 0)
+                    snprintf(resp, sizeof(resp),
+                             "{\"status\":\"error\",\"message\":\"bloque de identidad ilegible; "
+                             "el equipo es DS%u\"}", (unsigned)me);
+                else
+                    snprintf(resp, sizeof(resp),
+                             "{\"status\":\"error\",\"message\":\"este firmware es para DS%u "
+                             "y el equipo es DS%u\"}", (unsigned)img, (unsigned)me);
+                printf("[ESP32] OTA STM32 RECHAZADA: %s\n", resp);
+                httpd_resp_set_status(req, "409 Conflict");
+                httpd_resp_set_type(req, "application/json");
+                httpd_resp_send(req, resp, strlen(resp));
+                return ESP_OK;
+            }
+        }
+        pos += got;
 
         crc = crc32_up(crc, &chunk[2], got);
         chunk[0] = (uint8_t)(seq & 0xFF);

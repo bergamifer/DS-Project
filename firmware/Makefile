@@ -442,8 +442,27 @@ flash-todo: boot all
 
 # Flasheo por WiFi, sin cable. Requiere el bootloader ya instalado (make boot-flash).
 # El equipo queda mudo durante la carga y se reinicia solo al terminar.
+#
+# Antes de subir le pregunta a la placa QUÉ placa es (/status → "board") y se
+# niega si no coincide con BOARD: el binario de una DS12 en una DS11 maneja
+# pines que en la DS11 están al aire. Un ESP32 viejo no manda "board", y eso
+# sólo pasa en las DS11, así que la ausencia cuenta como DS11. Es la primera
+# de tres barreras: el ESP32 (409) y el STM32 (OTA_End) miran además el bloque
+# de identidad DENTRO del binario.
 OTA_HOST ?= ds-1e1f30.local
+OTA_PLACA = $(shell echo $(BOARD) | tr a-z A-Z)
 ota: all
+	@st=$$(curl -sS --max-time 10 "http://$(OTA_HOST)/status") || { \
+	  echo "No contesta http://$(OTA_HOST)/status: no subo nada."; exit 1; }; \
+	case "$$st" in *'"stm32":"ok"'*) ;; *) \
+	  echo "El ESP32 contesta pero el STM32 no: no se puede saber qué placa es."; \
+	  echo "No subo nada. Respuesta: $$st"; exit 1;; esac; \
+	placa=$$(printf '%s' "$$st" | sed -n 's/.*"board":"\(DS[0-9][0-9]*\)".*/\1/p'); \
+	[ -n "$$placa" ] || placa=DS11; \
+	if [ "$$placa" != "$(OTA_PLACA)" ]; then \
+	  echo "✗ $(OTA_HOST) es una $$placa y esto se compiló para $(OTA_PLACA)."; \
+	  echo "  Usá: make ota BOARD=$$(echo $$placa | tr A-Z a-z) OTA_HOST=$(OTA_HOST)"; exit 1; fi; \
+	echo "Placa en $(OTA_HOST): $$placa — coincide con BOARD=$(BOARD)."
 	@echo "Subiendo $(BUILD_DIR)/$(TARGET).bin a http://$(OTA_HOST) ..."
 	@curl -sS --max-time 240 -X POST --data-binary @$(BUILD_DIR)/$(TARGET).bin \
 	  "http://$(OTA_HOST)/firmware?id=$(GIT_ID)&build=$(BUILD_EPOCH)" ; echo
