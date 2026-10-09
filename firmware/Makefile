@@ -11,9 +11,24 @@
 # ------------------------------------------------
 
 ######################################
-# target
+# target y placa
 ######################################
-TARGET = ds11_beamforming
+# La placa decide los pines, las capacidades y la geometría del array
+# (Core/Inc/board/). Por defecto DS11, para que nada de lo que ya existe cambie:
+#   make                → DS11, en build/ds11_beamforming.bin (la ruta de siempre)
+#   make BOARD=ds12     → DS12, en build_ds12/ds12_beamforming.bin
+# Un valor desconocido corta acá, antes de compilar nada.
+BOARD ?= ds11
+ifeq ($(BOARD),ds11)
+BOARD_DEF       = -DBOARD_DS11
+BOARD_BUILD_DIR = build
+else ifeq ($(BOARD),ds12)
+BOARD_DEF       = -DBOARD_DS12
+BOARD_BUILD_DIR = build_ds12
+else
+$(error BOARD tiene que ser ds11 o ds12, y vino "$(BOARD)")
+endif
+TARGET = $(BOARD)_beamforming
 
 
 ######################################
@@ -32,8 +47,8 @@ OPT = -O2
 #######################################
 # paths
 #######################################
-# Build path
-BUILD_DIR = build
+# Build path (una carpeta por placa: compilar una no pisa a la otra)
+BUILD_DIR = $(BOARD_BUILD_DIR)
 
 ######################################
 # source
@@ -126,7 +141,8 @@ AS_DEFS =
 C_DEFS =  \
 -DUSE_PWR_LDO_SUPPLY \
 -DUSE_HAL_DRIVER \
--DSTM32H743xx
+-DSTM32H743xx \
+$(BOARD_DEF)
 
 
 # AS includes
@@ -397,8 +413,9 @@ clean-boot:
 #######################################
 # clean up
 #######################################
+# Borra los builds de las DOS placas.
 clean:
-	-rm -fR $(BUILD_DIR)
+	-rm -fR build build_ds12
 
 clean-led:
 	-rm -fR $(LED_BUILD)

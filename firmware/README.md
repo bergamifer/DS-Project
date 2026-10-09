@@ -6,12 +6,17 @@ Firmware de audio beamforming: 5 SAI blocks (32 TX + 2 RX), DMA circular, delay 
 
 ```bash
 cd firmware
-make -j4                 # Compilar
+make -j4                 # Compilar para la DS11 (por defecto)
+make -j4 BOARD=ds12      # Compilar para la DS12
 make flash-stlink        # Flash via ST-Link SWD
-make clean && make -j4   # Clean build
+make clean && make -j4   # Clean build (clean borra las dos placas)
 ```
 
-Output: `build/ds11_beamforming.bin`
+Output: `build/ds11_beamforming.bin` (DS11) · `build_ds12/ds12_beamforming.bin` (DS12).
+
+**La placa la elige `BOARD`**, que define los pines, las capacidades y la geometría del array
+(`Core/Inc/board/`). Sin placa no compila, y `BOARD` con otro valor tampoco. Ver
+[`docs/ds12_firmware_plan.md`](../docs/ds12_firmware_plan.md).
 
 ## Estructura
 
@@ -31,7 +36,7 @@ Core/
     pcm1690.c               # PCM1690 DAC I2C driver
     epaper.c                # SSD1681 driver
 STM32H743XX_FLASH.ld       # Linker script (.dma_buffer -> RAM_D2)
-Makefile                    # TARGET=ds11_beamforming
+Makefile                    # BOARD ?= ds11 → TARGET = $(BOARD)_beamforming
 ```
 
 ## Clocks

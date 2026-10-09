@@ -35,7 +35,7 @@ Para preguntas de conectividad: `tools/netlist_digest.py` deja tres archivos gre
 ## Firmware
 
 ```bash
-cd firmware && make -j4         # TARGET = ds11_beamforming
+cd firmware && make -j4         # DS11 (por defecto) · make -j4 BOARD=ds12 para la DS12
 make flash-stlink               # ⚠️ no anda en todas las placas: si no, make todo-cube
 make ota OTA_HOST=192.168.100.77
 ```

@@ -43,7 +43,16 @@ AK5538 al volver `+5VA` lo garantiza el hardware (D3 junto con PG), pero la *rec
 
 ## 2. Fases
 
-### Fase 1 — Partir por placa, sin cambiar nada (se prueba en una DS11)
+### Fase 1 — Partir por placa, sin cambiar nada (se prueba en una DS11) ✅ hecha el 2026-10-09
+
+> **Resultado:**
+> - `make` (DS11) da un `.bin` **byte a byte idéntico** al de antes, y el bootloader también. Se compiló con
+>   `GIT_ID=00000000 BUILD_EPOCH=0` y se comparó con `cmp`; antes se probó que el build es reproducible.
+> - `make BOARD=ds12` compila sin warnings. Sólo cambia la geometría (`SPK_LAYOUT_2X16 = 1`): las capacidades
+>   están declaradas, pero todavía no las usa nadie.
+> - Pruebas negativas: `BOARD=ds13` lo frena el Makefile; un build sin placa lo frena `#error`.
+> - La DS11 sigue saliendo en `build/ds11_beamforming.bin`, y la DS12 sale en `build_ds12/`.
+> - El `_Static_assert` de pines duplicados no hizo falta: GCC ya avisa si un `#define` se redefine con otro valor.
 
 1. Crear `firmware/Core/Inc/board/`:
    - `board.h`: el único que se incluye. Elige por `-DBOARD_DS11` / `-DBOARD_DS12`, y si no hay ninguno no compila;

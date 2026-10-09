@@ -89,9 +89,14 @@
  * El entrelazado NO necesita código nuevo: SPK_ROW_DX_MM ya corre las filas
  * impares 40 mm, que es justo el paso efectivo que busca el 2×16.
  *
- * ⚠️ Cambiar esto con el hardware equivocado NO da error: el haz se forma
- * igual, pero apuntando a otro lado. Confirmalo con el channel walker. */
-#define SPK_LAYOUT_2X16  0        /* 0 = DS11 (8×4) · 1 = DS12 (2×16) */
+ * El interruptor ya no se toca a mano: lo fija la placa (SPK_LAYOUT_2X16 en
+ * board/board_ds11.h = 0, board/board_ds12.h = 1), elegida con
+ * `make BOARD=ds11|ds12`. Antes de esto, compilar para la DS12 con el 0
+ * olvidado no daba error: el haz se formaba igual, apuntando a otro lado.
+ * Confirmalo igual con el channel walker. */
+#ifndef SPK_LAYOUT_2X16
+  #error "SPK_LAYOUT_2X16 lo define el archivo de placa: falta incluir pin_definitions.h"
+#endif
 
 #if SPK_LAYOUT_2X16
   #define SPK_ROWS        2
