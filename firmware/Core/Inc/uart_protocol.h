@@ -631,9 +631,9 @@ typedef struct __attribute__((packed)) {
 
 #define BOARD_F_MISMATCH   0x01  /* el jumper de identidad dice otra placa: modo seguro */
 #define BOARD_F_PG         0x02  /* PG del buck de los amplificadores en alto (DS12) */
-#define BOARD_F_VBUS       0x04  /* hay VBUS en el USB del STM32 (DS12) */
+#define BOARD_F_VBUS       0x04  /* hay una computadora en el USB del STM32, J8 (DS12, PA5) */
 #define BOARD_F_5VA_OK     0x08  /* la guarda permite los amplificadores (DS12) */
-#define BOARD_F_SENSE      0x10  /* esta placa mide +5VA: los bits 0x02, 0x08 y 0x20 valen */
+#define BOARD_F_SENSE      0x10  /* la placa mide +5VA, PG y VBUS: valen 0x02, 0x04, 0x08, 0x20 */
 #define BOARD_F_BLOQUEO    0x20  /* +5VA se cayó demasiadas veces: no se encienden solos */
 
 /* Estado REAL, no el nominal.

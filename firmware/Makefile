@@ -421,10 +421,11 @@ clean:
 #######################################
 # Tests de host: corren en la Mac, sin placa.
 #######################################
-# La guarda de +5VA (Core/Src/power_guard.c). Se compila tres veces: la de
-# verdad tiene que PASAR, y dos rotas a proposito (mutantes) tienen que FALLAR.
-# Si un mutante pasa, el test no esta mirando lo que dice mirar, y el "ok" de
-# la de verdad no vale nada.
+# Cada test se compila una vez tal cual —tiene que PASAR— y una vez por cada
+# mutante: una version rota a proposito que tiene que FALLAR. Si un mutante
+# pasa, el test no esta mirando lo que dice mirar, y el "ok" no vale nada.
+# Los tests escriben sus requisitos con constantes propias, nunca con las
+# macros del codigo: si no, el mutante se aprobaria a si mismo.
 HOST_CC ?= cc
 # En esta Mac las Command Line Tools traen un SDK (macOS 27) que su propio
 # linker no entiende ("tapi error: unknown architecture arm64e.x1"). El SDK de
@@ -434,16 +435,24 @@ ifneq ($(wildcard $(XCODE_SDK)),)
 HOST_ENV = SDKROOT=$(XCODE_SDK)
 endif
 TEST_CFLAGS = -std=c11 -Wall -Wextra -Werror -ICore/Inc
-PG_MUTANTES = "-DPGD_ESTABLE_MS=0u" "-DPGD_MAX_RESTAUR=200u" "-DPGD_VENTANA_MS=1u"
+
+# test:mutante,mutante,...
+HOST_TESTS = \
+  power_guard:-DPGD_ESTABLE_MS=0u,-DPGD_MAX_RESTAUR=200u,-DPGD_VENTANA_MS=1u \
+  vbus_detect:-DVBUS_ESTABLE_MS=0u
+
 test:
 	@mkdir -p build_test
-	@$(HOST_ENV) $(HOST_CC) $(TEST_CFLAGS) tests/test_power_guard.c -o build_test/test_power_guard
-	@./build_test/test_power_guard
-	@for m in $(PG_MUTANTES); do \
-	  $(HOST_ENV) $(HOST_CC) $(TEST_CFLAGS) $$m tests/test_power_guard.c -o build_test/mutante || exit 1; \
-	  if ./build_test/mutante >/dev/null; then \
-	    echo "✗ el mutante $$m PASA: el test no lo detecta"; exit 1; \
-	  else echo "  mutante $$m: detectado"; fi; \
+	@for t in $(HOST_TESTS); do \
+	  nombre=$${t%%:*}; mutantes=$$(echo $${t#*:} | tr ',' ' '); \
+	  $(HOST_ENV) $(HOST_CC) $(TEST_CFLAGS) tests/test_$$nombre.c -o build_test/$$nombre || exit 1; \
+	  ./build_test/$$nombre || exit 1; \
+	  for m in $$mutantes; do \
+	    $(HOST_ENV) $(HOST_CC) $(TEST_CFLAGS) $$m tests/test_$$nombre.c -o build_test/mutante || exit 1; \
+	    if ./build_test/mutante >/dev/null; then \
+	      echo "✗ el mutante $$m PASA: el test de $$nombre no lo detecta"; exit 1; \
+	    else echo "  mutante $$m: detectado"; fi; \
+	  done; \
 	done
 .PHONY: test
 

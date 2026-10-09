@@ -21,6 +21,13 @@
 #include "../Core/Inc/power_guard.h"
 #include "../Core/Src/power_guard.c"
 
+/* Los requisitos, escritos acá y NO tomados de power_guard.h. Si el test usara
+ * las macros del código, un mutante que las cambia se aprobaría a sí mismo:
+ * "esperó PGD_ESTABLE_MS" es cierto para cualquier valor de PGD_ESTABLE_MS. */
+#define REQ_ESTABLE_MS   50u       /* DS12_ALIMENTACION.md §6.1.b: ≥ 50 ms con riel y PG */
+#define REQ_MAX_RESTAUR  3u
+#define REQ_VENTANA_MS   600000u
+
 static int fallas = 0;
 #define CHECK(cond, ...) do { if (!(cond)) { fallas++; \
     printf("  FALLA %s:%d: ", __FILE__, __LINE__); printf(__VA_ARGS__); printf("\n"); } } while (0)
@@ -119,8 +126,8 @@ static void t_solo_usb(void)
   /* Llega la fuente: +5VA sube, PG baja durante el soft-start y vuelve. */
   p.riel_mv = 5090; p.pg = 0; correr(&p, 10);
   p.pg = 1;
-  correr(&p, PGD_ESTABLE_MS - 1);
-  CHECK(p.n_recuperar == 0, "recuperó antes de %u ms estables", PGD_ESTABLE_MS);
+  correr(&p, REQ_ESTABLE_MS - 1);
+  CHECK(p.n_recuperar == 0, "recuperó antes de %u ms estables", REQ_ESTABLE_MS);
   correr(&p, 2);
   CHECK(p.n_recuperar == 1, "tenía que recuperar una vez al llegar la fuente (fueron %d)", p.n_recuperar);
   CHECK(p.amps == 0, "nadie los había pedido: no se encienden solos");
@@ -136,7 +143,7 @@ static void t_caida_y_vuelta(void)
   CHECK(!persona_enciende(&p), "durante la caída no se puede encender");
   correr(&p, 100);
   p.riel_mv = 5090; p.pg = 1;
-  correr(&p, PGD_ESTABLE_MS + 2);
+  correr(&p, REQ_ESTABLE_MS + 2);
   CHECK(p.n_recuperar == 1, "tenía que recuperar (fueron %d)", p.n_recuperar);
   CHECK(p.amps == 1 && p.n_restaurar == 1, "estaban pedidos: tienen que volver solos");
 }
@@ -149,7 +156,7 @@ static void t_rebote(void)
   p.riel_mv = 0; correr(&p, 20);
   p.riel_mv = 5090; correr(&p, 30);
   p.riel_mv = 4000; correr(&p, 5);
-  p.riel_mv = 5090; correr(&p, PGD_ESTABLE_MS - 1);
+  p.riel_mv = 5090; correr(&p, REQ_ESTABLE_MS - 1);
   CHECK(p.n_recuperar == 0, "recuperó con un riel que rebotaba");
   correr(&p, 2);
   CHECK(p.n_recuperar == 1, "después de 50 ms seguidos tenía que recuperar");
@@ -185,7 +192,7 @@ static void t_apagan_durante_la_caida(void)
 
 static void t_tartamudeo(void)
 {
-  /* Una fuente que se cae cada vez que suenan. Vuelven solos PGD_MAX_RESTAUR
+  /* Una fuente que se cae cada vez que suenan. Vuelven solos REQ_MAX_RESTAUR
    * veces; después quedan apagados hasta que encienda una persona. */
   placa_t p; placa_init(&p, 1000, 5090, 1);
   persona_enciende(&p);
@@ -193,8 +200,8 @@ static void t_tartamudeo(void)
     p.riel_mv = 3000; correr(&p, 5);
     p.riel_mv = 5090; correr(&p, 100);
   }
-  CHECK(p.n_restaurar == (int)PGD_MAX_RESTAUR,
-        "tenía que restaurar %u veces, restauró %d", PGD_MAX_RESTAUR, p.n_restaurar);
+  CHECK(p.n_restaurar == (int)REQ_MAX_RESTAUR,
+        "tenía que restaurar %u veces, restauró %d", REQ_MAX_RESTAUR, p.n_restaurar);
   CHECK(p.amps == 0 && p.g.bloqueado, "pasado el límite tienen que quedar apagados");
   CHECK(persona_enciende(&p) && !p.g.bloqueado, "una persona tiene que poder desbloquear");
   /* Y después de una caída vuelven solos otra vez. */
@@ -211,7 +218,7 @@ static void t_ventana(void)
   for (int i = 0; i < 6; i++) {
     p.riel_mv = 3000; correr(&p, 5);
     p.riel_mv = 5090; correr(&p, 100);
-    p.ahora += PGD_VENTANA_MS;   /* pasa el tiempo sin nada que mirar */
+    p.ahora += REQ_VENTANA_MS;   /* pasa el tiempo sin nada que mirar */
   }
   CHECK(p.n_restaurar == 6 && !p.g.bloqueado,
         "caídas espaciadas: tenía que restaurar 6, restauró %d", p.n_restaurar);
@@ -233,7 +240,7 @@ static void t_cae_durante_la_recuperacion(void)
   placa_t p; placa_init(&p, 1000, 5090, 1);
   persona_enciende(&p);
   p.riel_mv = 0; correr(&p, 10);
-  p.riel_mv = 5090; correr(&p, PGD_ESTABLE_MS);
+  p.riel_mv = 5090; correr(&p, REQ_ESTABLE_MS);
   /* El próximo paso pide RECUPERAR; simulamos que durante la reconfiguración
    * el riel se va de nuevo. */
   CHECK(pgd_tick(&p.g, p.ahora, 0, 1, 1, 1, 0) == PGD_RECUPERAR, "tenía que pedir recuperar");

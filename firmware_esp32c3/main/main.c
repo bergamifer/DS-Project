@@ -992,10 +992,12 @@ static esp_err_t status_handler(httpd_req_t *req)
     xSemaphoreTake(status_sem, 0);              // drenar status viejo
     uart_send_frame(CMD_GET_STATUS, NULL, 0);
 
-    /* 768: el JSON ronda los 550 chars con los campos de la v8. snprintf trunca
-     * en silencio, y un JSON truncado hace que la pagina entera se quede en
-     * "sin conexion" sin decir por que — asi que conviene el margen. */
-    char buf[1100];
+    /* snprintf trunca en silencio, y un JSON truncado hace que la pagina
+     * entera se quede en "sin conexion" sin decir por que — asi que conviene
+     * el margen. 1536: con la v23 (v5a, usb_vbus) el compilador calcula un
+     * peor caso de mas de 1100. La tarea de httpd tiene 8 KB de pila y este
+     * handler usa ~1,9 KB. */
+    char buf[1536];
     /* 800 ms, no 400. El STM32 manda el status byte a byte sirviendo los fills
      * de audio entre medio (para no meter un pop de 6 ms), asi que en el modo
      * mas pesado —el 15, 8 fuentes x 32 salidas— la trama entera puede tardar
@@ -1035,7 +1037,7 @@ static esp_err_t status_handler(httpd_req_t *req)
         "\"vdda_mv\":%u,\"vdda_min_mv\":%u,\"vdda_min_abs\":%u,"
         "\"cpu_adc_pct\":%u.%u,"
         "\"vdda_pre_reset_mv\":%u,\"rail_deaths\":%u,"
-        "\"board\":\"DS%u\",\"board_mismatch\":%s,\"v5a\":%s,"
+        "\"board\":\"DS%u\",\"board_mismatch\":%s,\"v5a\":%s,\"usb_vbus\":%s,"
             "%s,\"status_len\":%u,"
             "\"stm32_uptime_ms\":%lu,\"uptime_ms\":%lu}",
             device_id,
@@ -1077,6 +1079,10 @@ static esp_err_t status_handler(httpd_req_t *req)
             (unsigned)stm32_board(),
             (ST_HAS(board_flags) && (s->board_flags & 0x01)) ? "true" : "false",
             v5a,
+            /* Hay una computadora en el USB del STM32 (J8, PA5). null si la
+             * placa no lo mide (DS11). */
+            !(ST_HAS(board_flags) && (s->board_flags & 0x10)) ? "null"
+              : ((s->board_flags & 0x04) ? "true" : "false"),
             self, (unsigned)last_status_len,
             (unsigned long)s->uptime_ms,
             (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS));

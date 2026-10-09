@@ -30,6 +30,7 @@
 #include "eeprom_config.h"
 #include "ota.h"
 #include "power_guard.h"
+#include "vbus_detect.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -1487,6 +1488,11 @@ static uint16_t          v5a_vdda_cal   = 0;        /* VDDA con que se calcularo
 static uint16_t          v5a_mv_ult     = 0;        /* +5VA, última lectura */
 static uint8_t           v5a_pg_ult     = 0;
 #endif
+#if BOARD_HAS_VBUS_SENSE
+/* ¿Hay una computadora en el USB del STM32 (J8)? Ver vbus_detect.h. Lo va a
+ * usar el USB (fase 5): el pull-up de D+ se conecta sólo con esto en 1. */
+static vbus_t vbus;
+#endif
 /* Mientras se reconfiguran los codecs con el audio andando, las esperas del
  * driver del PCM1690 sirven los fills (PCM1690_Yield). En el arranque no. */
 static uint8_t  codecs_coop = 0;
@@ -1716,6 +1722,10 @@ static const char *Amps_MotivoNo(void);
 #if BOARD_HAS_5VA_SENSE
 static void V5A_Init(void);
 static void V5A_Tick(void);
+#endif
+#if BOARD_HAS_VBUS_SENSE
+static void VBUS_Init(void);
+static void VBUS_Tick(void);
 #endif
 static void Autostart_Tick(void);
 static void Autostart_ManualOverride(uint8_t turning_on);
@@ -2798,6 +2808,9 @@ int main(void)
    * autoarranque se decide unas líneas más abajo. */
   V5A_Init();
 #endif
+#if BOARD_HAS_VBUS_SENSE
+  VBUS_Init();
+#endif
 
   /* Identidad de la placa, en el banner. */
   snprintf(uart_buf, sizeof(uart_buf), "PLACA: firmware %s, jumper PE15 = %u (espera %u)%s\r\n",
@@ -2922,6 +2935,9 @@ int main(void)
 
 #if BOARD_HAS_5VA_SENSE
     V5A_Tick();           /* la guarda de +5VA: lo que la interrupción no decide */
+#endif
+#if BOARD_HAS_VBUS_SENSE
+    VBUS_Tick();          /* PA5: computadora en el USB del STM32 */
 #endif
 
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
@@ -3454,6 +3470,9 @@ int main(void)
                         | (v5a_pg_ult ? BOARD_F_PG : 0)
                         | (pgd_permitido(&v5a_guard) ? BOARD_F_5VA_OK : 0)
                         | (v5a_guard.bloqueado ? BOARD_F_BLOQUEO : 0);
+#if BOARD_HAS_VBUS_SENSE
+        st.board_flags |= (vbus.presente ? BOARD_F_VBUS : 0);
+#endif
         st.v5a_mv      = v5a_mv_ult;
         st.v5a_caidas  = (v5a_guard.caidas > 255u) ? 255u : (uint8_t)v5a_guard.caidas;
 #else
@@ -4842,6 +4861,36 @@ static void V5A_Tick(void)
   V5A_ArmarSiOk();
 }
 #endif /* BOARD_HAS_5VA_SENSE */
+
+#if BOARD_HAS_VBUS_SENSE
+/* PA5 = VBUS de J8 × 100/162. Entrada digital SIN pull: un pull interno de
+ * 40 kΩ contra R160 (100 kΩ) rompería el divisor. MX_GPIO_Init lo había dejado
+ * en analógico, como todo pin libre. Nunca con el ADC ni el DAC: es un TT_ha
+ * y lo que interesa es sí o no. */
+static void VBUS_Init(void)
+{
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  GPIO_InitTypeDef gi = {0};
+  gi.Pin  = VBUS_SENSE_PIN;
+  gi.Mode = GPIO_MODE_INPUT;
+  gi.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(VBUS_SENSE_PORT, &gi);
+  vbus_init(&vbus);
+  snprintf(uart_buf, sizeof(uart_buf), "USB: PA5 (VBUS de J8) = %u\r\n",
+           (unsigned)(HAL_GPIO_ReadPin(VBUS_SENSE_PORT, VBUS_SENSE_PIN) == GPIO_PIN_SET));
+  UART_Print(uart_buf);
+}
+
+static void VBUS_Tick(void)
+{
+  int pa5 = (HAL_GPIO_ReadPin(VBUS_SENSE_PORT, VBUS_SENSE_PIN) == GPIO_PIN_SET);
+  if (vbus_tick(&vbus, HAL_GetTick(), pa5)) {
+    /* Fase 5: acá se conecta (o desconecta) el pull-up de D+ del USB. */
+    UART_Print(vbus.presente ? "USB: hay una computadora en J8 (VBUS, 20 ms estable)\r\n"
+                             : "USB: se fue la computadora de J8\r\n");
+  }
+}
+#endif /* BOARD_HAS_VBUS_SENSE */
 
 /**
   * @brief I2C3 Initialization Function (AK5538VN ADC — PA8/PC9 AF4)

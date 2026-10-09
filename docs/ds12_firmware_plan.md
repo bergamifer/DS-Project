@@ -172,6 +172,12 @@ Mientras tanto, la página muestra el aviso de protocolos distintos.
 >
 >   **Tres mutantes** (sin los 50 ms, sin límite de restauraciones y con una ventana de 1 ms): el test detecta los
 >   tres. Un "ok" que no puede fallar no prueba nada.
+>
+>   🔧 Corrección del mismo día: la primera versión del test medía contra las macros del código
+>   (`PGD_ESTABLE_MS`). Así, el mutante de 0 ms se aprobaba a sí mismo en el chequeo que debía agarrarlo, y lo
+>   delataba un efecto colateral: `PGD_ESTABLE_MS - 1` daba un número gigante. Ahora el test escribe los
+>   requisitos con constantes propias (`REQ_ESTABLE_MS = 50`, …), y cada mutante cae en el chequeo que le
+>   corresponde: «recuperó antes de 50 ms», «tenía que restaurar 3 veces, restauró 6».
 > - **Decisiones que el plan no traía:**
 >   - **Límite de restauraciones.** Los amplificadores vuelven solos como mucho 3 veces cada 10 minutos. Una fuente
 >     que no da abasto se cae cada vez que suenan, y sin límite la obra sería un tartamudeo de golpes. Pasado el
@@ -226,6 +232,19 @@ Va todo detrás de `BOARD_HAS_5VA_SENSE`.
 1. Primero el firmware de la DS11 tal cual, por ST-Link, **con los 20 V puestos** y para ver si suena. Después, `BOARD=ds12`.
 2. Verificar el MAX809S de UMW: **que un OTA reinicie la placa**. Su salida es push-pull y el reset por software del STM32 tiene que poder ganarle.
 3. **F7:** PA5 lee 0 sin cable, también con la placa caliente; lee 1 con la Mac enchufada en J8.
+
+   > 🟡 **Código hecho el 2026-10-09**, sin probar en placa.
+   > - El antirrebote vive en `vbus_detect.h`, sin HAL: presente sólo con 20 ms seguidos en alto, y ausente apenas
+   >   baja.
+   > - `make test` lo prueba con un cable firme, uno que rebota, el desenchufe y la vuelta del tick, y con su
+   >   mutante (sin los 20 ms).
+   > - PA5 es entrada digital sin pull.
+   > - `/status` dice `"usb_vbus"`: `null` en la DS11.
+   > - El log avisa cuando se enchufa o se va la computadora.
+   > - El hueco para la fase 5 está marcado en `VBUS_Tick()`: ahí se conecta el pull-up de D+.
+   >
+   > En el banco: además de leer 0 y 1, enchufar y desenchufar varias veces, y ver **una** línea `USB:` por
+   > cada vez.
 
 ### Fase 5 — USB del STM32 (F9) y línea de timing (F10)
 
