@@ -138,6 +138,11 @@ AK5538 al volver `+5VA` lo garantiza el hardware (D3 junto con PG), pero la *rec
 Mientras tanto, la página muestra el aviso de protocolos distintos.
 
 **Pruebas (parlantes desenchufados, sin encender amplificadores a mano):**
+
+> Casi toda esta lista la corre `tools/banco_fase2.py` (2026-10-15):
+> `--host … --serie … --stlink --ota --barreras`. Quedan a mano tres cosas: la barrera del
+> STM32, el `flash-cube BOARD=ds12` y armar el autoarranque.
+
 - `make reset` y `make flash-cube` leyendo la línea `RESET:` (medida M8): **SFT**. Anotar también `reset_rsr`;
 - un OTA a mitad de un autoarranque no suma una falla: aparece `AUTOARRANQUE` con el contador descontado;
 - subir el firmware de la DS12 a una DS11 tiene que ser rechazado en las tres capas, probando cada una por separado:

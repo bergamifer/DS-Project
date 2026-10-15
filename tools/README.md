@@ -4,7 +4,9 @@ Dos familias, y conviene no confundirlas:
 
 - **Medición acústica** (las ocho de abajo + `sweep_focus.sh`): hablan con el ESP32 por
   HTTP, con la placa encendida y sonando.
-- **Placa, madera y repositorio** (`check_pcb.sh`, `sch2net.py`, `pcb_status.py`,
+- **Banco del firmware** (`banco_fase2.py`): prueba un firmware nuevo en una placa, sin
+  sonido y con los parlantes desenchufados.
+- **Placa, madera y repositorio** (`check_pcb.sh`, `check_layout.py`, `sch2net.py`, `pcb_status.py`,
   `netlist_digest.py`, `netlist_diff.py`, `geometria_array.py`): trabajan sobre los
   archivos del proyecto —el KiCad y el firmware—, sin tocar hardware. Están al final.
 
@@ -130,6 +132,44 @@ sin instrumental.
 ESP=http://192.168.100.77 STEP=100 ./tools/sweep_focus.sh 800
 ```
 ⚠️ Su IP por default (`192.168.100.143`) es vieja: pasale `ESP=` siempre.
+
+---
+
+## Banco del firmware
+
+### `banco_fase2.py` — la prueba de la fase 2 del plan DS12, en una DS11
+La fase 2 (identidad de placa y autoarranque) está escrita pero nunca corrió en una placa.
+Su prueba (`docs/ds12_firmware_plan.md`) es una lista de cosas para mirar en el log y en
+`/status`. El script hace esa lista entero:
+- revisa `/status`: protocolo 23 en los dos chips, DS11, sin `board_mismatch`, y `v5a` y
+  `usb_vbus` en null;
+- con `--stlink`, `make reset` tiene que volver con `RESET: SFT`;
+- con `--ota`, reinstala el mismo firmware y tiene que volver con SFT y el `fw_id` del repo;
+- con `--barreras`, el firmware de la DS12 tiene que rebotar en el Makefile y con un 409
+  del ESP32, sin que la placa se reinicie;
+- con `--serie`, lee el log del ST-Link y verifica en cada arranque las líneas `PLACA:` y
+  `RESET:` y el readback del AK5538.
+
+**No toca los amplificadores ni el autoarranque**, y no llama a `POST /reset`. Igual, se
+corre con los parlantes desenchufados. Todo lo crudo queda en `.ds12_audit/banco/`,
+incluido el `reset_rsr` de la medida M8.
+```
+tools/banco_fase2.py --host 192.168.100.77 --serie /dev/cu.usbmodemXXXX --stlink --ota --barreras
+tools/banco_fase2.py --autoprueba        # sin placa, contra una placa falsa en localhost
+```
+**Su autoprueba:** placas falsas que contestan como el ESP32.
+- La sana da ✅.
+- Dan ❌: el jumper equivocado, un protocolo viejo, una DS12, el STM32 mudo y los
+  amplificadores encendidos.
+- También da ❌ un ESP32 que acepta el firmware de la DS12, o que contesta 409 pero igual
+  se reinicia.
+- Un banner vacío da ❌, nunca ✅.
+
+No cubre `make`, el puerto serie real ni el ST-Link: eso se ve en la primera corrida.
+
+La prueba "OTA a mitad de un autoarranque" necesita los amplificadores encendidos por el
+autoarranque. Lo arma una persona: el script sólo detecta que está en curso y entonces
+exige la línea de descuento.
 
 ---
 
