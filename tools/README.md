@@ -136,8 +136,9 @@ ESP=http://192.168.100.77 STEP=100 ./tools/sweep_focus.sh 800
 ## Placa, madera y repositorio
 
 Estas no hablan con la placa: leen los archivos del proyecto. Y **ninguna necesita
-KiCad instalado salvo `check_pcb.sh`**, así que la revisión de lo que se está dibujando
-se puede hacer desde cualquier máquina —incluida la nube— sin exportar nada a mano.
+KiCad instalado salvo `check_pcb.sh` y `check_layout.py`**, así que la revisión de lo que
+se está dibujando se puede hacer desde cualquier máquina —incluida la nube— sin exportar
+nada a mano.
 
 ### `check_pcb.sh` — que no salgan gerbers con el cobre viejo
 KiCad **no recalcula los rellenos de zona al plotear**: usa el cobre que está guardado
@@ -159,6 +160,45 @@ tools/check_pcb.sh --install    # lo deja como hook de pre-commit
 **`--install` hay que correrlo una vez por copia del repo**: `.git/hooks/` no se versiona.
 
 Y al exportar: `kicad-cli pcb export gerbers --check-zones`, que viene apagado por default.
+
+### `check_layout.py` — las reglas de layout que el DRC no mira
+El DRC contesta "¿se tocan cosas que no deberían?". No contesta "¿este buck va a
+irradiar?": una placa puede tener el DRC en cero y el lazo caliente de un buck dando la
+vuelta por la otra cara. Esto mide las reglas de `hardware/DS/DS12_ALIMENTACION.md` §7:
+
+1. **Lazo caliente.** Los cerámicos de entrada de cada buck, ¿están pegados a VIN y a
+   GND del integrado (≤ 2 mm borde a borde) y en la misma cara?
+2. **Nodo SW.** ¿El inductor está pegado al pin SW y en la misma cara? ¿Hay vías en SW?
+3. **Vías térmicas** bajo el pad de GND del AP63356, y ninguna en el pad de SW.
+4. **FB lejos de SW**, en la misma capa (entre F.Cu y B.Cu está el plano de In1).
+5. **Separación** de cada buck al AK5538 y a los PCM1690.
+6. **Un punto de prueba por riel**, y que el TP esté conectado (en la DS11, seis de
+   siete no lo estaban).
+7. **+5VA y +3V3 como planos.**
+8. **Antena del ESP32:** cero cobre, en ninguna capa, dentro del keepout de la huella, y
+   el keepout contra el borde.
+9. **Desacople:** para cada pin de alimentación de cada integrado, el capacitor más cercano.
+
+Trabaja sobre una copia en memoria con los rellenos recalculados, y no toca el archivo.
+Encuentra los componentes **por valor y por función de pin**, no por designador: si IC4
+pasa a llamarse IC7, lo sigue encontrando. Los umbrales son **criterio, no física**
+(están juntos al principio del script, para discutirlos en un solo lugar).
+```
+tools/check_layout.py                          # hardware/DS/DS.kicad_pcb
+tools/check_layout.py otra/placa.kicad_pcb
+tools/check_layout.py --autoprueba             # ~45 s: prueba la herramienta, no la placa
+```
+**Su autoprueba:** geometría contra respuestas conocidas. Una placa vacía tiene que dar
+❌, nunca ✅. Y 22 mutantes sobre la placa real, en las dos direcciones: los capacitores y
+el inductor **bien** puestos tienen que dar ✅, y alejados tienen que dar ❌. También: una
+vía en SW, las vías térmicas, una pista de SW junto a FB (y la misma detrás del plano,
+que no cuenta), una pista y un plano bajo la antena, un TP desconectado y el desacople
+del STM32. Sale 1 si hay alguna ❌.
+
+**Lo que no mide**, y hay que mirar a mano:
+- las islas de GND (§7.4);
+- dónde toma FB la muestra;
+- los retornos por vías.
 
 ### `sch2net.py` — el netlist derivado del esquemático, sin KiCad
 El netlist exportado (`.net`) está en el `.gitignore`, y sin él no hay forma de
