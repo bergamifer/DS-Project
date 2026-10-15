@@ -206,8 +206,9 @@ El DRC contesta "¿se tocan cosas que no deberían?". No contesta "¿este buck v
 irradiar?": una placa puede tener el DRC en cero y el lazo caliente de un buck dando la
 vuelta por la otra cara. Esto mide las reglas de `hardware/DS/DS12_ALIMENTACION.md` §7:
 
-1. **Lazo caliente.** Los cerámicos de entrada de cada buck, ¿están pegados a VIN y a
-   GND del integrado (≤ 2 mm borde a borde) y en la misma cara?
+1. **Lazo caliente.** Como la Figura 47 de la hoja del AP63356: **uno** de los cerámicos
+   de entrada pegado a VIN y a GND del integrado (≤ 2 mm borde a borde), y **dos de
+   ≥ 1 µF cerca** (≤ 5 mm, §7.2). Todos en la misma cara que el integrado.
 2. **Nodo SW.** ¿El inductor está pegado al pin SW y en la misma cara? ¿Hay vías en SW?
 3. **Vías térmicas** bajo el pad de GND del AP63356, y ninguna en el pad de SW.
 4. **FB lejos de SW**, en la misma capa (entre F.Cu y B.Cu está el plano de In1).

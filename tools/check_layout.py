@@ -11,7 +11,8 @@ hardware/DS/DS12_ALIMENTACION.md §7, y este script las mide.
 
 QUÉ MIDE (cada sección dice de qué regla sale)
   1. Lazo caliente de cada buck (§7.1, §7.2): los capacitores cerámicos de
-     entrada, ¿están pegados a VIN y a GND del integrado, y en la misma cara?
+     entrada: uno pegado a VIN y GND (el C1 de la Figura 47 de la hoja) y dos de
+     ≥ 1 µF cerca, todos en la misma cara que el integrado.
   2. Nodo SW (§7.1): ¿el inductor está pegado al pin SW y en la misma cara?
      ¿hay vías en la red SW?
   3. Vías térmicas (§7.5): ¿hay vías bajo el pad de GND del AP63356? ¿y ninguna
@@ -121,7 +122,11 @@ FB_MIN = 1.0        # cobre de FB contra cobre de SW
 SEP_ANALOG = 10.0   # buck → AK5538 / PCM1690
 DESACOPLE_MAX = 3.0 # pin de alimentación → su capacitor más cercano
 
-# Los bucks, por el valor del integrado. `min_cin`: cuántos cerámicos de ≥ 1 µF
+# Los bucks, por el valor del integrado. El criterio de entrada sale de la
+# Figura 47 de la hoja del AP63356: UN capacitor (C1) pegado sobre los pads VIN y
+# GND, y los demás sobre los mismos planos, cerca. Dos 1210 no pueden quedar los
+# dos a 2 mm de pads de 0,8 mm: pedirlo era pedir algo que la hoja no dibuja.
+# `min_cin`: cuántos cerámicos de ≥ 1 µF
 # tienen que estar pegados (§7.2: dos como mínimo para el buck A).
 BUCKS = [
     dict(valor="AP63356", nombre="buck A (+5VA, amplificadores)", min_cin=2, pad_termico=True),
@@ -280,10 +285,13 @@ def veredicto_cin(gap_vin, gap_gnd, misma_cara):
     return OK if peor <= CIN_OK else AVISO if peor <= CIN_MAX else FALLA
 
 
-def veredicto_cin_buck(n_ok, n_aviso, minimo):
-    if n_ok >= minimo:
+def veredicto_cin_buck(hay_pegado, n_grandes_cerca, minimo):
+    """hay_pegado: algún cerámico (de cualquier valor) a ≤ CIN_OK de VIN y GND,
+    en la misma cara — el C1 de la Figura 47. n_grandes_cerca: cerámicos de
+    ≥ 1 µF a ≤ CIN_MAX, misma cara (§7.2: la corriente RMS pide dos)."""
+    if hay_pegado and n_grandes_cerca >= minimo:
         return OK
-    return AVISO if n_ok + n_aviso > 0 else FALLA
+    return AVISO if hay_pegado or n_grandes_cerca > 0 else FALLA
 
 
 def veredicto_sw(gap, misma_cara):
@@ -410,7 +418,7 @@ def chequear_un_buck(P, ic, cfg):
     f_vin, f_sw, f_gnd = [forma_pad(p) for p in vin], [forma_pad(p) for p in sw], [forma_pad(p) for p in gnd]
 
     # 1. Lazo caliente: capacitores cerámicos de entrada.
-    n_ok = n_aviso = 0
+    hay_pegado, n_grandes = False, 0
     cins = [c for c in capacitores_entre(P.b, red_vin, red_gnd) if not es_electrolitico(c)]
     lineas = []
     for c in sorted(cins, key=lambda c: c.GetReference()):
@@ -424,16 +432,17 @@ def chequear_un_buck(P, ic, cfg):
         nv = veredicto_cin(gv, gg, misma)
         grande = (faradios(c.GetValue()) or 0) >= 1e-6
         if grande:
-            n_ok += nv == OK
-            n_aviso += nv == AVISO
+            n_grandes += nv in (OK, AVISO)
+        hay_pegado |= nv == OK
         texto = (f"{cr} {c.GetValue()}: VIN {f1(gv)} mm · GND {f1(gg)} mm · "
                  + ("misma cara" if misma else f"OTRA CARA ({cara(c)}, el integrado está en {cara(ic)}): "
                     "el lazo pasa por vías"))
         lineas.append(Resultado("cin", f"{ref}/{cr}", nv, texto, max(gv, gg)))
-    nb = veredicto_cin_buck(n_ok, n_aviso, cfg["min_cin"])
+    nb = veredicto_cin_buck(hay_pegado, n_grandes, cfg["min_cin"])
     R.append(Resultado("cin", ref, nb,
-                       f"{nombre}: {n_ok} de ≥{cfg['min_cin']} cerámicos de ≥1 µF pegados a VIN y GND "
-                       f"(≤ {f1(CIN_OK)} mm, misma cara)", n_ok))
+                       f"{nombre}: {'uno' if hay_pegado else 'NINGUNO'} pegado a VIN y GND (≤ {f1(CIN_OK)} mm), "
+                       f"{n_grandes} de ≥{cfg['min_cin']} de ≥1 µF cerca (≤ {f1(CIN_MAX)} mm) — misma cara",
+                       n_grandes))
     R += lineas
 
     # 2. Nodo SW → inductor.
@@ -739,8 +748,9 @@ def autoprueba(ruta):
     exigir(veredicto_cin(CIN_OK, 0.1, True) == OK, f"capacitor a {f1(CIN_OK)} mm → ✅")
     exigir(veredicto_cin(CIN_OK + 0.1, 0.1, True) == AVISO, "un poco más lejos → ⚠️")
     exigir(veredicto_cin(CIN_MAX + 0.1, 0.1, True) == FALLA, f"más de {f1(CIN_MAX)} mm → ❌")
-    exigir(veredicto_cin_buck(1, 3, 2) == AVISO and veredicto_cin_buck(0, 0, 2) == FALLA
-           and veredicto_cin_buck(2, 0, 2) == OK, "el resumen por buck cuenta bien")
+    exigir(veredicto_cin_buck(True, 2, 2) == OK and veredicto_cin_buck(True, 1, 2) == AVISO
+           and veredicto_cin_buck(False, 3, 2) == AVISO and veredicto_cin_buck(False, 0, 2) == FALLA,
+           "el resumen por buck: uno pegado Y dos cerca → ✅; nada → ❌")
     exigir(all(math.isclose(faradios(v), f) for v, f in
                (("10uF x 50V", 10e-6), ("0.1uF x 50v", 1e-7), ("220pF", 220e-12), ("4.7nF", 4.7e-9))),
            "lee los valores de capacitor del BOM")
