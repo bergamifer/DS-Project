@@ -27,6 +27,27 @@
 | M9 | (opcional) ¿cuánto le pide la placa a la PC? (S1) | 20 V y la Mac por J3, con un medidor USB-C en línea | 0–45 mA | sólo confirma S1; no dispara nada |
 | M10 | 🔊 **decisión de Fernando** — ruido de los PAM al ADC (S11) | entradas 0–3 vacías, en un modo **sin** lazo (1, 7–14 o 16–23). Espectro del ADC con amps OFF y ON | ningún tono > −140 dBFS por bin; el piso (−113,4 dBFS) no sube más de 0,5 dB | **pasa** → S11 queda 🟢 con evidencia. **No pasa** → revisar el camino `+5VA` → AVDD antes de pedir |
 | M11 | 🔊 **decisión de Fernando** — PSRR del PCM1690 | un tono por un canal con los demás amplificadores sonando; buscar productos en 2f y 3f | nada por encima del piso | **productos visibles** → mirar FB3 / `+5VA_DAC` |
+| **M12** | ¿Prenden los LEDs de J9, el RJ45 ×4? Nunca se probaron: el firmware deja PE12 en analógico | **desenchufada.** Tester en modo diodo: rojo en el extremo de **R111** que va a J9, negro a masa. Repetir con R112, R113 y R114 | el LED de ese jack prende débil y el tester lee su caída, **1,8–3,0 V**. Los otros tres pueden prender apenas: están unidos por PE12 | **Las cuatro leen** → con la caída más baja, la corriente de PE12 en alto es 4 × (3,3 V − caída) / 470 Ω: **a lo sumo 12,8 mA**, debajo de los **20 mA** máximos del pin. Hacer M12b sólo para confirmar. **Lee «OL»** → invertir las puntas: si ahí lee, **el LED está al revés en el footprint** y la DS12 lo hereda. Si tampoco lee, no está o su caída supera lo que da el tester: M12b |
+
+### M12b — los LEDs con PE12 en alto (opcional)
+
+Basta el ST-Link enchufado: alimenta el STM32 por J7, **sin 20 V, sin amplificadores**. PE12 va sólo a R111–R114
+(netlist: cinco nodos), así que no mueve nada más. El firmware no lo usa: lo pone en analógico al arrancar. Los
+comandos escriben los registros de GPIOE (`0x58021000`, de `stm32h743xx.h`) con la placa corriendo. **No los probé
+contra una placa.**
+
+```bash
+CLI=/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI
+$CLI -c port=SWD mode=HOTPLUG -r32 0x58021000 4        # GPIOE_MODER: anotar el valor, VIEJO
+# NUEVO = (VIEJO & 0xFCFFFFFF) | 0x01000000            → PE12 como salida, sin tocar los otros pines
+$CLI -c port=SWD mode=HOTPLUG -w32 0x58021000 NUEVO
+$CLI -c port=SWD mode=HOTPLUG -w32 0x58021018 0x00001000   # BSRR: PE12 en alto → prenden
+# medir la tensión sobre una de las 470 Ω: corriente de ese LED = V / 470
+$CLI -c port=SWD mode=HOTPLUG -w32 0x58021018 0x10000000   # PE12 en bajo → se apagan
+```
+
+Un reinicio de la placa deja todo como estaba. Con la corriente medida se decide la resistencia de la DS12, donde
+cada LED tiene su propio GPIO (DS12_CHECKLIST, B).
 
 ## 2. En la primera DS12 (cuando llegue)
 

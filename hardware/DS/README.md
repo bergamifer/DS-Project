@@ -24,7 +24,7 @@ Cada unidad es un nodo de audio autónomo que distribuye 32 canales amplificados
                          DS (por unidad)
 ┌────────────────────────────────────────────────────────┐
 │                                                        │
-│  24V DC ──> Buck ──> 5V ──> 32x PAM8302A ──> Speakers │
+│  20V DC ──> Buck ──> 5V ──> 32x PAM8302A ──> Speakers │
 │              │                                         │
 │              └──> LDOs ──> STM32H743 ──SAI──> 4x DAC  │
 │                                │                       │
@@ -34,7 +34,7 @@ Cada unidad es un nodo de audio autónomo que distribuye 32 canales amplificados
 │                                                        │
 └────────────────────────────────────────────────────────┘
          ↑                              ↑
-    24V daisy-chain              Cat5e/RJ45 audio
+    20V daisy-chain              Cat5e/RJ45 audio
     entre cajas                  (4 links × 8ch = 32ch)
 ```
 
@@ -44,7 +44,7 @@ Cada unidad es un nodo de audio autónomo que distribuye 32 canales amplificados
 - **8 canales de entrada** — ADC diferencial 32-bit (micrófonos o señal de referencia)
 - **Sincronización de red** — MCLK 24.576MHz (512xfS) compartido garantiza coherencia de fase entre unidades
 - **WiFi/BLE** — configuración y control inalámbrico
-- **Alimentación 24V** — bus daisy-chain entre cajas, un solo cable de potencia
+- **Alimentación 20V** — bus daisy-chain entre cajas, un solo cable de potencia
 
 ### Escala del sistema completo
 
@@ -53,7 +53,7 @@ Cada unidad es un nodo de audio autónomo que distribuye 32 canales amplificados
 | Canales de salida | 32 | ~576 |
 | Canales de entrada | 8 | ~144 |
 | Parlantes | 32 | ~500 |
-| Alimentación | 24V DC | Bus daisy-chain |
+| Alimentación | 20V DC | Bus daisy-chain |
 
 ---
 
@@ -83,11 +83,15 @@ El STM32H743 corre a 480MHz con DMA audio pipeline y opera los 5 puertos SAI sim
 | AK5538VN | ADC 8ch diferencial 32-bit | SAI3_B (TDM256) |
 | 32× PAM8302A | Amplificador Class-D 2.5W/ch | — |
 | ESP32-C3-Mini | WiFi / BLE | UART |
-| MP2315S | Buck 24V→5V 3A | — |
+| MP2315S | Buck 20V→5V 3A | — |
 
 > **En DS12 la etapa de fuente cambia entera:** el buck pasa a **AP63356** y el LDO digital
 > desaparece. Todo el diseño, con valores y con el porqué de cada uno, en
 > [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md).
+>
+> **Entrada de la DS12: 20 V nominal, ventana de 15 a 21 V.** Por debajo de ~14,7 V los
+> amplificadores no encienden (el micro sí); por encima de ~22 V conduce el TVS y puede abrirse
+> el fusible. Una fuente de 12 V o de 24 V no sirve.
 
 ### PCB
 
@@ -114,7 +118,7 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 
 - PCM1802 (2ch) reemplazado por AK5538VN (8ch, 32-bit) — 4× más entradas
 - 32× PAM8302A integrados en PCB (antes módulo HAT externo)
-- Fuente 24V con buck local por placa (antes fuente externa)
+- Fuente 20V con buck local por placa (antes fuente externa)
 - Supply analógico separado (+3.3VA) para el ADC
 
 ---

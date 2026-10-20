@@ -178,6 +178,61 @@ y vuelve **mientras el digital nunca se cae**. Dos cosas dependían de que todo 
 - [x] Prolijidad: el valor de C67, C69, C70, C321 y C322 dice «16V», pero `C45783` es de 25 V. Corregirlo, para que nadie lo
       «arregle» poniendo uno de 16 V.
 
+### A.10 🆕 Layout de la fuente (2026-10-19) — AL §7 y `tools/check_layout.py`
+
+> Designadores **del PCB**: IC4 es el AP63356 (buck A, `+5VA`) y U11 el AP63301 (buck B, `+3V3`). Los títulos de A.2
+> y A.3 usan los del documento; la correspondencia está en AL §12. Medido sobre copias, con los rellenos recalculados.
+> `check_layout`: **12 → 9 fallas** entre la mañana y la tarde.
+
+**Buck A (IC4).** Es el que importa: conmuta ~3,5 A, y el pico que deja la inductancia del lazo caliente crece con
+la corriente conmutada.
+
+- [x] C315 (100 nF) en B.Cu **justo debajo** de VIN y GND, con la vía de GND dentro del pad 8. Es la solución conocida
+      para el capacitor chico cuando no entra en la misma cara. `check_layout` la sigue marcando ❌ porque su criterio
+      es el de la Figura 47: misma cara.
+- [x] C324 (10 µF) a F.Cu. Le queda el GND lejos: 5,4 mm.
+- [ ] La vía de VIN, **pegada al pin 1**: hoy está a 1,6 mm. Así el lazo queda pin → vía → C315, sin rodeo.
+- [ ] **Nodo SW → L1: 13,4 mm de pista más una vía, con L1 en la otra cara.** Es la mejora de más peso que queda en la
+      fuente. SW salta entre 0 y 20 V medio millón de veces por segundo, y cada milímetro de ese cobre irradia el salto.
+
+**Buck B (U11): queda en F.Cu.** Mueve unos 0,9 A de pico (AL §3.3), cuatro veces menos que el A, y alimenta lo
+digital. Lo que sí importaba era el 100 nF:
+
+- [x] **C320 (100 nF) a F.Cu, pegado a los pines 3 (VIN) y 4 (GND)**, que están en el mismo extremo de U11. Para
+      hacerle lugar, C321 y C322 se corren a la derecha.
+- [x] Se sacó la vía que estaba **dentro** del pad SW (pin 5). En el horno, el estaño se puede ir por el agujero y la
+      soldadura del pin queda floja.
+- [x] Los dos 10 µF (C319, C325) quedan en B.Cu: es el ⚠️ que queda. Llevan la corriente promedio (~0,34 A RMS), y
+      para eso las vías alcanzan.
+
+**FB3 → `+5VA_DAC`.**
+
+- [x] **Un solo ferrite, CBW201209U601T** (`C21286`). Según su hoja: 600 Ω a 100 MHz, 0,22 Ω máx en continua y
+      1500 mA nominales (40 °C de calentamiento). Los cuatro PCM1690 piden **0,30 A típico y 0,44 A máximo** (ICC de
+      VCC: 74/110 mA cada uno), así que caen ≤ 0,1 V. **No van dos en paralelo**: bajaría a la mitad la impedancia a
+      100 MHz, que es para lo único que está. Si alguna vez hace falta filtrar más: en serie, o más capacitancia después.
+- [ ] ⚠️ `DS10_DESIGN_REVIEW.md` dice que esta misma pieza es de **300 mA**, y la hoja de datos dice 1500 mA. Con
+      300 mA, uno solo quedaría en el límite. Confirmar que la hoja de la ficha de LCSC de `C21286` sea la misma.
+- [ ] En el PCB, el campo «Mouser part» de FB3 dice todavía `81-BLM18DN601SN1D`: **Update PCB from Schematic**. Es
+      la única diferencia de paridad.
+- [x] Ancho de pista: la clase «Ancha» (0,6 mm) ya está en `+5VA` y `+5VA_DAC`. Soporta ~1,6 A con 10 °C, y necesitamos
+      0,44 A. Al bajar a la isla de `+5VA_DAC` en In2, **dos vías** al lado del pad 1.
+
+**U10 (AP2125) → `+3,3VA`.** Disipa ~0,1 W (≈ +20 °C con 200 °C/W): el cobre no es para el calor, es para que su
+tierra sea quieta. La salida son 3,3 V **medidos contra el pin 2**: la corriente de otros circuitos que pase por el
+GND de F.Cu junto a ese pin se suma tal cual, y el PSRR no la ve.
+
+- [ ] **Una vía de GND pegada a cada uno de estos pads: U10.2, C64.2, C63.2, C57.2 y C59.1.** Hoy la más cercana está a
+      2,5–5,3 mm.
+- [x] In1: GND entero entre U10 y el AK5538 (41 puntos, sin cortes). In2: la isla de `+3,3VA` bajo el AK5538 se queda.
+- [x] Se sacó la isla de `+5V_AUX` en In2: con ~60 mA alcanza una pista (AL §7.7). Falta reconectar **C59.2**, que
+      quedó separado de la pista de `+5V_AUX` en B.Cu.
+- [ ] (Opcional) El enlace de U10 a la isla de `+3,3VA`, que hoy es una pista de 0,2 mm en B.Cu, a 0,5 mm con dos vías.
+
+**Limpieza (DRC del 2026-10-19, con relleno y paridad):** pistas sueltas de `+VIN_LOCAL` (156,1·126,7) y de `IN`
+(137,6·127,3); vías sueltas de `+5VA` (159,1·119,6, 160,1·119,3, 162,9·90,2 y 150,3·116,2) y de `+3,3VA` (89,3·111,7 y
+94,4·113,7); una isla de GND sin conectar cerca de (68,9·32,2). Las 15 `lib_footprint_issues` son la tabla de librerías.
+
 ---
 
 ## B. El resto del esquemático — AU §3
@@ -200,6 +255,8 @@ y vuelve **mientras el digital nunca se cae**. Dos cosas dependían de que todo 
       **US$ 0.** Sacar el stub del lado del STM32, no del DAC.
 - [ ] **Los 4 LEDs de los jacks a GPIOs separados** (PE9, PE10, PE13, PE14). R111-R114 ya
       existen y van todos a PE12, que el firmware declara sin usar. Sin agregar componentes.
+      ⚠️ **En la DS11 nunca se prendieron**: antes de copiarlos, la medida **M12** de
+      [`revision_alimentacion/medidas_ds11.md`](revision_alimentacion/medidas_ds11.md).
 - [ ] **Partir el `~SD` de los amplificadores en cuatro bancos** (PD14, PD15, PD5, PD6).
       ≈US$ 0,01.
 - [x] **Línea de timing del ESP32: NO usar PC13** — PL §3. Choca con la errata **ES0392

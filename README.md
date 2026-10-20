@@ -44,7 +44,7 @@ El registro de por qué se decidió cada cosa está en los reportes mensuales:
 | ADC | AK5538VN (8ch TDM256) via SAI3_B — I2C3 addr 0x22 (7-bit 0x11) |
 | Amps | 32× PAM8302A Class-D 2.5W (shutdown compartido PD3) |
 | EEPROM | CAT24C256 (I2C4 PB6/PB7 **AF6**, WP=PB5) |
-| Power | 24V → buck → 5VA → LDOs → 3.3V/3.3VA (acepta 12V de entrada) |
+| Power | 20V → buck → 5VA → 3.3V/3.3VA (DS12: dos bucks en paralelo; ventana de entrada 15–21 V) |
 
 > En DS12 la etapa de fuente cambia entera: el buck pasa a **AP63356** y el LDO digital
 > desaparece. El diseño completo, con valores y por qué, está en

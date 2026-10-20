@@ -9161,7 +9161,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/C21286.pdf"
 			(at 151.13 139.7 0)
 			(hide yes)
 			(show_name no)
@@ -9172,7 +9172,7 @@
 				)
 			)
 		)
-		(property "Description" "-55℃~+125℃ 1 1.5A 220mΩ 600Ω@100MHz ±25% 0805 Ferrite Beads ROHS"
+		(property "Description" "FERRITE BEAD 600Ω 0805 1LN"
 			(at 151.13 139.7 0)
 			(hide yes)
 			(show_name no)
@@ -9183,7 +9183,7 @@
 				)
 			)
 		)
-		(property "Mouser part" "81-BLM18DN601SN1D"
+		(property "Mouser part" "CBW201209U601T"
 			(at 151.13 139.7 90)
 			(hide yes)
 			(show_name no)
@@ -9216,7 +9216,7 @@
 				)
 			)
 		)
-		(property "Manufacturer_Part_Number" "BLM18DN601SN1D"
+		(property "Manufacturer_Part_Number" "CBW201209U601T"
 			(at 151.13 139.7 0)
 			(hide yes)
 			(show_name no)
