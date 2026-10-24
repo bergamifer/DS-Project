@@ -77,7 +77,10 @@ Esta es la parte donde es más fácil romper algo.
 ### Qué fuente usar
 
 - **19 o 20 voltios de corriente continua.** Un cargador de notebook típico sirve.
-- ⚠️ **NUNCA 24 V.** El componente que baja la tensión aguanta 26 V como máximo
+- ⚠️ **Esto vale para la DS11.** La DS12 (todavía no fabricada) va a 24 V: cuando convivan, las
+  fuentes de 24 V tienen que estar marcadas y **nunca** conectarse a una DS11. Ver
+  `hardware/DS/DS12_ENTRADA_24V.md`.
+- ⚠️ **NUNCA 24 V** en una DS11. El componente que baja la tensión aguanta 26 V como máximo
   absoluto. A 24 V no queda margen ante cualquier pico y se quema. **No es una
   recomendación conservadora: es el límite del chip.**
 - **Que pueda dar corriente de sobra.** Si la fuente es regulable y tiene límite de

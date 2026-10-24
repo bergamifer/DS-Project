@@ -88,6 +88,13 @@
 > 4. **§11.3:** el bypass de VIN es `C14663` (50 V), no `C1525` (16 V), que queda sólo para los BST.
 >    Y `C45783` es de **25 V**, no de 16 V: es el Samsung CL21A226MAQNNNE.
 
+> ### 🔧 Revisión 2026-10-23 — el sistema pasa a **24 V**
+> Decisión de Fernando: las fuentes de 24 V cuestan mucho menos por vatio. Los bucks quedan. Cambian
+> **D9: SMBJ20A → SMBJ24A** (`C908801`, obligatorio) y **F1: 2 A → 3 A** (JFC1206-1300FS, `C136347`).
+> El net pasa a `+24V`. Todo lo que este documento dice de 20 V, del SMBJ20A y del §10 («20 V») queda
+> reemplazado por [DS12_ENTRADA_24V.md](DS12_ENTRADA_24V.md), que tiene los límites, la simulación y
+> los modos de falla. **Fuente ajustada a 24,0 V, nunca más de 25,5 V.**
+
 ---
 
 ## 0. Qué cambia, en una tabla

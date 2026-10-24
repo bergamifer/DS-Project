@@ -23,8 +23,11 @@
 
 ### A.1 Entrada y protección — AL §3.1
 
-- [x] **F1** — fusible 1206 **2 A / 63 V**, 🔧 **rápido**, no lento (se queda igual: las cuentas
-      están en AL §11.2), `C136345`. Va en `+20V` → `VIN_PROT`.
+- [ ] 🔧 **2026-10-23 — sistema a 24 V** ([DS12_ENTRADA_24V.md](DS12_ENTRADA_24V.md)): renombrar el
+      net `+20V` → `+24V` (y el valor de TP5). Ningún conexionado cambia.
+- [ ] **F1** — 🔧 **2026-10-23: pasa a 3 A**, JFC1206-1300FS `C136347` (misma huella 1206, 63 V,
+      I²t 1,39 A²s). Con 24 V el enchufe en caliente se llevaba hasta el 87 % del I²t del de 2 A
+      (`C136345`): ver DS12_ENTRADA_24V §3.3. Va en `+24V` → `VIN_PROT`.
       Es de un solo uso a propósito: no hay PTC de 1206 con ≥2 A de hold y ≥30 V, **y el
       fusible aporta la impedancia serie que el TVS necesita para coordinar**.
 - [x] **Q1** — P-MOSFET **AO3401A** `C15127` (Basic de JLCPCB). Drain a `VIN_PROT`,
@@ -33,7 +36,9 @@
 - [x] **DZ1** (D21) — zener **10 V** `C173431` entre gate y source, cátodo al source.
       🔴 **10 V y no 12 V**: el AO3401A tiene VGS máx ±12 V y un zener de 12 V llega a
       12,7 V por tolerancia — el componente que protege la compuerta la destruiría.
-- [x] **D8'** (D9) — **SMBJ20A** `C364296` de `VIN_LOCAL` a GND. Reemplazo directo sobre el
+- [ ] **D8'** (D9) — 🔴 **2026-10-23: pasa a SMBJ24A** `C908801` (el de la DS11). Con 24 V el
+      SMBJ20A conduce o no según la unidad (VBR 22,2–24,5 V): **ninguna placa a 24 V con el
+      SMBJ20A puesto**. De `VIN_LOCAL` a GND. Reemplazo directo sobre el
       footprint `D_SMB` que ya existe: cambia el part number, no el dibujo.
 - [x] **C_bulk** — **100 µF / 35 V electrolítico, ESR 600 mΩ**, `C2836437`. 🔧 Dibujados dos
       (C273, C314). El footprint
@@ -266,7 +271,7 @@ GND de F.Cu junto a ese pin se suma tal cual, y el PSRR no la ve.
       tomadas por J9. Para el self-test usar **PC0**.
 - [ ] **C45/C46 de 0201 a 0402** — PL §5.
 - [ ] **Barrel jack DC-005, DNP**, en paralelo con la Phoenix, antes del TVS/buck.
-      Serigrafiar **"19-20 V"**, la polaridad centro-positivo y **"USE ONE"** — PL §6b.
+      Serigrafiar 🔧 **"24 V"** (antes "19-20 V"), la polaridad centro-positivo y **"USE ONE"** — PL §6b.
 - [ ] **Series de MCLK: unificar en 33 Ω y ponerlas junto al STM32** (hoy son 75 Ω a los DAC
       y 33 Ω al ADC, elegidas por stock).
 - [x] **Choque de modo común del USB del STM32** — 🆕 2026-09-29. **FL1** = Murata

@@ -135,7 +135,7 @@ BUCKS = [
 ANALOGICOS = ("AK5538", "PCM1690")
 # Los rieles que tienen que tener punto de prueba (§7.8). Si una red no existe
 # en la placa, se informa y no cuenta como falla (puede ser otra revisión).
-RIELES = ["+20V", "+VIN_LOCAL", "/DS_Power/IN", "+5VA", "+5VA_DAC", "+5V_AUX",
+RIELES = ["+20V", "+24V", "+VIN_LOCAL", "/DS_Power/IN", "+5VA", "+5VA_DAC", "+5V_AUX",
           "+3V3", "+3.3VA", "GND"]
 PLANOS = ["+5VA", "+3V3"]
 # Funciones de pin que son alimentación (para el desacople).
