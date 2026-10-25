@@ -5,7 +5,7 @@
 	(uuid "86744701-59b2-49e9-9673-edb47d989dd1")
 	(paper "A4")
 	(title_block
-		(title "Power supply 20V")
+		(title "Power supply 24V")
 		(date "2026-09-28")
 	)
 	(lib_symbols
@@ -6979,7 +6979,7 @@
 				)
 			)
 		)
-		(property "Value" "+20V"
+		(property "Value" "+24V"
 			(at 207.518 114.046 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9949,7 +9949,7 @@
 				)
 			)
 		)
-		(property "Value" "+20V"
+		(property "Value" "+24V"
 			(at 89.662 16.51 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13987,7 +13987,7 @@
 				)
 			)
 		)
-		(property "Value" "+20V"
+		(property "Value" "+24V"
 			(at 59.69 40.64 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14065,7 +14065,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "SMBJ20A"
+		(property "Value" "SMBJ24A"
 			(at 87.376 47.244 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14109,7 +14109,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C364296"
+		(property "LCSC" "C908801"
 			(at 90.17 48.26 0)
 			(hide yes)
 			(show_name no)
@@ -14651,7 +14651,7 @@
 				)
 			)
 		)
-		(property "Value" "Fuse_Small"
+		(property "Value" "JFC1206-1300FS"
 			(at 66.04 41.91 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14694,7 +14694,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C136345"
+		(property "LCSC" "C136347"
 			(at 66.04 44.45 0)
 			(hide yes)
 			(show_name no)
@@ -17346,7 +17346,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "+20V"
+		(property "Value" "+24V"
 			(at 212.09 107.1879 0)
 			(show_name no)
 			(do_not_autoplace no)
