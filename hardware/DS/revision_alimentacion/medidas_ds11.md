@@ -67,4 +67,8 @@ Anotalos acá, con la fecha y la placa (DS_xxxxxx).
 
 | # | fecha | placa | lectura | decisión tomada |
 |---|---|---|---|---|
-| | | | | |
+| M1 | 2026-10-26 | DS_1E1F30 | 4,62 V en el pad de C31, 20 V puestos | **N4 confirmado**: la fuga de D2 levanta el VBUS de J3 sin cable. Un poco debajo del 4,7–4,8 V esperado; no cambia nada |
+| M2 | 2026-10-26 | DS_1E1F30 | 0,81 V con 1 kΩ a masa (borde inferior del rango 0,8–1,3 V) | **Pasar la pata 5 de U6/U9 a `+3V3` es obligatorio** (ya está en el esquemático de la DS12, A.9 de la checklist) |
+| M3 | 2026-10-26 | DS_1E1F30 | La Mac enumeró al ESP32 (`/dev/cu.usbmodem101`) **5 de 5**, en frío y en caliente, con y sin fuente; el control (cable primero) igual | **El arreglo de J3 baja a 🟢.** El 1 kΩ de J8 va igual |
+| M8 | 2026-10-26 | DS_1E1F30 | `make reset` (`-rst`): **PIN**, RSR `0x00460000`. `make ota`: **SFT**, RSR `0x01460000`. Log: `.ds12_audit/banco/fase2_192.168.100.70_2026-10-26_1847.log` (no versionado) | **El OTA sirve para N6 tal cual.** El reflasheo por ST-Link **llega como PIN y cuenta** como intento fallido, igual que una caída del riel. Corregido en `DS12_REVISION_ALIMENTACION.md` §9 (N6) |
+| — | 2026-10-26 | DS_1E1F30 | Firmware actualizado de `D80BE13B` (proto 10/9) a `96868512` (proto 23/23): STM32 por `make flash-cube`, ESP32 por OTA. `banco_fase2.py` sin opciones: 0 fallas | La placa queda en la versión del repo |
