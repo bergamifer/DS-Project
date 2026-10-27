@@ -166,6 +166,12 @@ Se hace sobre una DS11 **sin alimentar**, que tiene el mismo PAM y la misma R19/
 
   Mejor todavía: medir un PAM8302A suelto, o levantar R20.
 
+**Resultado (2026-10-27, DS11 DS_1E1F30, [`medidas_ds11.md`](revision_alimentacion/medidas_ds11.md) M5 y M6):**
+(i) **0,91 kΩ** en lugar de 1,033 kΩ: hay una vía en paralelo de ≈7,6 kΩ, o sea un pull-down interno de los SD
+(≈240 kΩ por pin). (ii) **0,554 V** en modo diodo, dentro de 0,4–0,7 V: hay un diodo del pin SD hacia `+5VA`
+(el tester mide 1 kΩ bien; no se anotó si se esperaron los 10 s). **Decisión: R20 se queda en 33 Ω** (la opción
+de 5,1 kΩ no se toma) **y la guarda de firmware de la opción 1 sigue siendo obligatoria**, porque la inyección es real.
+
 ---
 
 ## 3. S4 — el USB ve más de 10 µF
