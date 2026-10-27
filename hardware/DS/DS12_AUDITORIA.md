@@ -89,6 +89,14 @@ los ponga en la ventana de 0,48–0,52×AVDD que pide el datasheet. Sin micrófo
 y una resistencia por pin. **Usar 22 kΩ, no 100 kΩ**: el ruido térmico de dos resistencias de
 100 k (~40 nV/√Hz) baja la DR a ~104 dB y se come los 111 dB del chip. ≈US$0,30 y 20 pasivos.
 
+> 🔧 **2026-10-27 — revisión.** El argumento de ruido vale sólo con la entrada **abierta**: con un micrófono
+> enchufado, la fuente (470 Ω + preamp, a través de 2,2 µF) cortocircuita el ruido de la R de bias, que queda
+> por debajo de 2 nV/√Hz incluso con 100 kΩ, contra ≈13 nV/√Hz del propio ADC. **Se usa 10 kΩ** (`C25744`, el
+> mismo valor del divisor): pasa-altos de ≈7 Hz con los 2,2 µF y una sola pieza. Lo que **no** está resuelto
+> es contra qué tensión está la resistencia de entrada de ≈10,4 kΩ (hoja, «Input Resistance»): si es contra
+> ≈0 V, ninguna red pasiva lleva la pata a 1,65 V. Lo decide la medida **M4b** de
+> [`revision_alimentacion/medidas_ds11.md`](revision_alimentacion/medidas_ds11.md).
+
 ### 3.3 Cuatro PTC en la expansión, no dos ✅
 
 `J5.9` y `J6.9` llevan `+3V3` directo (verificado en `pines_por_ic.txt`). El §6 de
