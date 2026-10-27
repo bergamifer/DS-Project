@@ -96,6 +96,9 @@ y una resistencia por pin. **Usar 22 kΩ, no 100 kΩ**: el ruido térmico de dos
 > es contra qué tensión está la resistencia de entrada de ≈10,4 kΩ (hoja, «Input Resistance»): si es contra
 > ≈0 V, ninguna red pasiva lleva la pata a 1,65 V. Lo decide la medida **M4b** de
 > [`revision_alimentacion/medidas_ds11.md`](revision_alimentacion/medidas_ds11.md).
+> **M4b hecha (2026-10-27): 3,296 V** con 10 kΩ desde `+3.3VA` → la entrada no carga en modo común; los
+> 10,4 kΩ son diferenciales (entre P y N). **La red pasiva de 10 kΩ queda confirmada.** Pasa-altos diferencial
+> resultante ≈18 Hz (1,1 µF contra 20 k ∥ 10,4 k + 940 Ω).
 
 ### 3.3 Cuatro PTC en la expansión, no dos ✅
 
