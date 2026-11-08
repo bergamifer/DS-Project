@@ -137,6 +137,7 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 - [DS12_AUDITORIA.md](DS12_AUDITORIA.md) — Auditoría previa a fabricar. Doce dimensiones,
   y **sólo lo que sobrevivió a verificación**: cada ítem dice cómo se comprobó
 - [DS12_USB_STM32.md](DS12_USB_STM32.md) — El USB del STM32 (PA11/PA12 hoy al aire)
+- [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md) — Micrófono MEMS I2S de banco, DNP, sobre las redes I2S2
 - [DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md) — **Revisión de la
   alimentación (octubre 2026)**: las fuentes y cómo conviven, contra las hojas de datos, con
   refutación a ciegas. Los planes que la guían son
