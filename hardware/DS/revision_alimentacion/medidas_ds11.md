@@ -29,6 +29,9 @@
 | M10 | 🔊 **decisión de Fernando** — ruido de los PAM al ADC (S11) | entradas 0–3 vacías, en un modo **sin** lazo (1, 7–14 o 16–23). Espectro del ADC con amps OFF y ON | ningún tono > −140 dBFS por bin; el piso (−113,4 dBFS) no sube más de 0,5 dB | **pasa** → S11 queda 🟢 con evidencia. **No pasa** → revisar el camino `+5VA` → AVDD antes de pedir |
 | M11 | 🔊 **decisión de Fernando** — PSRR del PCM1690 | un tono por un canal con los demás amplificadores sonando; buscar productos en 2f y 3f | nada por encima del piso | **productos visibles** → mirar FB3 / `+5VA_DAC` |
 | **M12** | ¿Prenden los LEDs de J9, el RJ45 ×4? Nunca se probaron: el firmware deja PE12 en analógico | **desenchufada.** Tester en modo diodo: rojo en el extremo de **R111** que va a J9, negro a masa. Repetir con R112, R113 y R114 | el LED de ese jack prende débil y el tester lee su caída, **1,8–3,0 V**. Los otros tres pueden prender apenas: están unidos por PE12 | **Las cuatro leen** → con la caída más baja, la corriente de PE12 en alto es 4 × (3,3 V − caída) / 470 Ω: **a lo sumo 12,8 mA**, debajo de los **20 mA** máximos del pin. Hacer M12b sólo para confirmar. **Lee «OL»** → invertir las puntas: si ahí lee, **el LED está al revés en el footprint** y la DS12 lo hereda. Si tampoco lee, no está o su caída supera lo que da el tester: M12b |
+| **M13** | Brillo y caída de los LEDs de J9 con la corriente que van a tener en la DS12 (nunca se probó: en M12c al LED le llegaron ≈6 mA) | **desenchufada.** La misma conexión de M12c: fuente de 5 V, positivo a masa y negativo, por una resistencia, al extremo de R111 que va a J9. Ahora con **560 Ω** (o 470 Ω) en lugar de 330 Ω. Multímetro entre masa y ese mismo extremo de R111: es la caída del LED. Ojo: cerca de la mitad de la corriente no pasa por el LED, se va por R111 al diodo de protección de PE12; con 560 Ω al LED le llegan ≈2,5 mA, contra ≈2,8 mA en la DS12 | prende, y cae **1,8–2,2 V** | **Se ve bien** → 470 Ω queda. **Se ve poco** → un pin por jack y bajar la R a 220 Ω (≈6 mA por LED; cuatro en un mismo pin pasarían los 20 mA). **Cae 2,5 V o más** → es un LED de tensión alta y con 3,3 V casi no prende: avisar antes de dibujar |
+| M13b | (sólo si se va a usar el LED 2) Sentido y caída del LED 2 | **en un jack suelto**, no en la placa: en la DS11 sus dos pads están a masa. 5 V por 1 kΩ: positivo a la pata 11, negativo a la 12 | prende, y cae 1,8–2,2 V | **Prende** → el sentido del plano vale también para el LED 2. **No prende y al revés sí** → está al revés del plano: no dibujarlo como figura |
+| M14 | (sólo si se mantienen los dos colores) ¿La pata de LED entra en un agujero de 0,9 mm? | **jack suelto.** Calibre sobre una pata de LED: lado, y diagonal si es cuadrada | diagonal ≤ 0,75 mm | **≤ 0,75 mm** → se puede achicar la huella a agujero 0,9 / pad 1,2. **Más** → no entra: un solo LED por jack ([DS12_REVISION_DECISIONES.md](../DS12_REVISION_DECISIONES.md) §1) |
 
 ### M12b — los LEDs con PE12 en alto (opcional)
 
@@ -47,8 +50,10 @@ $CLI -c port=SWD mode=HOTPLUG -w32 0x58021018 0x00001000   # BSRR: PE12 en alto 
 $CLI -c port=SWD mode=HOTPLUG -w32 0x58021018 0x10000000   # PE12 en bajo → se apagan
 ```
 
-Un reinicio de la placa deja todo como estaba. Con la corriente medida se decide la resistencia de la DS12, donde
-cada LED tiene su propio GPIO (DS12_CHECKLIST, B).
+Un reinicio de la placa deja todo como estaba.
+
+> 🔧 **2026-11-10.** En la DS11 esta prueba no puede prender nada: los LEDs están al revés (M12c). La corriente de
+> la DS12 se decide con **M13**. Cómo quedan cableados los LEDs: [DS12_REVISION_DECISIONES.md](../DS12_REVISION_DECISIONES.md) §1.
 
 ## 2. En la primera DS12 (cuando llegue)
 
