@@ -141,3 +141,7 @@ firmware/build_boot/
 # nombre propio y con el .md que dice que se estaba midiendo.
 captura.wav
 *.wav
+
+# Salida del build del sitio (Cloudflare la regenera en cada push)
+/dist/
+.wrangler/
