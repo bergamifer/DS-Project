@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Genera sitio/domosonica.html (standalone, ASCII puro) desde sitio/index.html.
 
-- index.html      = fragmento fuente del artifact de claude.ai (sin doctype/head/body)
-- domosonica.html = página completa para hosting propio (WordPress/FTP/Netlify)
+- index.html      = fragmento fuente (sin doctype/head/body)
+- domosonica.html = página completa
+- img/            = fotos y logos. Desde 2026-11-18 ya no van embebidas en base64
+                    adentro del HTML: van como archivos, con variantes AVIF/WebP/JPEG
+                    en varios anchos, y la página sólo funciona junto a esta carpeta.
+                    Lo que se publica es dist/ entera (ver wrangler.jsonc).
 
 El standalone queda 100%% ASCII (entidades HTML + escapes JS/CSS) para ser
 inmune al charset que anuncie el servidor. Correr después de editar index.html:
@@ -137,6 +141,10 @@ DIST = os.path.join(HERE, "..", "dist")
 os.makedirs(DIST, exist_ok=True)
 open(os.path.join(DIST, "index.html"), "w").write(res)
 shutil.copyfile(os.path.join(HERE, "og.jpg"), os.path.join(DIST, "og.jpg"))
+# Fotos y logos: cada foto está en tres anchos (480, 800 y el original) y tres
+# formatos (AVIF, WebP, JPEG). El navegador elige el más liviano que entiende y
+# que alcanza para su pantalla; un celular baja la de 480 px en AVIF, no la grande.
+shutil.copytree(os.path.join(HERE, "img"), os.path.join(DIST, "img"), dirs_exist_ok=True)
 # Página de error propia: Cloudflare la sirve con código 404 para cualquier
 # dirección que no exista (ver not_found_handling en wrangler.jsonc). Se
 # ASCII-fica igual que la portada, y como no tiene <script> alcanza con las
@@ -166,5 +174,9 @@ open(os.path.join(DIST, "_headers"), "w").write(
     # El sitio no usa cámara, micrófono ni ubicación: se declaran apagados.
     "  Permissions-Policy: camera=(), microphone=(), geolocation=()\n"
     "/og.jpg\n"
-    "  Cache-Control: public, max-age=604800\n")
-print(f"dist/: index.html, 404.html, og.jpg, robots.txt, sitemap.xml, _headers")
+    "  Cache-Control: public, max-age=604800\n"
+    # Las imágenes casi no cambian: el navegador las guarda 30 días y no las
+    # vuelve a pedir. Si se cambia una, conviene cambiarle también el nombre.
+    "/img/*\n"
+    "  Cache-Control: public, max-age=2592000\n")
+print(f"dist/: index.html, 404.html, og.jpg, img/, robots.txt, sitemap.xml, _headers")
