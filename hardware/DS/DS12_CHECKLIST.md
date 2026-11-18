@@ -396,6 +396,7 @@ Cuando llegue la placa, y **antes** de darla por buena:
 - [ ] **Comprar el MSM261S4030H0R** (MEMSensing, puerto superior, 4 × 3 mm). Va DNP, no hace falta que esté en LCSC. Stock no verificado. ~~ICS-43434 y SPH0645LM4H~~: son de puerto inferior (agujero en la placa) y están discontinuados.
 - [x] **Hoja de datos leída** (DS-050): patas, huella y reloj (SCK de 1 a 4 MHz; a 48 kHz son 3,072 MHz).
 - [ ] **Dibujar**: pata 1 GND · 2 sin conectar · 3 `I2S2_WS` · 4 (CHIPEN) a `+3V3` · 5 (L/R) a GND · 6 `I2S2_CK` · 7 `I2S2_SDI` con **100 kΩ a GND** · 8 `+3V3` con **100 nF + 10 µF**. El micrófono DNP; el 100 kΩ y los dos capacitores se ensamblan.
+- [ ] 🆕 2026-11-18 **Segundo micrófono, en el ESP32** (DNP, el mismo MSM261S4030H0R) — [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md) §«El segundo micrófono»: pata 6 SCK → **GPIO6**, 3 WS → **GPIO7**, 7 SD → **GPIO3** con **100 kΩ a GND**, 4 y 8 a `+3V3` con **100 nF + 10 µF**, 5 y 1 a GND, 2 sin conectar. Redes nuevas `ESP_MIC_SCK/WS/SD`. Con él montado se pierde el JTAG externo de J1 (el del USB sigue).
 - [ ] **Huella**: 8 pads de 0,9 × 0,6 mm, copiada del plano de la hoja.
 - [x] **Redes I2S2 reconfirmadas** el 2026-11-10 contra el esquemático guardado el 28-oct: PB12/J6.1, PB13/J6.2, PB14/J5.5.
 - [ ] **Layout**: lejos de los PAM8302A, del inductor del buck y de los cables de parlantes; con lugar para soldar a mano. **No lavar la placa** después de soldarlo.

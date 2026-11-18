@@ -42,6 +42,7 @@
 | **Un solo LED por jack** (LED 1 → PE12) ⚠️ *recomendado, falta que lo decidas* | Con los LEDs invertidos, los pads de jacks vecinos quedaron a 0,097 mm con redes distintas; el DRC lo marca | DEC §1 |
 | **Polaridad del conector de parlantes `+ − − +`**, por nombre de red | El `pinfunction` del netlist miente; mandan los nombres de red | CLAUDE.md, PL (final: «La polaridad del conector…») |
 | **Micrófono MEMS I2S DNP: MSM261S4030H0R**, sobre las redes I2S2 | Cero patas nuevas y sin circuito analógico. Los otros dos modelos son de puerto inferior y están discontinuados | MIC |
+| **Un segundo micrófono igual, DNP, en el ESP32** (GPIO6 SCK, GPIO7 WS, GPIO3 SD), en la placa (2026-11-18) | Chequeo de parlantes y escucha remota sin tocar los buses de audio del STM32. Costo de centavos. Con él montado se pierde el JTAG externo de J1 | MIC |
 
 ### Geometría y firmware
 
@@ -90,7 +91,7 @@
 ## 4. Falta dibujar (según DEC §7, netlist del 28-oct)
 
 - 15 de las 16 resistencias del bias del ADC (está R171 y el nodo).
-- El micrófono.
+- Los dos micrófonos: el del STM32 (I2S2) y el del ESP32.
 - El cambio de J9 (un LED por jack) y, si se acepta, R20.
 - Actualizar el PCB desde el esquemático (le faltan C58, C62, R169–R171).
 - ~~Firmware: el código de los LEDs de PE12/PE13~~ — hecho el 18-nov (`jack_leds.c`, con test); falta probarlo en una DS12.

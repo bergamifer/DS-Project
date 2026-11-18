@@ -5,6 +5,9 @@ tres redes I2S2 que ya existen. Sin patas nuevas del STM32 y sin circuito analó
 
 No tiene aplicación directa en la obra. Sirve para probar el STM32 con micrófonos en otros proyectos.
 
+> **2026-11-18:** se suma **un segundo micrófono igual, en el ESP32**, para chequear los parlantes desde
+> la central sin tocar el audio del STM32. Ver la sección «El segundo micrófono», al final.
+
 > 🔧 **2026-11-10 — corrección.** La primera versión de este documento proponía tres modelos como si
 > fueran equivalentes y hablaba de un «LGA de unos 3,5 × 2,65 mm». Estaba mal:
 >
@@ -116,6 +119,66 @@ verificaron**: chequear en CubeMX o en la hoja de datos del H743 antes de fijar 
   un conector estándar.
 - **Conector de 6–8 GPIO libres:** lo más barato para dejar la placa abierta.
 - **microSD: descartada.** SDMMC1 usa PC8–PC12 y PD2; PC8–PC12 los ocupa el AK5538.
+
+## El segundo micrófono: en el ESP32 (decidido el 2026-11-18)
+
+**Para qué.** Un oído que no depende del STM32. El ESP32 lo lee, lo analiza y lo publica por WiFi,
+sin tocar los buses de audio del STM32 (SAI y el ADC de J9). Sirve para un chequeo de los parlantes
+desde la central: el STM32 emite un tono por canal y el ESP32 dice si llegó y con cuánto nivel. También
+sirve para escuchar la sala de forma remota.
+
+**Por qué el mismo modelo.** Una sola huella y una sola línea en el BOM. El ESP32-C3 lo lee por I2S
+estándar, y el ESP32 es el maestro: genera SCK y WS. Las alternativas no sirven:
+
+- **PDM: no.** Según la documentación de ESP-IDF el C3 no tiene PDM de entrada, sólo de salida
+  ⚠️ (no se verificó contra la hoja del chip).
+- **Analógico: no.** El ADC del C3 es ruidoso y el ADC2 comparte recursos con el WiFi.
+
+**Las patas del ESP32.** Elegidas sobre el netlist derivado del esquemático del commit `b31521d`
+con `tools/sch2net.py`:
+
+| Micrófono | ESP32 (U5) | Por qué esa |
+|---|---|---|
+| 6 SCK | **GPIO6** (pata 20) | hoy va sólo a J1.3 |
+| 3 WS | **GPIO7** (pata 21) | hoy va sólo a J1.4 |
+| 7 SD | **GPIO3** (pata 6), con **100 kΩ a GND** | hoy al aire; no es de arranque |
+| 4 CHIPEN, 8 VDD | `+3V3`, con **100 nF + 10 µF** | igual que el del STM32 |
+| 5 L/R, 1 GND | GND | canal izquierdo |
+| 2 | sin conectar | |
+
+- **GPIO2 y GPIO8 no se usan:** están libres, pero son de arranque. Con el 100 kΩ a GND de SD pueden
+  cambiar cómo arranca el chip.
+- **GPIO6 y GPIO7 son dos patas del JTAG externo de J1** (J1 es un JST-XH de 4 pines con GPIO4–7).
+  Con el micrófono montado no se puede usar ese JTAG. Se pierde poco: el C3 también se depura por su
+  USB (GPIO18/19), que no cambia. Sin el micrófono, J1 queda como está.
+- El firmware del ESP32 no usa GPIO3, 6 ni 7 (verificado: sólo usa GPIO0, 1 y 10).
+
+**Qué dibujar.** Un segundo MSM261S4030H0R, **DNP**, con sus tres piezas, que sí se ensamblan: 100 nF
+(`C1525`), 10 µF (`C1691`) y 100 kΩ (`C25741`). Son las mismas del micrófono del STM32 y el
+costo es de centavos. Las tres redes son nuevas: `ESP_MIC_SCK`, `ESP_MIC_WS`, `ESP_MIC_SD`.
+Ubicarlo lejos de los PAM y del buck. **Ojo:** mirá dónde queda la placa respecto de los conos. Si
+queda detrás del panel, el micrófono va a oír la caja más que a los parlantes.
+
+**El firmware (sin escribir todavía).**
+
+- Driver `i2s_std` de ESP-IDF, modo Philips, mono izquierdo, palabras de 32 bits, a **24 kHz**. Eso da
+  SCK = 1,536 MHz, dentro del rango de 1–4 MHz de la hoja.
+- Cálculo en enteros, porque el C3 no tiene FPU: nivel RMS y Goertzel para los tonos de prueba.
+- `GET /mic/nivel`: el nivel en vivo.
+- `GET /mic/escuchar`: un WAV de 16 kHz (unos 32 kB/s) para oír desde la central.
+- `GET /mic/chequeo`:
+  - **primero mide el piso con silencio** (la regla del repo: un umbral sin esa medida es una opinión);
+  - después pide al STM32, por UART, un tono por canal, de a uno;
+  - devuelve los dB sobre el piso y un veredicto por canal;
+  - **no enciende amplificadores**: eso lo sigue decidiendo una persona;
+  - si el STM32 no tiene un comando de «tono sólo en el canal k», hay que agregarlo (no se revisó).
+
+**Límites.**
+
+- Con la obra en beamforming, el chequeo por parlante necesita tonos de prueba, o sea, interrumpe la obra.
+  Sin interrumpirla, el micrófono sólo puede decir «hay sonido o no» y mostrar el espectro.
+- Este micrófono no entra al ADC del STM32, así que **no crea el acople** de los modos 0, 2–6 y 15. Tiene
+  que seguir así: el audio del ESP32 no se manda al camino de los parlantes.
 
 ## Fuentes
 
