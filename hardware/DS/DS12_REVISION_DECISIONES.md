@@ -62,6 +62,20 @@ sigue siendo GND, pero el 21 pasó a ser el ánodo del LED del jack de al lado.
 Evidencia: el DRC sobre la copia da 3 errores de separación y 6 de puente de máscara, todos en esos
 tres pares.
 
+> 🔧 **2026-11-13 — Fernando cambió la huella: pads ovalados.** Los pads 12, 21, 24, 33, 36 y 45 (y el
+> resto de los pads de LED) pasaron a óvalo de **1,15 × 1,8 mm**, con el agujero de Ø1,0 igual (leído del
+> PCB guardado a las 10:49; el `.kicad_mod` también cambió). Ya no hay violaciones entre pads vecinos. Es
+> la alternativa «mantener los dos colores» con otra forma: el cobre entre vecinos queda en ≈0,25 mm y la
+> distancia entre agujeros sigue en 0,397 mm.
+>
+> **Efecto secundario (DRC sobre una copia, rellenos recalculados): 53 → 63 violaciones, 5 son cortos.**
+> Como el óvalo es más alto, lo tocan pistas viejas que pasaban cerca: PE13 (B.Cu) contra los pads 46 y 23,
+> y las redes de los pads 21, 9 y 33 (B.Cu) contra los pads 22, 10 y 34 (GND). La red del pad 45 (F.Cu) queda
+> a 0,08–0,13 mm del pad 36 (mínimo 0,18). Además, PE13 (B.Cu) pasa pegada a los pads 23–24, 33–36 y 45–46
+> (11 puentes de máscara). Es de ruteo, no de la huella. **Pendiente de Fernando**, y depende de si se
+> conserva el LED 2. Sigue sin medirse M13b (sentido del LED 2) y sigue abierta la regla de agujero a
+> agujero de JLCPCB (0,5 mm según copias secundarias).
+
 ### Qué hacer
 
 **Recomendado — un solo LED por jack, el LED 1.** Es el que probaste en el banco (prende con 5 V y

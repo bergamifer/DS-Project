@@ -89,9 +89,11 @@ El STM32H743 corre a 480MHz con DMA audio pipeline y opera los 5 puertos SAI sim
 > desaparece. Todo el diseño, con valores y con el porqué de cada uno, en
 > [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md).
 >
-> **Entrada de la DS12: 20 V nominal, ventana de 15 a 21 V.** Por debajo de ~14,7 V los
-> amplificadores no encienden (el micro sí); por encima de ~22 V conduce el TVS y puede abrirse
-> el fusible. Una fuente de 12 V o de 24 V no sirve.
+> **Entrada de la DS12: 24 V, ajustada a 24,0 V y nunca más de 25,5 V** (decidido el 2026-10-23;
+> detalle en [DS12_ENTRADA_24V.md](DS12_ENTRADA_24V.md)). Por debajo de ~15 V los amplificadores
+> no encienden (el micro sí); por encima de ~26,7 V conduce el TVS y puede abrirse el fusible.
+> **Esa regla es sólo de la DS12.** La DS11 nunca va a 24 V: su buck MP2315S aguanta 26 V como
+> máximo absoluto. Antes este párrafo decía «20 V, ventana 15–21 V, 24 V no sirve»: ya no vale.
 
 ### PCB
 
@@ -127,6 +129,8 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 
 ### DS12 — lo que se está diseñando ahora
 
+- **[DS12_DECISIONES.md](DS12_DECISIONES.md) — qué está decidido, qué se descartó y qué sigue
+  abierto**, en una página. Empezar por acá; los demás son el porqué de cada fila
 - **[DS12_CHECKLIST.md](DS12_CHECKLIST.md) — la lista para tildar mientras dibujás.**
   El índice de todo lo de abajo, en orden de dibujo: qué poner y dónde está el porqué
 - [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md) — **La etapa de fuente, lista para dibujar.**

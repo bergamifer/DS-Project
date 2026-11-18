@@ -23,20 +23,22 @@
 
 ### A.1 Entrada y protección — AL §3.1
 
-- [ ] 🔧 **2026-10-23 — sistema a 24 V** ([DS12_ENTRADA_24V.md](DS12_ENTRADA_24V.md)): renombrar el
+- [x] 🔧 **2026-10-23 — sistema a 24 V** ([DS12_ENTRADA_24V.md](DS12_ENTRADA_24V.md)): renombrar el
       net `+20V` → `+24V` (y el valor de TP5). Ningún conexionado cambia.
-- [ ] **F1** — 🔧 **2026-10-23: pasa a 3 A**, JFC1206-1300FS `C136347` (misma huella 1206, 63 V,
+      ✅ 2026-11-10: verificado en el esquemático guardado el 28-oct (net `+24V`, TP5, D9 y F1) y en el PCB.
+- [x] **F1** — 🔧 **2026-10-23: pasa a 3 A**, JFC1206-1300FS `C136347` (misma huella 1206, 63 V,
       I²t 1,39 A²s). Con 24 V el enchufe en caliente se llevaba hasta el 87 % del I²t del de 2 A
       (`C136345`): ver DS12_ENTRADA_24V §3.3. Va en `+24V` → `VIN_PROT`.
       Es de un solo uso a propósito: no hay PTC de 1206 con ≥2 A de hold y ≥30 V, **y el
       fusible aporta la impedancia serie que el TVS necesita para coordinar**.
+      Prolijidad: el campo *descripción* de F1 todavía dice «0.41 … 2A», del fusible viejo. Corregirlo.
 - [x] **Q1** — P-MOSFET **AO3401A** `C15127` (Basic de JLCPCB). Drain a `VIN_PROT`,
       source a `VIN_LOCAL`.
 - [x] **R1** (R149) — 100 kΩ de gate de Q1 a GND (lo enciende).
 - [x] **DZ1** (D21) — zener **10 V** `C173431` entre gate y source, cátodo al source.
       🔴 **10 V y no 12 V**: el AO3401A tiene VGS máx ±12 V y un zener de 12 V llega a
       12,7 V por tolerancia — el componente que protege la compuerta la destruiría.
-- [ ] **D8'** (D9) — 🔴 **2026-10-23: pasa a SMBJ24A** `C908801` (el de la DS11). Con 24 V el
+- [x] **D8'** (D9) — 🔴 **2026-10-23: pasa a SMBJ24A** `C908801` (el de la DS11). Con 24 V el
       SMBJ20A conduce o no según la unidad (VBR 22,2–24,5 V): **ninguna placa a 24 V con el
       SMBJ20A puesto**. De `VIN_LOCAL` a GND. Reemplazo directo sobre el
       footprint `D_SMB` que ya existe: cambia el part number, no el dibujo.
@@ -179,7 +181,7 @@ y vuelve **mientras el digital nunca se cae**. Dos cosas dependían de que todo 
 - [x] **C28 (EN del ESP32) de 0,1 µF a 1 µF** (`C15849`): la rampa de 4 ms del AP63301 deja el RC al límite.
 - [x] **TDMIN (pin 35 del AK5538) a GND**, como pide la hoja en modo PCM.
 - [x] **Jumper de identidad: PE15 (pata 45) a GND por 1 kΩ (`C11702`)**. En el BOM no hay 0 Ω.
-- [ ] Decisiones abiertas: LED de tensión D24/D25, TP9 en `IN`, C73–C80 (6,3 V sobre `+5VA`), R20 a 5,1 kΩ (después de la medida M5).
+- [ ] Decisiones abiertas: LED de tensión D24/D25, TP9 en `IN`, C73–C80 (6,3 V sobre `+5VA`), ~~R20 a 5,1 kΩ~~ — **descartado: R20 queda en 33 Ω** (M5 = 0,91 kΩ y M6 = 0,554 V en la DS11: hay pull-down y diodo internos en SD; la guarda de firmware sigue siendo obligatoria). 🔧 2026-11-10: propuesto 470 Ω, ver B.
 - [x] Prolijidad: el valor de C67, C69, C70, C321 y C322 dice «16V», pero `C45783` es de 25 V. Corregirlo, para que nadie lo
       «arregle» poniendo uno de 16 V.
 
@@ -216,8 +218,9 @@ digital. Lo que sí importaba era el 100 nF:
       1500 mA nominales (40 °C de calentamiento). Los cuatro PCM1690 piden **0,30 A típico y 0,44 A máximo** (ICC de
       VCC: 74/110 mA cada uno), así que caen ≤ 0,1 V. **No van dos en paralelo**: bajaría a la mitad la impedancia a
       100 MHz, que es para lo único que está. Si alguna vez hace falta filtrar más: en serie, o más capacitancia después.
-- [ ] ⚠️ `DS10_DESIGN_REVIEW.md` dice que esta misma pieza es de **300 mA**, y la hoja de datos dice 1500 mA. Con
-      300 mA, uno solo quedaría en el límite. Confirmar que la hoja de la ficha de LCSC de `C21286` sea la misma.
+- [x] ~~`DS10_DESIGN_REVIEW.md` dice que esta misma pieza es de **300 mA**~~ — **cerrado el 2026-11-10: son 1500 mA.**
+      En la hoja de `C21286` la fila de 300 mA es la del tamaño 0402 de la misma serie (CBW100505U601T, 0,60 Ω);
+      la de 0805 (CBW201209U601T) dice 0,22 Ω y 1500 mA. El número viejo salió de la fila equivocada.
 - [ ] En el PCB, el campo «Mouser part» de FB3 dice todavía `81-BLM18DN601SN1D`: **Update PCB from Schematic**. Es
       la única diferencia de paridad.
 - [x] Ancho de pista: la clase «Ancha» (0,6 mm) ya está en `+5VA` y `+5VA_DAC`. Soporta ~1,6 A con 10 °C, y necesitamos
@@ -242,26 +245,55 @@ GND de F.Cu junto a ese pin se suma tal cual, y el PSRR no la ve.
 
 ## B. El resto del esquemático — AU §3
 
-- [ ] **Bias DC de las 8 entradas del ADC** — nodo VCM compartido (divisor 10k/10k desde
-      `+3,3VA` → 1,65 V, con 10 µF + 100 nF) y **una resistencia de 22 kΩ por pin**.
-      🔴 **22 kΩ, no 100 kΩ**: con 100 k el ruido térmico (~40 nV/√Hz) baja la DR a ~104 dB
-      y se come los 111 dB del chip. ≈US$ 0,30. Lo pide la hoja del AK5538: *«Set the DC bias
-      voltage in a range from 0.48 x AVDD to 0.52 x AVDD»*, y su circuito de ejemplo trae el
-      divisor.
+- [ ] **Bias DC de las 8 entradas del ADC** — nodo VCM compartido (divisor desde `+3,3VA` → 1,65 V,
+      con 10 µF + 100 nF) y **una resistencia por pin** (16) del lado del chip, en la red `AINnP/N`.
+      🔧 **2026-10-27: el valor pasa a 10 kΩ (`C25744`, el mismo del divisor)**, no 22 kΩ: con un micrófono
+      enchufado, el ruido de la R lo cortocircuita la fuente (470 Ω + preamp) y no pesa; 10 kΩ deja el
+      pasa-altos en ≈18 Hz (diferencial, con los 10,4 kΩ del chip) y una sola pieza para las 18 R. El argumento «22 k, no 100 k,
+      por ruido» valía sólo con la entrada abierta.
+      ✅ **M4b (2026-10-27): 3,296 V** con 10 kΩ desde `+3.3VA` a AIN8P → la entrada no carga en modo
+      común (los 10,4 kΩ son entre P y N). **Red pasiva confirmada, sin buffer.** Pasa-altos diferencial ≈18 Hz.
+      📍 **Estado al 2026-11-10** (esquemático guardado el 28-oct): está el nodo (R169 a `+3.3VA`, R170 a GND,
+      C58 100 nF, C62 10 µF) y **una** resistencia, R171 en AIN4N. **Faltan las otras 15.** El PCB todavía no
+      tiene ninguna de las cinco piezas.
 - [ ] **J7 a un JST SH de 8 o 9 pines** — J5, J6 y J7 son hoy el **mismo conector físico**
       (mismo LCSC `C5343037`) y **J7.9 = GND mientras J5.9 = +3V3**: enchufarlo en el lugar
       equivocado pone masa contra el riel digital. Con 8 pines el error se vuelve
       mecánicamente imposible. Costo cero.
+      🔧 2026-11-10: **ya es opcional.** Los cuatro PTC de la expansión (abajo) limitan la corriente si el
+      ST-Link se enchufa en J5 o J6, y cambiar J7 obliga a tener un cable para las DS11 y otro para las DS12.
 - [x] **Cuatro PTC en la expansión** (`C883126`, F4…F7), no dos: J5.9, J5.10, J6.9 y J6.10.
       Los `.9` llevan `+3V3` **directo**.
 - [x] **Pull-up de 10 kΩ en AMUTEO** (R24) — cuatro salidas open-drain en wired-OR contra PC10,
       hoy sin ningún pull-up externo: funciona sólo porque el firmware habilita el interno.
 - [ ] **Fila de 8 pads a paso 2,54 mm para el SAI** (MCLK, SCK, FS y los cuatro SD).
       **US$ 0.** Sacar el stub del lado del STM32, no del DAC.
-- [ ] **Los 4 LEDs de los jacks a GPIOs separados** (PE9, PE10, PE13, PE14). R111-R114 ya
-      existen y van todos a PE12, que el firmware declara sin usar. Sin agregar componentes.
-      ⚠️ **En la DS11 nunca se prendieron**: antes de copiarlos, la medida **M12** de
-      [`revision_alimentacion/medidas_ds11.md`](revision_alimentacion/medidas_ds11.md).
+- [x] **LEDs de los jacks (J9)** — 🔧 2026-10-27, dibujado por Fernando (verificado con `sch2net` sobre el
+      autosave, todavía sin guardar): **LED 1** de cada jack (ánodo pads 9/21/33/45) por R111/R113/R112/R114
+      (470 Ω) a **PE12**; **LED 2** (ánodo pads 11/23/35/47) por R164/R166/R165/R167 (470 Ω, `C25117`) a
+      **PE13**; cátodos (pads 10/12/22/24/34/36/46/48) a GND. Corrige el sentido invertido de la DS11
+      (M12/M12c). Queda un GPIO por color, no uno por jack: no se puede prender un jack solo.
+      Corriente: a lo sumo 4 × (3,3 − 1,8) / 470 ≈ 12,8 mA por pin, debajo de 20 mA.
+      ⚠️ El sentido del LED 2 sale del plano del jack (los 16 pines «+ −»); en el banco sólo se probó el LED 1.
+- [ ] 🔴 **J9: un solo LED por jack** — 🆕 2026-11-10, [DS12_REVISION_DECISIONES.md](DS12_REVISION_DECISIONES.md) §1.
+      🔧 2026-11-13: la huella ya tiene pads ovalados (1,15 × 1,8 mm) y no hay violaciones entre pads vecinos,
+      pero las pistas viejas ahora los tocan: **5 cortos** en el DRC (PE13 contra pads 46 y 23; redes de los
+      pads 21, 9 y 33 contra 22, 10 y 34). Decidir LED 2 sí/no y rerutear. Sigue pendiente M13b.
+      Los pads 12–21, 24–33 y 36–45 (LED 2 de un jack, LED 1 del siguiente) están a **0,097 mm** y, desde que se
+      invirtieron los LEDs, en redes distintas: un puente de estaño es probable, apaga ese LED y le pide a PE12
+      hasta ≈24 mA. El DRC lo marca (3 de separación + 6 de máscara). **Qué dibujar:** el LED 1 queda como está;
+      el LED 2 se anula uniendo sus dos pads a la red del pad vecino (11 y 12 → red del 21; 23 y 24 → red del 33;
+      35 y 36 → red del 45; 47 y 48 → GND). Salen R164–R167 y PE13 queda libre. Opcional: un pin por jack
+      (PE12, PE13, PE14, PE10). Si querés los dos colores hay que achicar la huella: ver el documento.
+- [ ] **Medir el brillo de los LEDs con la corriente de la DS12** — prueba **M13** de
+      [`medidas_ds11.md`](revision_alimentacion/medidas_ds11.md). Con 470 Ω desde 3,3 V son ≈2,8 mA; la prueba que
+      confirmó el sentido le dio ≈6 mA al LED.
+- [ ] 🟡 **R20 de 33 Ω a 470 Ω** (`C25117`, 0402: cambiarle la huella a R20, que es 0603) — 🆕 2026-11-10,
+      [DS12_REVISION_DECISIONES.md](DS12_REVISION_DECISIONES.md) §3. Con `+5VA` en 0, PD3 pasa de ≈80 mA a 5,9 mA y
+      queda protegido aunque falle la guarda de firmware; SD en alto queda en 3,11 V (el PAM pide 1,2 V).
+      Sin cambiar la huella: 200 Ω `C8218` (13,8 mA). No está probado en una placa.
+- [ ] (Opcional) **100 kΩ a GND del lado del conector** de cada capacitor de entrada del ADC (16 × `C25741`):
+      evita el golpe al enchufar un micrófono. Es una cuenta, no una medida. DS12_REVISION_DECISIONES.md §8.
 - [ ] **Partir el `~SD` de los amplificadores en cuatro bancos** (PD14, PD15, PD5, PD6).
       ≈US$ 0,01.
 - [x] **Línea de timing del ESP32: NO usar PC13** — PL §3. Choca con la errata **ES0392
@@ -329,3 +361,50 @@ Cuando llegue la placa, y **antes** de darla por buena:
       pico de 900 mA es real.
 - [ ] El UVLO: bajar la fuente y ver que **los amplificadores caen y el MCU sigue vivo
       reportando**.
+
+---
+
+## F. Pendientes acumulados (2026-10-24)
+
+> Lo que **no** está en A–E. Lo de la fuente de A.10 ya está tildado allí y no se repite. Cada ítem dice dónde
+> está el porqué.
+
+**Entrada a 24 V** — [DS12_ENTRADA_24V.md](DS12_ENTRADA_24V.md). El esquemático ya tiene D9, F1 y el net `+24V` (commit `9686851`).
+
+- [ ] **Comprar** el SMBJ24A `C908801` y el JFC1206-1300FS 3 A `C136347`. No estaban en la compra de la DS12.
+- [ ] **Actualizar el PCB desde el esquemático** y verificar que D9 y F1 conserven su huella (SMB y 1206) y que el net `+24V` no mueva pistas. Antes, revisar los cambios que ya tiene `DS.kicad_pcb`.
+- [ ] **Rellenar zonas y `tools/check_pcb.sh`**; recién después, commit del PCB.
+- [ ] (Opcional) **Q1 → Si2319CDS** (−40 V, SOT-23). Confirmar que el pinout sea 1 = G, 2 = S, 3 = D antes de cambiarlo.
+- [ ] **`docs/presupuesto_potencia.md`**: rehacer las cuentas a 24 V; hoy tiene las de 20 V y 12 V.
+- [ ] **Pico de enchufe por Q1** (47–136 A durante µs, IDM 27 A): no verificado. Se evita conectando con la fuente apagada.
+- [ ] **Pruebas de banco de la entrada** (§7 de DS12_ENTRADA_24V.md), incluido el enchufe en caliente con la fuente ajustada a 24,0 V.
+
+**Alimentación** — [DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md) §9.
+
+- [x] **S4.f** (golpe de ariete en `+5V_AUX`): resuelto con los cinco C45783 (ver A.9).
+- [x] **N1** (fuga de D23 con el STM32 en blanco): resuelto con el drenaje de 1 kΩ (ver A.9).
+- [x] **S2** (guarda de firmware: SD sólo con PC1 > 2,25 V): **está en el código** (verificado el 2026-11-10: `power_guard.c`, el watchdog analógico sobre PC1 en `main.c` y `tests/test_power_guard.c`).
+- [ ] **S2 en una placa real**: probar la guarda en la primera DS12, por USB y con el autoarranque activo. Hasta hoy sólo corrió en los tests de host.
+- [ ] **S3 y S5–S12**: revisar en DS12_REVISION_ALIMENTACION.md §9 cuáles siguen abiertos.
+- [x] **Medidas de la DS11** (`revision_alimentacion/medidas_ds11.md`): hechas M1–M8, M12 (+M12b/c) y M6 (2026-10-26/27). M7 no concluyente (el ZT703S no resuelve 20 mV); M9 sin medidor; M10/M11 no se hacen. Consecuencias para el esquemático: bias del ADC (B), LEDs de J9 invertidos (B), R20 se queda en 33 Ω.
+
+**Micrófono de banco (DNP)** — [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md). Decidido el 2026-11-07, **sin dibujar**.
+🔧 Corregido el 2026-11-10: el modelo es uno solo, y la huella y las conexiones cambiaron.
+
+- [ ] **Comprar el MSM261S4030H0R** (MEMSensing, puerto superior, 4 × 3 mm). Va DNP, no hace falta que esté en LCSC. Stock no verificado. ~~ICS-43434 y SPH0645LM4H~~: son de puerto inferior (agujero en la placa) y están discontinuados.
+- [x] **Hoja de datos leída** (DS-050): patas, huella y reloj (SCK de 1 a 4 MHz; a 48 kHz son 3,072 MHz).
+- [ ] **Dibujar**: pata 1 GND · 2 sin conectar · 3 `I2S2_WS` · 4 (CHIPEN) a `+3V3` · 5 (L/R) a GND · 6 `I2S2_CK` · 7 `I2S2_SDI` con **100 kΩ a GND** · 8 `+3V3` con **100 nF + 10 µF**. El micrófono DNP; el 100 kΩ y los dos capacitores se ensamblan.
+- [ ] **Huella**: 8 pads de 0,9 × 0,6 mm, copiada del plano de la hoja.
+- [x] **Redes I2S2 reconfirmadas** el 2026-11-10 contra el esquemático guardado el 28-oct: PB12/J6.1, PB13/J6.2, PB14/J5.5.
+- [ ] **Layout**: lejos de los PAM8302A, del inductor del buck y de los cables de parlantes; con lugar para soldar a mano. **No lavar la placa** después de soldarlo.
+- [x] **Firmware**: no usa I2S2 (verificado el 2026-11-10 en `main.c` y `stm32h7xx_hal_msp.c`).
+
+**PCB** — lo abierto está en A.10. Lo que no aparece allí:
+
+- [ ] **H2 (agujero) se movió 1,76 mm** respecto de la DS11 (99,65·51,50 → 99,86·53,26). Confirmar si fue a propósito: rompe el patrón de agujeros y pisa el QR.
+- [ ] **Cobre viejo de la revisión anterior**: confirmar que no quedó ninguna pista DS11 que una pads sin red (R132, PC7 a `PDN_AK`) en el PCB de la DS12.
+- [ ] 🆕 2026-11-10 (DRC sobre una copia, rellenos recalculados: 0 cortos): **actualizar desde el esquemático** — faltan C58, C62, R169, R170 y R171; **rutear R166.2 a J9.23** (o sacarlo, si se anula el LED 2); el **QR está sobre vías** (27 avisos): correrlo o comprobar que se lee.
+
+**Git** (no son de la DS12 en sí, pero están sin commitear en el mismo repo):
+
+- [ ] `DS.kicad_pro` (20 líneas borradas), un `.kicad_mod` de la librería USB, el `.stp` del AP63356 y la carpeta `LIB_UJ20-C-V-G-SMT-P16-TR/`. Revisar antes de cualquier commit grande.

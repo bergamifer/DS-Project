@@ -3,6 +3,12 @@
 > Abierto 2026-07-08, con la **DS11 ya enviada a fabricar**. Acá se acumula todo lo que
 > se detectó tarde o se decidió posponer, para no perderlo. Nada de esto bloqueó la DS11;
 > son mejoras/verificaciones para la próxima vuelta. Ver [DS11_PLANNING.md](DS11_PLANNING.md).
+>
+> **🗂️ 2026-11-10 — este documento es en buena parte historia.** Qué está decidido hoy:
+> [DS12_DECISIONES.md](DS12_DECISIONES.md). Lo que sigue **vigente** acá: la geometría (§0.5, §0.8),
+> el pinout de J9 (§6d) y la polaridad de los parlantes (al final). Lo de **alimentación y TVS
+> (§0.1, §0.2, §1)** se discutió con 19–20 V, SMBJ20A y un buck de 26 V: **quedó resuelto** por el
+> rediseño de la fuente y por el paso a 24 V, así que sus números y recomendaciones ya no valen.
 
 ---
 
