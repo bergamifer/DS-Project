@@ -149,6 +149,15 @@ open(os.path.join(DIST, "_headers"), "w").write(
     "/*\n"
     "  X-Content-Type-Options: nosniff\n"
     "  Referrer-Policy: strict-origin-when-cross-origin\n"
+    # HSTS: el navegador recuerda por un año "este sitio va siempre por https"
+    # y deja de intentar http. Sólo vale si llega por https, así que funciona
+    # junto con "Always Use HTTPS" de Cloudflare. Sin includeSubDomains a
+    # propósito: no comprometer subdominios que todavía no existen.
+    "  Strict-Transport-Security: max-age=31536000\n"
+    # Nadie puede meter el sitio dentro de un iframe ajeno (clickjacking).
+    "  X-Frame-Options: DENY\n"
+    # El sitio no usa cámara, micrófono ni ubicación: se declaran apagados.
+    "  Permissions-Policy: camera=(), microphone=(), geolocation=()\n"
     "/og.jpg\n"
     "  Cache-Control: public, max-age=604800\n")
 print(f"dist/: index.html, og.jpg, robots.txt, sitemap.xml, _headers")
