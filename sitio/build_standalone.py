@@ -137,6 +137,13 @@ DIST = os.path.join(HERE, "..", "dist")
 os.makedirs(DIST, exist_ok=True)
 open(os.path.join(DIST, "index.html"), "w").write(res)
 shutil.copyfile(os.path.join(HERE, "og.jpg"), os.path.join(DIST, "og.jpg"))
+# Página de error propia: Cloudflare la sirve con código 404 para cualquier
+# dirección que no exista (ver not_found_handling en wrangler.jsonc). Se
+# ASCII-fica igual que la portada, y como no tiene <script> alcanza con las
+# entidades HTML afuera del <style> (el CSS de la 404 es ASCII puro).
+p404 = esc_html(open(os.path.join(HERE, "404.html"), encoding="utf-8").read())
+assert p404.isascii()
+open(os.path.join(DIST, "404.html"), "w").write(p404)
 open(os.path.join(DIST, "robots.txt"), "w").write(
     f"User-agent: *\nAllow: /\nSitemap: {URL}sitemap.xml\n")
 hoy = datetime.date.today().isoformat()
@@ -160,4 +167,4 @@ open(os.path.join(DIST, "_headers"), "w").write(
     "  Permissions-Policy: camera=(), microphone=(), geolocation=()\n"
     "/og.jpg\n"
     "  Cache-Control: public, max-age=604800\n")
-print(f"dist/: index.html, og.jpg, robots.txt, sitemap.xml, _headers")
+print(f"dist/: index.html, 404.html, og.jpg, robots.txt, sitemap.xml, _headers")
