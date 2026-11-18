@@ -19,6 +19,69 @@
 
 ---
 
+## 0. 🗂️ Para la próxima sentada — todo junto y en orden (2026-11-18)
+
+> Lo que te toca **a vos**, en el orden en que conviene hacerlo. Cada línea apunta a la sección
+> de abajo (o al documento) que tiene el detalle. **Verificado el 2026-11-18 sobre el netlist**
+> derivado del esquemático del commit `b31521d` (con `tools/sch2net.py`), salvo lo marcado ⚠️.
+> Lo que no figura acá está hecho o no depende de vos.
+
+### 0.1 Antes de abrir KiCad: decidir, medir y comprar
+
+- [ ] **Medir M13b y M13 en un jack suelto** (tester, sin placa ni amplificadores): el sentido del
+      LED 2 y su brillo con ≈2,5 mA. De esto depende conservar el LED 2 → §B (J9) y
+      `DS12_REVISION_DECISIONES.md` §1 y §4.
+- [ ] **Decidir el LED 2 de J9.** Tu inclinación es conservarlo. Antes, confirmar con JLCPCB que
+      aceptan **0,397 mm entre agujeros** de pads vecinos (su mínimo sería 0,5 mm ⚠️, dato de copias
+      de su tabla).
+- [ ] **Decidir R20: 33 Ω → 470 Ω** (`C25117`, cambiar la huella a 0402) → §B.
+- [ ] **Decidir lo que quedó abierto en la fuente:** LED de tensión D24/D25, TP9 en `IN` y C73–C80
+      (6,3 V sobre `+5VA`) → §A.9 ⚠️ (figuran abiertas ahí; no lo volví a verificar).
+- [ ] **Comprar:** SMBJ24A `C908801`, fusible 3 A `C136347` (§F) y **dos** MSM261S4030H0R (uno para
+      el STM32 y otro para el ESP32; van DNP y se sueldan a mano).
+
+### 0.2 Esquemático — todo en una pasada
+
+- [ ] **Las 15 resistencias de bias del ADC** — tabla de red, pata y pieza en
+      [`DS12_BIAS_ADC_LISTA.md`](DS12_BIAS_ADC_LISTA.md). Al terminar, `tools/verificar_bias_adc.py`
+      tiene que dar **16 de 16**.
+- [ ] **Micrófono del STM32** (I2S2, DNP) más sus 100 nF, 10 µF y 100 kΩ → §F «Micrófono de banco».
+- [ ] **Micrófono del ESP32** (GPIO6 SCK, GPIO7 WS, GPIO3 SD, DNP) más los mismos tres pasivos →
+      §F. El firmware ya está escrito (`firmware_esp32c3/main/mic.c`).
+- [ ] **J9** según lo que decidas en 0.1. Si se anula el LED 2: unir los pads según DEC §1.
+- [ ] **R20** según 0.1.
+- [ ] **Nombrar las 64 redes de parlante** `SPK_CH00_P/N`… → §C.
+- [ ] (Opcional) **Partir el `~SD` de los amplificadores en cuatro bancos** (PD14, PD15, PD5, PD6) —
+      hoy las cuatro patas están al aire. Sólo si querés encendido escalonado: pide ruteo y firmware → §B.
+- [ ] **Series de MCLK unificadas en 33 Ω** — hoy siguen R145–R148 en 75 Ω y R131 en 33 Ω → §B.
+- [ ] **C45/C46 de 0201 a 0402** — siguen en 0201 → §B.
+- [ ] **Barrel jack DC-005 (DNP)** — no está dibujado → §B.
+- [ ] (Opcional) **J7** — J5, J6 y J7 siguen siendo el mismo JST SH de 10 pines. Los PTC F4–F7 ya
+      limitan la corriente si se enchufa el ST-Link en el lugar equivocado; cambiarlo pide otro cable
+      para las DS12 → §B.
+- [ ] (Opcional) **PC0 para el self-test DAC→ADC** — hoy al aire → §B.
+
+### 0.3 PCB — después del esquemático
+
+- [ ] **Update PCB from Schematic.** Entran C58, C62, R169–R171, las 15 R de bias, los dos
+      micrófonos con sus pasivos y lo que cambie en J9/R20/~SD.
+- [ ] **Rerutear J9** (5 cortos y 11 puentes de máscara hoy). Si conservás el LED 2, hay una
+      referencia en `.ds12_audit/pcb_intento/DS_j9.kicad_pcb`, sacada con
+      `intento_j9/intento_j9.py`: deja J9 en 0 violaciones → DEC §1.
+- [ ] **Los dos bucks** — los puntos de §A.10 (lazo de entrada de IC4, SW → L1, vías de GND de U10).
+- [ ] **H2 movido 1,76 mm** y el **QR sobre vías** → §F «PCB».
+- [ ] **Antes de los gerbers**, todo §D: DRC en 0, `tools/check_pcb.sh`, `--check-zones`, «Remove
+      Order Number» y las rotaciones de JLCPCB.
+
+### 0.4 Cuando llegue la primera DS12 (no es de dibujo)
+
+- [ ] Las medidas de §E y las pruebas de la entrada a 24 V (§F).
+- [ ] La guarda de +5VA (S2) por USB y con autoarranque → §F.
+- [ ] Los LEDs de J9 (`jack_leds.c`) y el micrófono del ESP32 (`GET /mic/nivel`; con los
+      amplificadores encendidos por una persona, `POST /mic/chequeo`).
+
+---
+
 ## A. La etapa de fuente
 
 ### A.1 Entrada y protección — AL §3.1
@@ -410,4 +473,4 @@ Cuando llegue la placa, y **antes** de darla por buena:
 
 **Git** (no son de la DS12 en sí, pero están sin commitear en el mismo repo):
 
-- [ ] `DS.kicad_pro` (20 líneas borradas), un `.kicad_mod` de la librería USB, el `.stp` del AP63356 y la carpeta `LIB_UJ20-C-V-G-SMT-P16-TR/`. Revisar antes de cualquier commit grande.
+- [x] ~~`DS.kicad_pro`, `.kicad_mod`, `.stp` y `LIB_UJ20-C-V-G-SMT-P16-TR/` sin commitear~~ — commiteados el 2026-11-18 (`53ce7c1`).

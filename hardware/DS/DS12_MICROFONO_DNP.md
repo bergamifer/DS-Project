@@ -159,7 +159,7 @@ costo es de centavos. Las tres redes son nuevas: `ESP_MIC_SCK`, `ESP_MIC_WS`, `E
 Ubicarlo lejos de los PAM y del buck. **Ojo:** mirá dónde queda la placa respecto de los conos. Si
 queda detrás del panel, el micrófono va a oír la caja más que a los parlantes.
 
-**El firmware (sin escribir todavía).**
+**El firmware — escrito el 2026-11-18** (`firmware_esp32c3/main/mic.c` y `mic_dsp.c`; test de host en `firmware_esp32c3/test/`, con dos mutantes; compila con ESP-IDF 6.1; **sin probar en una placa**). El chequeo usa el modo 1 del STM32 (channel walker), que ya existe: no hizo falta un comando nuevo.
 
 - Driver `i2s_std` de ESP-IDF, modo Philips, mono izquierdo, palabras de 32 bits, a **24 kHz**. Eso da
   SCK = 1,536 MHz, dentro del rango de 1–4 MHz de la hoja.
