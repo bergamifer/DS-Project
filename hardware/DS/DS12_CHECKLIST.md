@@ -254,7 +254,8 @@ GND de F.Cu junto a ese pin se suma tal cual, y el PSRR no la ve.
       ✅ **M4b (2026-10-27): 3,296 V** con 10 kΩ desde `+3.3VA` a AIN8P → la entrada no carga en modo
       común (los 10,4 kΩ son entre P y N). **Red pasiva confirmada, sin buffer.** Pasa-altos diferencial ≈18 Hz.
       📍 **Estado al 2026-11-10** (esquemático guardado el 28-oct): está el nodo (R169 a `+3.3VA`, R170 a GND,
-      C58 100 nF, C62 10 µF) y **una** resistencia, R171 en AIN4N. **Faltan las otras 15.** El PCB todavía no
+      C58 100 nF, C62 10 µF) y **una** resistencia, R171 en AIN4N. **Faltan las otras 15** — con red, valor y pieza
+      en [`DS12_BIAS_ADC_LISTA.md`](DS12_BIAS_ADC_LISTA.md); `tools/verificar_bias_adc.py` da hoy «1 de 16». El PCB todavía no
       tiene ninguna de las cinco piezas.
 - [ ] **J7 a un JST SH de 8 o 9 pines** — J5, J6 y J7 son hoy el **mismo conector físico**
       (mismo LCSC `C5343037`) y **J7.9 = GND mientras J5.9 = +3V3**: enchufarlo en el lugar
@@ -279,6 +280,7 @@ GND de F.Cu junto a ese pin se suma tal cual, y el PSRR no la ve.
       🔧 2026-11-13: la huella ya tiene pads ovalados (1,15 × 1,8 mm) y no hay violaciones entre pads vecinos,
       pero las pistas viejas ahora los tocan: **5 cortos** en el DRC (PE13 contra pads 46 y 23; redes de los
       pads 21, 9 y 33 contra 22, 10 y 34). Decidir LED 2 sí/no y rerutear. Sigue pendiente M13b.
+      🔧 **2026-11-18:** si se conserva el LED 2, `hardware/DS/intento_j9/intento_j9.py` ya lo reruteó sobre una copia (DRC de J9 en 0, ver DEC §1); la copia está en `.ds12_audit/pcb_intento/DS_j9.kicad_pcb`.
       Los pads 12–21, 24–33 y 36–45 (LED 2 de un jack, LED 1 del siguiente) están a **0,097 mm** y, desde que se
       invirtieron los LEDs, en redes distintas: un puente de estaño es probable, apaga ese LED y le pide a PE12
       hasta ≈24 mA. El DRC lo marca (3 de separación + 6 de máscara). **Qué dibujar:** el LED 1 queda como está;

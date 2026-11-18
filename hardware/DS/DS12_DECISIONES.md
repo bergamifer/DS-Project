@@ -79,7 +79,7 @@
 | Qué | Qué falta | Dónde |
 |---|---|---|
 | **R20: 33 Ω → 470 Ω** (`C25117`, huella 0402) | Decidir. Probarlo en una DS11 implica encender amplificadores | DEC §3 |
-| **LED 2 de J9** (R164–R167, PE13) | Decidir si se anula (recomendado) o se conserva | DEC §1 |
+| **LED 2 de J9** (R164–R167, PE13) | Inclinación al 18-nov: **conservarlo** (sin cerrar). Hay un reruteo que deja J9 en 0 violaciones; falta M13b, M13 y confirmar los 0,397 mm de agujero a agujero con JLCPCB | DEC §1 |
 | **Medida M13** (brillo del LED a ≈2,5 mA) | Medir | DEC §4 |
 | **Remapeo de J9 a pares trenzados (1,2)/(3,6)/(4,5)/(7,8)** ⚠️ | Propuesto en PL §6d «para DS12»; **no encontré registro de que esté dibujado** | PL §6d |
 | **`C23630` ¿cumple la ECN de ≥ 1 µF a 5,25 V?** | Sólo importa si se cambian los capacitores de `+5V_AUX` | REV §9.4 |
@@ -93,7 +93,7 @@
 - El micrófono.
 - El cambio de J9 (un LED por jack) y, si se acepta, R20.
 - Actualizar el PCB desde el esquemático (le faltan C58, C62, R169–R171).
-- Firmware: el código de los LEDs de PE12/PE13 (los pines están declarados, sin uso).
+- ~~Firmware: el código de los LEDs de PE12/PE13~~ — hecho el 18-nov (`jack_leds.c`, con test); falta probarlo en una DS12.
 
 Lista completa en orden de dibujo: [`DS12_CHECKLIST.md`](DS12_CHECKLIST.md).
 

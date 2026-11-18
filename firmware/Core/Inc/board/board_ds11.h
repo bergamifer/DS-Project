@@ -20,6 +20,7 @@
 #define BOARD_HAS_VBUS_SENSE    0
 #define BOARD_HAS_USB_FS        0
 #define BOARD_HAS_TIMING_LINE   0
+#define BOARD_HAS_JACK_LEDS     0   /* LEDs de J9 en PE12/PE13 (jack_leds.h) */
 #define BOARD_HAS_ID_JUMPER     0
 #define ID_JUMPER_ESPERADO      1   /* PE15 al aire: lee el pull-up (board_common.h) */
 

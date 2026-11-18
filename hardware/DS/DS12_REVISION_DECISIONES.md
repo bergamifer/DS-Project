@@ -76,6 +76,26 @@ tres pares.
 > conserva el LED 2. Sigue sin medirse M13b (sentido del LED 2) y sigue abierta la regla de agujero a
 > agujero de JLCPCB (0,5 mm según copias secundarias).
 
+> 🔧 **2026-11-18 — LED 2: la inclinación de Fernando es conservarlo («creo»; no es un cierre).** Con eso
+> como supuesto, `intento_j9/intento_j9.py` reruteó la fila sobre **una copia** del PCB del commit `b31521d`
+> (DRC con rellenos recalculados y las reglas propias del proyecto):
+>
+> | | antes | después |
+> |---|---|---|
+> | cortos (`shorting_items`) | 5 | **0** |
+> | puentes de máscara | 11 | **0** |
+> | separaciones en J9 | 3 | **0** |
+> | conexiones sin rutear | 1 (R166.2 → pad 23) | **0** |
+> | total del DRC | 48 | 29 (27 del QR, 2 vías `+5VA` sueltas: no son de J9) |
+>
+> Cómo: el bus de PE13 pasa por arriba de la fila, recto; los tres desvíos del LED 1 pasan por encima del
+> GND vecino en otro carril; R114 va directo en B.Cu; y **R164, R165 y R167 se giran 180°** para que su pata de
+> PE13 quede del lado del bus. Es un reruteo, no una huella nueva. `check_layout.py` da lo mismo antes y después
+> (no toca los bucks). La copia está en `.ds12_audit/pcb_intento/DS_j9.kicad_pcb` (gitignored); el script se
+> puede correr sobre cualquier versión de tu PCB. **Sin verificar:** que JLCPCB acepte los 0,397 mm entre agujeros
+> de pads vecinos (su mínimo sería 0,5 mm ⚠️, dato sin confirmar en la página oficial: el DRC de KiCad no lo mira),
+> el sentido del LED 2 (M13b) y el brillo (M13). **Conservar el LED 2 depende de esos tres.**
+
 ### Qué hacer
 
 **Recomendado — un solo LED por jack, el LED 1.** Es el que probaste en el banco (prende con 5 V y
@@ -253,7 +273,7 @@ J9, las piezas nuevas del bias y los tres cambios de 24 V.
 
 - la guarda de `+5VA` está: `power_guard.c`, el watchdog analógico sobre PC1 en `main.c` y sus tests
   de host. **Sin probar en una placa**, porque todavía no hay DS12;
-- PE12 y PE13 siguen como pines sin usar en `board_ds12.h`: falta el código de los LEDs;
+- ~~PE12 y PE13 siguen como pines sin usar~~: **hecho el 2026-11-18** (`jack_leds.c`, rama `claude/ds12-leds-y-analisis`): PE12 = latido, PE13 = amplificadores, con test de host y mutantes. Sin probar en placa;
 - I2S2 sin usar.
 
 **Compras:** SMBJ24A `C908801`, fusible de 3 A `C136347`, y el micrófono.

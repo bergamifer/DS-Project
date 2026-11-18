@@ -87,6 +87,7 @@ Core/Src/eeprom_config.c \
 Core/Src/ota.c \
 Core/Src/fw_version.c \
 Core/Src/power_guard.c \
+Core/Src/jack_leds.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc.c \
@@ -439,7 +440,8 @@ TEST_CFLAGS = -std=c11 -Wall -Wextra -Werror -ICore/Inc
 # test:mutante,mutante,...
 HOST_TESTS = \
   power_guard:-DPGD_ESTABLE_MS=0u,-DPGD_MAX_RESTAUR=200u,-DPGD_VENTANA_MS=1u \
-  vbus_detect:-DVBUS_ESTABLE_MS=0u
+  vbus_detect:-DVBUS_ESTABLE_MS=0u \
+  jack_leds:-DJL_EXIGE_GUARDIA=0u,-DJL_LATIDO_ON_MS=0u,-DJL_LENTO_MEDIO_MS=100000000u,-DJL_RAPIDO_MEDIO_MS=500u
 
 test:
 	@mkdir -p build_test
