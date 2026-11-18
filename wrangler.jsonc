@@ -9,6 +9,9 @@
   "name": "domosonica",
   "compatibility_date": "2026-11-01",
   "assets": {
-    "directory": "./dist"
+    "directory": "./dist",
+    // Para direcciones que no existen, servir dist/404.html con código 404
+    // (en vez de una respuesta vacía).
+    "not_found_handling": "404-page"
   }
 }

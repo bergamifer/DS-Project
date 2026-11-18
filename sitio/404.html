@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Página no encontrada | Domosonica</title>
+<!-- Que los buscadores no indexen la página de error, pero sí sigan el link a la portada. -->
+<meta name="robots" content="noindex, follow">
+<meta name="description" content="Esta dirección no existe en el sitio de Domosonica. Volvé a la portada para conocer la instalación sonora.">
+<meta name="author" content="Fernando Bergami">
+<meta name="theme-color" content="#0a0d12">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%8A%3C/text%3E%3C/svg%3E">
+<style>
+  /* Mismos colores y tipografías que la portada (sitio/index.html). */
+  :root{
+    --ink:#0a0d12; --line:#222a38; --air:#e9e5da; --body:#b7bdca;
+    --muted:#8d94a6; --wood:#c9a06b; --wave:#6fe0ce;
+    --display:"Avenir Next",Avenir,"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;background:var(--ink);color:var(--body);font:400 1.0625rem/1.6 var(--sans)}
+  main{min-block-size:100svh;display:grid;place-content:center;padding:2rem 1rem;max-inline-size:36rem;margin-inline:auto}
+  .codigo{font:500 .8125rem/1 var(--mono);letter-spacing:.14em;color:var(--wood);margin:0 0 1rem}
+  h1{font:600 clamp(1.75rem,6vw,2.5rem)/1.15 var(--display);color:var(--air);margin:0 0 1rem;text-wrap:balance}
+  p{margin:0 0 1.75rem}
+  a{color:var(--wave)}
+  .volver{display:inline-block;padding:.75rem 1.25rem;border:1px solid var(--line);border-radius:999px;
+    text-decoration:none;font-weight:500;justify-self:start}
+  .volver:hover{border-color:var(--wave)}
+  a:focus-visible{outline:2px solid var(--wave);outline-offset:3px}
+</style>
+</head>
+<body>
+<main>
+  <p class="codigo">ERROR 404</p>
+  <h1>Acá no hay nada que escuchar</h1>
+  <p>La dirección que abriste no existe en este sitio. Puede que el link esté mal escrito o que la página se haya movido.</p>
+  <a class="volver" href="/">Volver a Domosonica</a>
+</main>
+</body>
+</html>
