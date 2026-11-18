@@ -230,6 +230,23 @@
     .rv{opacity:1;transform:none;transition:none}
     .hint{transition:none}
   }
+  @media(prefers-reduced-motion:reduce){ a{transition:none} }
+
+  /* Tanda de dise\0000f1o: lectura estable sobre el campo, sin alterar la simulaci\0000f3n. */
+  .hero-copy::before {
+    content:""; position:absolute; inset:-1.5rem -1.25rem;
+    z-index:-1; pointer-events:none; border-radius:1rem;
+    background:linear-gradient(90deg, rgba(10,13,18,.94), rgba(10,13,18,.88) 90%, transparent);
+    mask-image:linear-gradient(transparent, #000 6%, #000 94%, transparent);
+  }
+  .hero-copy .sub { color:var(--body); font-size:1rem; line-height:1.65; }
+  .hero-copy .tagline { margin-block-end:1rem; }
+  .datos {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));
+    gap:1.5rem 2rem; overflow:visible;
+  }
+  .dato { min-inline-size:0; }
+  .dato span { display:block; overflow-wrap:anywhere; }
 </style>
 
 <header class="top">
