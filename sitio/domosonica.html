@@ -236,7 +236,7 @@
   .hero-copy::before {
     content:""; position:absolute; inset:-1.5rem -1.25rem;
     z-index:-1; pointer-events:none; border-radius:1rem;
-    background:linear-gradient(90deg, rgba(10,13,18,.94), rgba(10,13,18,.88) 90%, transparent);
+    background:linear-gradient(90deg, rgba(10,13,18,.94), rgba(10,13,18,.88) calc(100% - .5rem), transparent);
     mask-image:linear-gradient(transparent, #000 6%, #000 94%, transparent);
   }
   .hero-copy .sub { color:var(--body); font-size:1rem; line-height:1.65; }
