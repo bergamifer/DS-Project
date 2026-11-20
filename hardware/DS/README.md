@@ -141,7 +141,8 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 - [DS12_AUDITORIA.md](DS12_AUDITORIA.md) — Auditoría previa a fabricar. Doce dimensiones,
   y **sólo lo que sobrevivió a verificación**: cada ítem dice cómo se comprobó
 - [DS12_USB_STM32.md](DS12_USB_STM32.md) — El USB del STM32 (PA11/PA12 hoy al aire)
-- [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md) — Micrófono MEMS I2S de banco (MSM261S4030H0R), DNP, sobre las redes I2S2
+- [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md) — Micrófonos MEMS I2S DNP (MSM261S4030H0R): uno en el STM32 (I2S2) y uno en el ESP32 (GPIO6/7/3)
+- [DS12_CAMARA_DVP_FUTURO.md](DS12_CAMARA_DVP_FUTURO.md) — Cámara DVP/MIPI: **no entra en la DS12** (D4–D7 caen sobre el audio); idea archivada, con el cruce de pines
 - [DS12_REVISION_DECISIONES.md](DS12_REVISION_DECISIONES.md) — **Revisión del 2026-11-10** de las decisiones recientes
   (24 V, LEDs de J9, R20, bias del ADC, micrófono): qué se sostiene, dos errores a corregir y una mejora
 - [DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md) — **Revisión de la

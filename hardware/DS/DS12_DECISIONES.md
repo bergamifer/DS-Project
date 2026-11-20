@@ -68,6 +68,7 @@
 | Subir el 33 Ω de R20 a 5,1 kΩ | Medido: dejaba SD en ≈2 V. Hoy la propuesta es 470 Ω (abierta, §3) |
 | «El ADC no necesita bias» | Falso: la hoja pide 0,48–0,52 × AVDD |
 | USB High-Speed / interfaz de audio 8×8 | Pide PHY ULPI externo y LQFP176: cambiar de encapsulado |
+| Interfaz de cámara DVP/MIPI (DNP) | El H743 no tiene MIPI; DCMI en LQFP100 pisa audio, EEPROM y PAM_SD en D4–D7. Archivado en [`DS12_CAMARA_DVP_FUTURO.md`](DS12_CAMARA_DVP_FUTURO.md) |
 | ICS-43434 y SPH0645LM4H-B de micrófono | Puerto inferior y discontinuados |
 | Analizar stock para la DS12 | Los componentes ya están comprados (BOM manda sobre el netlist) |
 | Igualar largos de pista por el skew entre bancos | El skew de layout es 67 ps contra 4 µs medidos: eran arranques de periféricos |
