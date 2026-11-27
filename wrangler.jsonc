@@ -1,0 +1,17 @@
+{
+  // Sitio público de Domosonica: sólo archivos estáticos, sin código de Worker.
+  // El build (ver abajo) arma dist/index.html desde sitio/index.html y
+  // Cloudflare publica esa carpeta. El nombre tiene que coincidir con el del
+  // Worker creado en el panel de Cloudflare.
+  //
+  //   Build command:  mkdir -p dist && python3 sitio/build_standalone.py && cp sitio/domosonica.html dist/index.html
+  //   Deploy command: npx wrangler deploy
+  "name": "domosonica",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    // Para direcciones que no existen, servir dist/404.html con código 404
+    // (en vez de una respuesta vacía).
+    "not_found_handling": "404-page"
+  }
+}
