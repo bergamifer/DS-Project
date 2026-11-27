@@ -5,7 +5,12 @@
   // Worker creado en el panel de Cloudflare.
   //
   //   Build command:  mkdir -p dist && python3 sitio/build_standalone.py && cp sitio/domosonica.html dist/index.html
-  //   Deploy command: npx wrangler deploy
+  //   Deploy command: npx wrangler deploy           (rama main: publica el sitio)
+  //   Non-production branch deploy command:
+  //                   npx wrangler versions upload  (otras ramas: versión de prueba
+  //                                                  con su propio link, sin publicar)
+  //   Ojo: `npx wrangler preview` ya no existe en wrangler; con ese comando el
+  //   build de toda rama que no sea main falla en el último paso.
   "name": "domosonica",
   "compatibility_date": "2026-11-01",
   "assets": {
