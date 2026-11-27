@@ -92,6 +92,17 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
+  /* Bloque de identidad de la imagen (fw_ident_t, ota.h): 32 bytes en un lugar
+   * FIJO, ORIGIN(FLASH) + 0x400, para que make ota, el ESP32 y OTA_End lo lean
+   * del .bin sin ejecutarlo. El hueco entre la tabla de vectores y 0x400 queda
+   * en cero. Si el offset cambia, cambiar FW_IDENT_OFFSET en ota.h. */
+  .fw_ident ORIGIN(FLASH) + 0x400 :
+  {
+    KEEP(*(.fw_ident))
+  } >FLASH
+  ASSERT(ADDR(.fw_ident) == ORIGIN(FLASH) + 0x400, "fw_ident no quedo en +0x400")
+  ASSERT(SIZEOF(.fw_ident) == 32, "fw_ident tiene que medir 32 bytes")
+
   /* The program code and other data goes into FLASH */
   .text :
   {

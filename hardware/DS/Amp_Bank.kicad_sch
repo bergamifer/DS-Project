@@ -2133,6 +2133,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 106.68 83.82 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "1902b4bb-75da-4353-a3ba-c06077c2f498")
 		)
@@ -2338,6 +2349,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 166.37 67.31 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "ff0186d9-9af4-4ac3-bcbe-8558501107d3")
 		)
@@ -2533,6 +2555,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 99.06 111.76 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 99.06 111.76 90)
 			(hide yes)
 			(show_name no)
@@ -2886,6 +2919,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 119.38 111.76 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "faa95af0-44be-4f9b-8f08-ba8de5db7387")
 		)
@@ -3082,6 +3126,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 119.38 81.28 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 119.38 81.28 90)
 			(hide yes)
 			(show_name no)
@@ -3297,6 +3352,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 106.68 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "60befaac-5c67-4a73-ae73-a256baae9740")
 		)
@@ -3481,6 +3547,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 182.88 106.68 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "5a0f5ad0-0ced-4369-8c4b-274c3b714adb")
 		)
@@ -3655,6 +3732,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 182.88 83.82 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 182.88 83.82 90)
 			(hide yes)
 			(show_name no)
@@ -4010,6 +4098,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 191.77 87.63 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "20107d4b-3fe5-419c-90c0-488e5b310e21")
 		)
@@ -4184,6 +4283,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 182.88 114.3 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 182.88 114.3 90)
 			(hide yes)
 			(show_name no)
@@ -4390,6 +4500,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 119.38 116.84 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 119.38 116.84 90)
 			(hide yes)
 			(show_name no)
@@ -4724,6 +4845,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 137.16 116.84 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "4"
 			(uuid "3a28d754-8dfc-4afe-8270-8f0a2b6eda35")
 		)
@@ -4947,6 +5079,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 106.68 73.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "36b1312a-e7d6-426e-a8be-55e026ecaf30")
 		)
@@ -5152,6 +5295,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 106.68 109.22 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "1e167ad3-4874-4b19-b4c1-c441164c4258")
 		)
@@ -5326,6 +5480,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 182.88 91.44 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 182.88 91.44 90)
 			(hide yes)
 			(show_name no)
@@ -5679,6 +5844,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 119.38 76.2 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "7daac80c-88f9-4242-95db-6b34a56af630")
 		)
@@ -5874,6 +6050,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 99.06 116.84 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 99.06 116.84 90)
 			(hide yes)
 			(show_name no)
@@ -6081,6 +6268,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 191.77 110.49 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 191.77 110.49 90)
 			(hide yes)
 			(show_name no)
@@ -6434,6 +6632,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 99.06 76.2 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "c62bbdb4-4e38-4c9b-993a-522580dbeb08")
 		)
@@ -6766,6 +6975,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 212.09 86.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "61dc2ec7-0df3-46c2-8ee0-b7613fdcff87")
 		)
@@ -6977,6 +7197,17 @@
 				)
 			)
 		)
+		(property "Description_1" ""
+			(at 99.06 81.28 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "3d07123e-e181-4d96-ba21-db232b6ed734")
 		)
@@ -7153,6 +7384,17 @@
 			)
 		)
 		(property "Field8" ""
+			(at 137.16 81.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description_1" ""
 			(at 137.16 81.28 0)
 			(hide yes)
 			(show_name no)

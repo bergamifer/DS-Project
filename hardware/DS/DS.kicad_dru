@@ -26,6 +26,22 @@
 	(condition "A.memberOfFootprint('IC3') && B.memberOfFootprint('IC3')"))
 
 # ---------------------------------------------------------------------------
+# IC4 — AP63356 (buck A, amplificadores), V-DFN3020-13
+#
+# Lo mismo que IC3, con otro número: los pines chicos van a 0,45 mm de paso y
+# miden 0,30 mm de ancho, así que entre dos vecinos quedan 0,15 mm POR
+# GEOMETRÍA DEL FOOTPRINT. Son ocho errores (pad contra pad: 1-2, 1-9, 2-3,
+# 3-4, 5-6, 6-7, 7-8, 8-9) que no dependen de cómo se rutee.
+#
+# 0,15 mm está por encima del mínimo de JLCPCB (0,127 mm). Mismo alcance que la
+# de IC3: sólo entre dos pads de IC4. Las PISTAS que salen de IC4 siguen
+# exigiendo su netclass: los errores de pista contra pad de IC4 quedan, y esos
+# sí son de ruteo.
+(rule "IC4 AP63356 DFN 0,45 mm — pad contra pad del mismo chip"
+	(constraint clearance (min 0.127mm))
+	(condition "A.memberOfFootprint('IC4') && B.memberOfFootprint('IC4')"))
+
+# ---------------------------------------------------------------------------
 # NOTA sobre el QR y la regla "barcode visual separation" (KiCad 10.0.3)
 #
 # No se puede apagar desde aca, y se probo de las cuatro maneras posibles:

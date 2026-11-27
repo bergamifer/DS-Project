@@ -35,9 +35,10 @@ Para preguntas de conectividad: `tools/netlist_digest.py` deja tres archivos gre
 ## Firmware
 
 ```bash
-cd firmware && make -j4         # TARGET = ds11_beamforming
+cd firmware && make -j4         # DS11 (por defecto) · make -j4 BOARD=ds12 para la DS12
 make flash-stlink               # ⚠️ no anda en todas las placas: si no, make todo-cube
-make ota OTA_HOST=192.168.100.77
+make ota OTA_HOST=192.168.100.77   # pregunta /status y se niega si la placa no es BOARD
+make test                       # tests de host, con mutantes que tienen que fallar
 ```
 
 - **La app vive en `0x08020000`**, no en `0x08000000`: hay un bootloader propio adelante.
@@ -71,6 +72,7 @@ Lo mismo para los hallazgos: verificar antes de afirmar, y decir **cómo** se ve
 |---|---|
 | Mapa del repo, estado y build | [README.md](README.md) |
 | La placa: revisiones, docs de DS12, reglas de DRC | [hardware/DS/README.md](hardware/DS/README.md) |
+| **DS12: qué está decidido, descartado y abierto** (empezar por acá) | [hardware/DS/DS12_DECISIONES.md](hardware/DS/DS12_DECISIONES.md) |
 | Herramientas de medición y de placa | [tools/README.md](tools/README.md) |
 | Por qué se decidió cada cosa, mes a mes | `docs/reporte_2026-0{7,8,9}.md` |
 | Operación en lenguaje llano | [docs/guia_operacion.md](docs/guia_operacion.md) |

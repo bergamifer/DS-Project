@@ -27,12 +27,22 @@ comprados: para eso es `hardware/DS/jlcpcb/production_files/BOM-DS.csv`. Los dos
 NO coinciden (p. ej. el 4,7 nF: DS.txt dice C883564, el BOM dice C2961271).
 
 USO:  tools/netlist_digest.py [netlist] [directorio_de_salida]
+      Sin argumentos usa hardware/DS/DS.net (el diseño en curso) y, si no existe,
+      hardware/DS/DS.txt (la DS11 fabricada, congelada como referencia).
+      Siempre imprime de cuándo es el netlist: un netlist viejo es una fuente
+      clásica de falsos hallazgos — reexportalo antes de sacar conclusiones.
 """
 import os
 import re
 import sys
 
-NETLIST = sys.argv[1] if len(sys.argv) > 1 else 'hardware/DS/DS.txt'
+def _por_defecto():
+    # DS.net = el que exporta KiCad del diseño en curso (DS12).
+    # DS.txt = el de la DS11 FABRICADA: se conserva congelado como referencia.
+    return 'hardware/DS/DS.net' if os.path.exists('hardware/DS/DS.net') else 'hardware/DS/DS.txt'
+
+
+NETLIST = sys.argv[1] if len(sys.argv) > 1 else _por_defecto()
 OUT = sys.argv[2] if len(sys.argv) > 2 else '.ds12_audit'
 
 
@@ -42,13 +52,20 @@ def natural(ref):
     return (re.sub(r'\d+$', '', ref), int(m.group(1)) if m else 0)
 
 
-def main():
-    if not os.path.exists(NETLIST):
-        sys.exit(f"no existe {NETLIST}")
-    os.makedirs(OUT, exist_ok=True)
-    src = open(NETLIST, encoding='utf-8', errors='replace').read()
+def leer(ruta):
+    """Lee un netlist de KiCad (.txt o .net) y devuelve (comps, nets, pin2net, meta).
 
-    # ---- componentes ----
+    comps    lista de dicts: ref, val, fp, lcsc, desc
+    nets     lista de (nombre, [(ref, pin, funcion), ...])
+    pin2net  {(ref, pin): nombre_de_red}
+    meta     {'fecha': ..., 'origen': ...}  — cuándo y desde qué esquemático se exportó
+    """
+    src = open(ruta, encoding='utf-8', errors='replace').read()
+    fecha = re.search(r'\(date "([^"]*)"\)', src)
+    origen = re.search(r'\(source "([^"]*)"\)', src)
+    meta = {'fecha': fecha.group(1) if fecha else '?',
+            'origen': os.path.basename(origen.group(1)) if origen else '?'}
+
     comps = []
     for b in src.split('\n\t\t(comp\n')[1:]:
         g = lambda p: (re.search(p, b).group(1) if re.search(p, b) else '')
@@ -60,12 +77,6 @@ def main():
             lcsc=lcsc.group(1) if lcsc else '',
             desc=g(r'\(description "([^"]*)"\)')[:90]))
 
-    with open(f'{OUT}/componentes.tsv', 'w') as f:
-        f.write("ref\tvalue\tfootprint\tLCSC\tdescription\n")
-        for c in sorted(comps, key=lambda c: natural(c['ref'])):
-            f.write(f"{c['ref']}\t{c['val']}\t{c['fp']}\t{c['lcsc']}\t{c['desc']}\n")
-
-    # ---- redes ----
     ns = src.find('\t(nets')
     nets, pin2net = [], {}
     for nb in re.split(r'\n\t\t\(net\n', src[ns:])[1:]:
@@ -80,7 +91,22 @@ def main():
         nets.append((nm, nodes))
         for r, p, fn in nodes:
             pin2net[(r, p)] = nm
+    return comps, nets, pin2net, meta
 
+
+def main():
+    if not os.path.exists(NETLIST):
+        sys.exit(f"no existe {NETLIST}")
+    os.makedirs(OUT, exist_ok=True)
+    comps, nets, pin2net, meta = leer(NETLIST)
+    print(f"netlist: {NETLIST}  (exportado {meta['fecha']} desde {meta['origen']})")
+
+    with open(f'{OUT}/componentes.tsv', 'w') as f:
+        f.write("ref\tvalue\tfootprint\tLCSC\tdescription\n")
+        for c in sorted(comps, key=lambda c: natural(c['ref'])):
+            f.write(f"{c['ref']}\t{c['val']}\t{c['fp']}\t{c['lcsc']}\t{c['desc']}\n")
+
+    # ---- redes ----
     with open(f'{OUT}/redes.txt', 'w') as f:
         f.write("# net\tnodos\tref.pin(pinfunction) ...\n")
         f.write("# pines al aire:  awk -F'\\t' '$2==1' redes.txt\n")

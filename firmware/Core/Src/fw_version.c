@@ -28,3 +28,24 @@
 
 const uint32_t fw_id    = (uint32_t)FW_ID;      /* hash git corto del commit */
 const uint32_t fw_build = (uint32_t)FW_BUILD;   /* epoch unix de la compilación */
+
+/* ===== Bloque de identidad de la imagen (ver fw_ident_t en ota.h) =====
+ *
+ * Vive acá porque este archivo se recompila en cada `make`: fw_id y build del
+ * bloque son siempre los de esta compilación. El linker lo pone en
+ * FW_IDENT_OFFSET desde el comienzo de la imagen (sección .fw_ident en
+ * STM32H743XX_FLASH.ld), para que se pueda leer del .bin sin ejecutarlo. */
+#include "ota.h"
+#include "uart_protocol.h"     /* PROTO_VERSION */
+#include "pin_definitions.h"   /* BOARD_ID */
+
+__attribute__((section(".fw_ident"), used))
+const fw_ident_t fw_ident = {
+    .magic     = FW_IDENT_MAGIC,
+    .version   = FW_IDENT_VERSION,
+    .board_id  = BOARD_ID,
+    .proto_ver = PROTO_VERSION,
+    .fw_id     = (uint32_t)FW_ID,
+    .build     = (uint32_t)FW_BUILD,
+    .rsv       = { 0, 0, 0, 0 },
+};

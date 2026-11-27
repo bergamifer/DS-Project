@@ -1,0 +1,67 @@
+AUTOPRUEBA
+  OK  RC 20 Ω/100 µF: -3.01 dB en 79,6 Hz (esperado −3,01)
+  OK  LC ideal: pico 100.0 a 159.1 kHz (esperado 100 a 159,2)
+  OK  SS34: 0.340 V @0,1 A, 0.450 V @1 A
+  OK  buck ancla: ΔIL 0.95 App (Fig.20 ≈1), Vpp 13.8 mV (Fig.20 ≈15-20, se acepta ×2)
+  OK  sin FB69 ni D19, H1 = 1.000000 (esperado 1: el filtro no inventa atenuación)
+  OK  rizado cero → inyección −∞ dBFS/Hz
+  OK  PSRR AP2125 a 1 kHz: 70.6 dB (tabla: 65)
+
+1) ATENUACIÓN POR ETAPA (dB, negativos = atenúa)
+   f        |Z+5VA| | H1 hoy  H1 +3×22µ | LDO opt/cen/pes | H3 ESR 0,5/1,5/3 Ω | DAC FB3
+      28.0k   6.61mΩ |    0.1    -14.5 | -55.1 -55.1 -55.1 |  -32.2  -23.1  -17.7 |   -1.2
+     100.0k   4.61mΩ |    1.5    -26.9 | -41.6 -41.6 -41.6 |  -32.3  -23.2  -17.8 |   -6.7
+     200.0k   4.35mΩ |   -0.9    -35.9 | -41.6 -33.5 -20.0 |  -32.3  -23.2  -18.1 |  -19.3
+     250.0k   4.26mΩ |   -4.7    -39.3 | -41.6 -30.9 -20.0 |  -32.3  -23.3  -18.3 |  -23.3
+     300.0k   4.16mΩ |   -8.2    -42.1 | -41.6 -28.7 -20.0 |  -32.3  -23.4  -18.5 |  -26.6
+     450.0k   3.80mΩ |  -16.0    -49.0 | -41.6 -24.0 -20.0 |  -32.3  -23.7  -19.3 |  -33.8
+    3072.0k   0.82mΩ |  -51.1    -72.5 | -41.6 -20.0 -20.0 |  -34.4  -31.6  -31.2 |  -68.4
+    6144.0k   1.05mΩ |  -64.6    -71.0 | -41.6 -20.0 -20.0 |  -38.0  -37.5  -37.4 |  -82.4
+
+2) RESONANCIA FB69 + capacitores de +5V_AUX (pico de |H1|; Q ≈ √(L/C)/R)
+   hoy    I_D19=   10 mA  r_d=2.893 Ω  f0= 172.1 kHz  Q=0.32  pico=-0.00 dB a    1.0 kHz
+   hoy    I_D19=   43 mA  r_d=0.711 Ω  f0= 172.1 kHz  Q=1.13  pico=+1.89 dB a  132.7 kHz
+   hoy    I_D19=  500 mA  r_d=0.106 Ω  f0= 172.1 kHz  Q=3.80  pico=+11.14 dB a  168.8 kHz
+   hoy    I_D19= 1000 mA  r_d=0.078 Ω  f0= 172.1 kHz  Q=4.27  pico=+12.08 dB a  169.2 kHz
+   hoy    peor: DCR 0,10 Ω, L 1,2 µH, 0,5 A → pico +14.10 dB a 147.7 kHz
+   hoy    H1 en la banda de los PAM con 0,5 A por D19: 200 kHz +6.4 dB, 250 kHz -1.5 dB, 300 kHz -6.4 dB, 450 kHz -15.4 dB
+   +3×22µ I_D19=   10 mA  r_d=2.893 Ω  f0=  28.4 kHz  Q=0.05  pico=-1.61 dB a    1.0 kHz
+   +3×22µ I_D19=   43 mA  r_d=0.711 Ω  f0=  28.4 kHz  Q=0.19  pico=-0.15 dB a    1.0 kHz
+   +3×22µ I_D19=  500 mA  r_d=0.106 Ω  f0=  28.4 kHz  Q=0.63  pico=-0.01 dB a    1.0 kHz
+   +3×22µ I_D19= 1000 mA  r_d=0.078 Ω  f0=  28.4 kHz  Q=0.70  pico=-0.00 dB a    1.0 kHz
+   +3×22µ peor: DCR 0,10 Ω, L 1,2 µH, 0,5 A → pico +0.65 dB a 15.0 kHz
+   +3×22µ H1 en la banda de los PAM con 0,5 A por D19: 200 kHz -34.1 dB, 250 kHz -38.0 dB, 300 kHz -41.2 dB, 450 kHz -48.6 dB
+   FB3/+5VA_DAC: pico -0.03 dB a 1.0 kHz (ESR elec 2 Ω); peor (ESR 8 Ω, DCR 0,1): +6.87 dB a 54.0 kHz
+
+3) FUENTES EN +5VA
+   buck A: ΔIL = 1.23 App (peor, L−20 % y 400 kHz: 1.73); fundamental 0.50 A → 1.89 mV pico a 450 kHz ±6 %
+   PAM (central): 0.15 A a f_i → 0.64 mV por tono; 32 tonos → 3.6 mV rms total
+   PAM (pesimista): 0.70 A a f_i → 2.98 mV por tono; 32 tonos → 16.9 mV rms total
+
+4) LLEGADA AL ADC (por tono, en 250 kHz y 450 kHz)
+   central  hoy     : AVDD    44.71 µV rms | VREFH máx    1.248 µV | inyección  -215.7 dBFS/Hz (S_q típ) /  -180.7 (sin shaping) vs piso -154.0 | tono plegado ≤ -178.7 dBFS (PSRR_HF 0 dB) / -198.7 (20 dB) vs bin -140.3
+   central  +3×22µ  : AVDD     0.85 µV rms | VREFH máx    0.028 µV | inyección  -250.1 dBFS/Hz (S_q típ) /  -215.1 (sin shaping) vs piso -154.0 | tono plegado ≤ -211.7 dBFS (PSRR_HF 0 dB) / -231.7 (20 dB) vs bin -140.3
+   pesimista hoy    : AVDD  3474.05 µV rms | VREFH máx  106.074 µV | inyección  -172.8 dBFS/Hz (S_q típ) /  -137.8 (sin shaping) vs piso -154.0 | tono plegado ≤ -145.6 dBFS (PSRR_HF 0 dB) / -165.6 (20 dB) vs bin -140.3
+   pesimista +3×22µ : AVDD    65.05 µV rms | VREFH máx    1.986 µV | inyección  -207.4 dBFS/Hz (S_q típ) /  -172.4 (sin shaping) vs piso -154.0 | tono plegado ≤ -180.1 dBFS (PSRR_HF 0 dB) / -200.1 (20 dB) vs bin -140.3
+
+5) BATIDOS PAM-PAM DEMODULADOS POR D19 (única alinealidad de la cadena antes del LDO)
+   hoy    central     : v_diodo   394.9 µV → batido  2742.36 nV c/u,  36645.1 nV rms en +5V_AUX → AVDD 13248.19 pV →  -213.9 dBFS
+   hoy    pesimista ×5: v_diodo  9214.7 µV → batido 1493062.39 nV c/u, 19951246.9 nV rms en +5V_AUX → AVDD 7212902.01 pV →  -159.2 dBFS
+   +3×22µ central     : v_diodo   276.9 µV → batido  1348.28 nV c/u,  18016.6 nV rms en +5V_AUX → AVDD 6513.47 pV →  -220.0 dBFS
+   +3×22µ pesimista ×5: v_diodo  6461.1 µV → batido 734063.57 nV c/u, 9809023.2 nV rms en +5V_AUX → AVDD 3546220.63 pV →  -165.3 dBFS
+
+6) RIZADO EN BANDA, DEPENDIENTE DEL PROGRAMA (corriente de audio de los PAM sobre el Zout del buck)
+    100 mV a  2000 Hz → +3.3VA   33.5 µV → AVDD -148.8 dBFS; VREFH  1.33 µV → bandas laterales -133.9 dBc (−1 dBFS de señal → -134.9 dBFS)
+        DAC: modulación de ganancia si ref = VCC1 directo:  -34.0 dB; si ref = VCOM filtrado:  -93.5 dB
+    500 mV a   600 Hz → +3.3VA  151.9 µV → AVDD -135.7 dBFS; VREFH 19.98 µV → bandas laterales -110.4 dBc (−1 dBFS de señal → -111.4 dBFS)
+        DAC: modulación de ganancia si ref = VCC1 directo:  -20.0 dB; si ref = VCOM filtrado:  -69.0 dB
+
+7) ALIASING CERCA DE k·f_mod (f_mod no está en la hoja: se barren 64/128/256 fs)
+   f_mod  3.072 MHz (armónico 12 de un PAM): 0.05 mV en +5VA → AVDD    13.4 nV (hoy) → con PSRR de AVDD = 0 dB: -156.8 dBFS
+   f_mod  3.072 MHz (armónico 12 de un PAM): 0.05 mV en +5VA → AVDD     1.1 nV (+3×22µ) → con PSRR de AVDD = 0 dB: -178.3 dBFS
+   f_mod  6.144 MHz (armónico 25 de un PAM): 0.03 mV en +5VA → AVDD     1.7 nV (hoy) → con PSRR de AVDD = 0 dB: -174.5 dBFS
+   f_mod  6.144 MHz (armónico 25 de un PAM): 0.03 mV en +5VA → AVDD     0.8 nV (+3×22µ) → con PSRR de AVDD = 0 dB: -180.9 dBFS
+   f_mod 12.288 MHz (armónico 49 de un PAM): 0.02 mV en +5VA → AVDD     1.4 nV (hoy) → con PSRR de AVDD = 0 dB: -176.2 dBFS
+   f_mod 12.288 MHz (armónico 49 de un PAM): 0.02 mV en +5VA → AVDD     0.5 nV (+3×22µ) → con PSRR de AVDD = 0 dB: -185.8 dBFS
+
+NOTA: z_5va es concentrado; la inductancia de las pistas entre PAM, bulk y FB69 la decide el PCB.

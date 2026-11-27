@@ -12,6 +12,19 @@
  * Internal helpers
  * ============================================================================ */
 
+/* Las esperas del driver suman ~25 ms por DAC. En el arranque no importa, pero
+ * la guarda de +5VA (DS12) reconfigura los cuatro DAC con el audio corriendo,
+ * y 100 ms sin servir fills son 40 deadlines perdidos. Por eso las esperas
+ * llaman a PCM1690_Yield(), que main.c redefine. Por defecto no hace nada, y
+ * entonces esto es exactamente HAL_Delay (que espera ms + 1). */
+__weak void PCM1690_Yield(void) { }
+
+static void pcm_espera(uint32_t ms)
+{
+    uint32_t t0 = HAL_GetTick();
+    while ((HAL_GetTick() - t0) < ms + 1u) PCM1690_Yield();
+}
+
 static HAL_StatusTypeDef PCM1690_WriteReg_Internal(I2C_HandleTypeDef *hi2c,
                                                     uint8_t dev_addr,
                                                     uint8_t reg, uint8_t data)
@@ -38,7 +51,7 @@ PCM1690_Status PCM1690_Init(I2C_HandleTypeDef *hi2c, uint8_t dev_addr,
 
     // Step 2: MCLK must already be running (caller's responsibility)
     // Step 3: Wait 1ms with RST held LOW
-    HAL_Delay(1);
+    pcm_espera(1);
 
     // Step 4: Release RST (HIGH)
     if (pins != NULL) {
@@ -46,12 +59,12 @@ PCM1690_Status PCM1690_Init(I2C_HandleTypeDef *hi2c, uint8_t dev_addr,
     }
 
     // Step 5: Wait 10ms for internal reset + PLL lock
-    HAL_Delay(10);
+    pcm_espera(10);
 
     // Step 6: Check I2C communication (3 retries)
     for (uint8_t retry = 0; retry < 3; retry++) {
         if (PCM1690_IsReady(hi2c, dev_addr)) break;
-        HAL_Delay(5);
+        pcm_espera(5);
         if (retry == 2) return PCM1690_ERR_NOT_FOUND;
     }
 
@@ -110,7 +123,7 @@ PCM1690_Status PCM1690_ConfigTDM(I2C_HandleTypeDef *hi2c, uint8_t dev_addr)
         if (status != HAL_OK) return PCM1690_ERR_I2C;
     }
 
-    HAL_Delay(10);  // Wait for config to take effect
+    pcm_espera(10);  // Wait for config to take effect
     return PCM1690_OK;
 }
 

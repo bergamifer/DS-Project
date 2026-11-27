@@ -11,9 +11,24 @@
 # ------------------------------------------------
 
 ######################################
-# target
+# target y placa
 ######################################
-TARGET = ds11_beamforming
+# La placa decide los pines, las capacidades y la geometría del array
+# (Core/Inc/board/). Por defecto DS11, para que nada de lo que ya existe cambie:
+#   make                → DS11, en build/ds11_beamforming.bin (la ruta de siempre)
+#   make BOARD=ds12     → DS12, en build_ds12/ds12_beamforming.bin
+# Un valor desconocido corta acá, antes de compilar nada.
+BOARD ?= ds11
+ifeq ($(BOARD),ds11)
+BOARD_DEF       = -DBOARD_DS11
+BOARD_BUILD_DIR = build
+else ifeq ($(BOARD),ds12)
+BOARD_DEF       = -DBOARD_DS12
+BOARD_BUILD_DIR = build_ds12
+else
+$(error BOARD tiene que ser ds11 o ds12, y vino "$(BOARD)")
+endif
+TARGET = $(BOARD)_beamforming
 
 
 ######################################
@@ -32,8 +47,8 @@ OPT = -O2
 #######################################
 # paths
 #######################################
-# Build path
-BUILD_DIR = build
+# Build path (una carpeta por placa: compilar una no pisa a la otra)
+BUILD_DIR = $(BOARD_BUILD_DIR)
 
 ######################################
 # source
@@ -71,6 +86,8 @@ Core/Src/uart_protocol.c \
 Core/Src/eeprom_config.c \
 Core/Src/ota.c \
 Core/Src/fw_version.c \
+Core/Src/power_guard.c \
+Core/Src/jack_leds.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc.c \
@@ -126,7 +143,8 @@ AS_DEFS =
 C_DEFS =  \
 -DUSE_PWR_LDO_SUPPLY \
 -DUSE_HAL_DRIVER \
--DSTM32H743xx
+-DSTM32H743xx \
+$(BOARD_DEF)
 
 
 # AS includes
@@ -397,8 +415,48 @@ clean-boot:
 #######################################
 # clean up
 #######################################
+# Borra los builds de las DOS placas.
 clean:
-	-rm -fR $(BUILD_DIR)
+	-rm -fR build build_ds12 build_test
+
+#######################################
+# Tests de host: corren en la Mac, sin placa.
+#######################################
+# Cada test se compila una vez tal cual —tiene que PASAR— y una vez por cada
+# mutante: una version rota a proposito que tiene que FALLAR. Si un mutante
+# pasa, el test no esta mirando lo que dice mirar, y el "ok" no vale nada.
+# Los tests escriben sus requisitos con constantes propias, nunca con las
+# macros del codigo: si no, el mutante se aprobaria a si mismo.
+HOST_CC ?= cc
+# En esta Mac las Command Line Tools traen un SDK (macOS 27) que su propio
+# linker no entiende ("tapi error: unknown architecture arm64e.x1"). El SDK de
+# Xcode si linkea; si esta instalado, se usa ese.
+XCODE_SDK := /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+ifneq ($(wildcard $(XCODE_SDK)),)
+HOST_ENV = SDKROOT=$(XCODE_SDK)
+endif
+TEST_CFLAGS = -std=c11 -Wall -Wextra -Werror -ICore/Inc
+
+# test:mutante,mutante,...
+HOST_TESTS = \
+  power_guard:-DPGD_ESTABLE_MS=0u,-DPGD_MAX_RESTAUR=200u,-DPGD_VENTANA_MS=1u \
+  vbus_detect:-DVBUS_ESTABLE_MS=0u \
+  jack_leds:-DJL_EXIGE_GUARDIA=0u,-DJL_LATIDO_ON_MS=0u,-DJL_LENTO_MEDIO_MS=100000000u,-DJL_RAPIDO_MEDIO_MS=500u
+
+test:
+	@mkdir -p build_test
+	@for t in $(HOST_TESTS); do \
+	  nombre=$${t%%:*}; mutantes=$$(echo $${t#*:} | tr ',' ' '); \
+	  $(HOST_ENV) $(HOST_CC) $(TEST_CFLAGS) tests/test_$$nombre.c -o build_test/$$nombre || exit 1; \
+	  ./build_test/$$nombre || exit 1; \
+	  for m in $$mutantes; do \
+	    $(HOST_ENV) $(HOST_CC) $(TEST_CFLAGS) $$m tests/test_$$nombre.c -o build_test/mutante || exit 1; \
+	    if ./build_test/mutante >/dev/null; then \
+	      echo "✗ el mutante $$m PASA: el test de $$nombre no lo detecta"; exit 1; \
+	    else echo "  mutante $$m: detectado"; fi; \
+	  done; \
+	done
+.PHONY: test
 
 clean-led:
 	-rm -fR $(LED_BUILD)
@@ -425,8 +483,27 @@ flash-todo: boot all
 
 # Flasheo por WiFi, sin cable. Requiere el bootloader ya instalado (make boot-flash).
 # El equipo queda mudo durante la carga y se reinicia solo al terminar.
+#
+# Antes de subir le pregunta a la placa QUÉ placa es (/status → "board") y se
+# niega si no coincide con BOARD: el binario de una DS12 en una DS11 maneja
+# pines que en la DS11 están al aire. Un ESP32 viejo no manda "board", y eso
+# sólo pasa en las DS11, así que la ausencia cuenta como DS11. Es la primera
+# de tres barreras: el ESP32 (409) y el STM32 (OTA_End) miran además el bloque
+# de identidad DENTRO del binario.
 OTA_HOST ?= ds-1e1f30.local
+OTA_PLACA = $(shell echo $(BOARD) | tr a-z A-Z)
 ota: all
+	@st=$$(curl -sS --max-time 10 "http://$(OTA_HOST)/status") || { \
+	  echo "No contesta http://$(OTA_HOST)/status: no subo nada."; exit 1; }; \
+	case "$$st" in *'"stm32":"ok"'*) ;; *) \
+	  echo "El ESP32 contesta pero el STM32 no: no se puede saber qué placa es."; \
+	  echo "No subo nada. Respuesta: $$st"; exit 1;; esac; \
+	placa=$$(printf '%s' "$$st" | sed -n 's/.*"board":"\(DS[0-9][0-9]*\)".*/\1/p'); \
+	[ -n "$$placa" ] || placa=DS11; \
+	if [ "$$placa" != "$(OTA_PLACA)" ]; then \
+	  echo "✗ $(OTA_HOST) es una $$placa y esto se compiló para $(OTA_PLACA)."; \
+	  echo "  Usá: make ota BOARD=$$(echo $$placa | tr A-Z a-z) OTA_HOST=$(OTA_HOST)"; exit 1; fi; \
+	echo "Placa en $(OTA_HOST): $$placa — coincide con BOARD=$(BOARD)."
 	@echo "Subiendo $(BUILD_DIR)/$(TARGET).bin a http://$(OTA_HOST) ..."
 	@curl -sS --max-time 240 -X POST --data-binary @$(BUILD_DIR)/$(TARGET).bin \
 	  "http://$(OTA_HOST)/firmware?id=$(GIT_ID)&build=$(BUILD_EPOCH)" ; echo
@@ -469,7 +546,7 @@ ota-esp:
 # ⚠️ st-flash NO sirve en esta Mac: escribe una vez y despues el ST-Link queda
 # enumerado pero no reclamable (libusb pide entitlements o root). Usar estos.
 CUBE ?= /Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI
-ESPTOOL ?= $(HOME)/.espressif/python_env/idf6.0_py3.13_env/bin/esptool.py
+ESPTOOL ?= $(HOME)/.espressif/python_env/idf6.1_py3.13_env/bin/esptool.py
 ESP_PORT ?= /dev/cu.usbmodem21301
 ESP_BUILD ?= ../firmware_esp32c3/build
 

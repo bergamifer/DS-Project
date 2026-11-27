@@ -1,0 +1,9 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP UJ20-C-V-G-SMT-P16-TR
+D Type C, USB 2.0, 480 Mbps, 30 Vdc, 5 A, Vertical, Surface Mount Anchor Pins Mounting Style, Surface Mount Contact Pin Type, Gold plated 3 in, Through Hole, 14 pin, USB Receptacle
+K
+F https://www.sameskydevices.com/product/resource/uj20-c-v-g-smt-p16-tr.pdf
+$ENDCMP
+#
+#End Doc Library

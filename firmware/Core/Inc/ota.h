@@ -114,6 +114,45 @@ _Static_assert(sizeof(ota_hdr_t) == OTA_FLASH_WORD,
 extern const uint32_t fw_id;      /* hash git corto; 0 = se compiló sin git */
 extern const uint32_t fw_build;   /* epoch unix de la compilación */
 
+/* ===================== Bloque de identidad de la imagen =====================
+ *
+ * 32 bytes en un lugar FIJO de la imagen (FW_IDENT_OFFSET desde su comienzo,
+ * lo pone el linker), que cualquiera puede leer SIN ejecutar nada: `make ota`,
+ * el ESP32 mientras recibe el .bin, OTA_End antes de escribir la cabecera, y
+ * mañana el bootloader. Dice para qué placa se compiló la imagen.
+ *
+ * Existe porque desde la DS12 hay dos firmwares para el mismo micro, y los dos
+ * arrancan en cualquiera de las dos placas: subir el equivocado no da error, da
+ * una placa que lee basura en pines que en la otra están al aire.
+ *
+ * Una imagen SIN este bloque es anterior a 2026-10: por definición, de la DS11.
+ * Por eso la DS11 la acepta y la DS12 no. */
+#define FW_IDENT_MAGIC      0x4D495344UL          /* "DSIM" en little-endian */
+#define FW_IDENT_OFFSET     0x400UL               /* desde el comienzo de la imagen */
+#define FW_IDENT_VERSION    1u
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;       /* FW_IDENT_MAGIC */
+    uint8_t  version;     /* FW_IDENT_VERSION */
+    uint8_t  board_id;    /* 11 = DS11, 12 = DS12 (BOARD_ID) */
+    uint16_t proto_ver;   /* PROTO_VERSION del protocolo UART que habla */
+    uint32_t fw_id;       /* = fw_id */
+    uint32_t build;       /* = fw_build */
+    uint32_t rsv[4];
+} fw_ident_t;
+
+_Static_assert(sizeof(fw_ident_t) == 32, "el bloque de identidad tiene que medir 32 bytes");
+
+extern const fw_ident_t fw_ident;
+
+/**
+ * @brief ¿Para qué placa es la imagen que está en `img_base`?
+ * @return el board_id del bloque (11, 12), 11 si la imagen no tiene bloque
+ *         (es anterior: por definición DS11), o 0 si el bloque está pero es
+ *         ilegible o de una versión desconocida.
+ */
+uint8_t OTA_ImageBoard(uint32_t img_base, uint32_t len);
+
 /* ===================== CRC32 =====================
  *
  * CRC-32 de zlib (poly reflejado 0xEDB88320, init y final invertidos), tabla de

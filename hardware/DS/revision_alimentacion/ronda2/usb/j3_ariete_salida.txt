@@ -1,0 +1,5 @@
+autoprueba j3_ariete: OK
+J3 con C31 vacío (descarga de 1 kΩ), 20 V presentes, cable con VBUS vivo. Peor pieza (−20 %, 85 °C).
+ n | VBUS 5,25 V clamp 0,5 Ω | 5,25 V sin clamp | 5,5 V clamp 2 Ω | 5,5 V sin clamp
+ 0 |        7.126 V          |     8.228 V      |     8.117 V     |    8.627 V
+ 3 |        5.732 V          |     5.766 V      |     5.943 V     |    5.971 V

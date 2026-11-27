@@ -89,6 +89,21 @@ los ponga en la ventana de 0,48–0,52×AVDD que pide el datasheet. Sin micrófo
 y una resistencia por pin. **Usar 22 kΩ, no 100 kΩ**: el ruido térmico de dos resistencias de
 100 k (~40 nV/√Hz) baja la DR a ~104 dB y se come los 111 dB del chip. ≈US$0,30 y 20 pasivos.
 
+> 🔧 **2026-10-27 — revisión.** El argumento de ruido vale sólo con la entrada **abierta**: con un micrófono
+> enchufado, la fuente (470 Ω + preamp, a través de 2,2 µF) cortocircuita el ruido de la R de bias, que queda
+> por debajo de 2 nV/√Hz incluso con 100 kΩ, contra ≈13 nV/√Hz del propio ADC. **Se usa 10 kΩ** (`C25744`, el
+> mismo valor del divisor): una sola pieza, y el pasa-altos queda en ≈18 Hz (acá decía ≈7 Hz: era la cuenta de una
+> pata sola contra 10 kΩ, sin los 10,4 kΩ del chip; corregido el 2026-11-10). Lo que **no** estaba resuelto
+> es contra qué tensión está la resistencia de entrada de ≈10,4 kΩ (hoja, «Input Resistance»): si es contra
+> ≈0 V, ninguna red pasiva lleva la pata a 1,65 V. Lo decide la medida **M4b** de
+> [`revision_alimentacion/medidas_ds11.md`](revision_alimentacion/medidas_ds11.md).
+> **M4b hecha (2026-10-27): 3,296 V** con 10 kΩ desde `+3.3VA` → la entrada no carga en modo común; los
+> 10,4 kΩ son diferenciales (entre P y N). **La red pasiva de 10 kΩ queda confirmada.** Pasa-altos diferencial
+> resultante ≈18 Hz (1,1 µF contra 20 k ∥ 10,4 k + 940 Ω).
+> **Estado al 2026-11-10:** en el esquemático está el nodo (R169, R170, C58, C62) y una sola de las 16
+> resistencias (R171, en AIN4N). Revisión completa de la decisión:
+> [DS12_REVISION_DECISIONES.md](DS12_REVISION_DECISIONES.md) §5.
+
 ### 3.3 Cuatro PTC en la expansión, no dos ✅
 
 `J5.9` y `J6.9` llevan `+3V3` directo (verificado en `pines_por_ic.txt`). El §6 de
@@ -112,6 +127,11 @@ cuatro SD. **US$ 0.** Sacar el stub del lado del STM32, no del DAC, para no carg
 R111-R114 (470 Ω) existen y van a **PE12 compartido**, que `main.c` declara como pin sin usar en
 modo analógico. Llevando cada uno a su propio GPIO libre (PE9, PE10, PE13, PE14) hay indicación
 de señal por canal **sin agregar un solo componente**.
+
+> 🔧 **2026-11-10.** «Ya están cableados» era cierto sólo en el papel: en la DS11 los LEDs están **al revés**
+> (M12c, confirmado en el banco) y nunca pudieron prender. Al invertirlos en la DS12 apareció otro problema: los
+> pads de LED de jacks vecinos quedan a 0,097 mm con redes distintas. Qué dibujar:
+> [DS12_REVISION_DECISIONES.md](DS12_REVISION_DECISIONES.md) §1.
 
 ### 3.7 Partir el `~SD` de los amplificadores en cuatro ⚠️
 

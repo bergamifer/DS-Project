@@ -1,0 +1,16 @@
+autoprueba: OK
+
+D23 con 14.5 V en reverso. R máxima de drenaje para que +5V_AUX no pase de 5,0 V
+(sin contar al AP2125 ni al AK5538 como sumideros: peor caso)
+
+  T [°C] | fuga típica | R máx (típica) | fuga máx esp. | R máx (máx esp.)
+     25  |      1.6 µA |     3183.2 kΩ |       187 µA  |     26.74 kΩ
+     40  |      5.4 µA |      924.0 kΩ |       235 µA  |     21.25 kΩ
+     60  |     28.2 µA |      177.6 kΩ |       320 µA  |     15.64 kΩ
+     75  |     97.0 µA |       51.5 kΩ |       402 µA  |     12.42 kΩ
+     85  |    205.0 µA |       24.4 kΩ |       469 µA  |     10.66 kΩ
+    100  |    630.0 µA |        7.9 kΩ |       630 µA  |      7.94 kΩ
+
+Candidatos del BOM: 1 kΩ (C11702) toma 5,0 mA a 5 V y disipa 25 mW; 10 kΩ (C25744) toma 0,5 mA y disipa 2,5 mW.
+     1 kΩ cubre el máximo especificado hasta más de 125 °C (con la fuga típica: siempre hasta 125 °C)
+    10 kΩ cubre el máximo especificado hasta 89 °C (con la fuga típica: no hasta 125 °C)

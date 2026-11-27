@@ -6,12 +6,22 @@ Firmware de audio beamforming: 5 SAI blocks (32 TX + 2 RX), DMA circular, delay 
 
 ```bash
 cd firmware
-make -j4                 # Compilar
+make -j4                 # Compilar para la DS11 (por defecto)
+make -j4 BOARD=ds12      # Compilar para la DS12
 make flash-stlink        # Flash via ST-Link SWD
-make clean && make -j4   # Clean build
+make clean && make -j4   # Clean build (clean borra las dos placas)
+make test                # Tests de host, en la Mac y sin placa (hoy: la guarda de +5VA)
 ```
 
-Output: `build/ds11_beamforming.bin`
+`make test` compila además versiones rotas a propósito (mutantes) y exige que el test las
+detecte: si un mutante pasa, el "ok" no vale nada. Usa el SDK de Xcode cuando está
+instalado, porque el de las Command Line Tools de esta Mac no linkea.
+
+Output: `build/ds11_beamforming.bin` (DS11) · `build_ds12/ds12_beamforming.bin` (DS12).
+
+**La placa la elige `BOARD`**, que define los pines, las capacidades y la geometría del array
+(`Core/Inc/board/`). Sin placa no compila, y `BOARD` con otro valor tampoco. Ver
+[`docs/ds12_firmware_plan.md`](../docs/ds12_firmware_plan.md).
 
 ## Estructura
 
@@ -22,6 +32,8 @@ Core/
     stm32h7xx_hal_conf.h    # HAL module config
     uart_protocol.h         # Protocolo binario (ds_config_t)
     pcm1690.h               # PCM1690 DAC driver
+    power_guard.h           # Guarda de +5VA (DS12): estados, sin HAL
+    board/                  # Pines y capacidades por placa (board.h elige)
     epaper.h                # SSD1681 e-paper driver
   Src/
     main.c                  # Init, clocks 480MHz, DMA, beamforming, main loop
@@ -29,9 +41,11 @@ Core/
     stm32h7xx_hal_msp.c     # MSP init (SAI, UART, I2C, SPI)
     uart_protocol.c         # Parser binario ESP32->STM32
     pcm1690.c               # PCM1690 DAC I2C driver
+    power_guard.c           # Guarda de +5VA: la máquina de estados (test en tests/)
     epaper.c                # SSD1681 driver
 STM32H743XX_FLASH.ld       # Linker script (.dma_buffer -> RAM_D2)
-Makefile                    # TARGET=ds11_beamforming
+tests/                      # Tests de host (make test)
+Makefile                    # BOARD ?= ds11 → TARGET = $(BOARD)_beamforming
 ```
 
 ## Clocks

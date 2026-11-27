@@ -363,7 +363,7 @@ ESP32 de cero, con los binarios de `firmware_esp32c3/build` (esptool v4.9 usa
 comandos con guion bajo):
 
 ```bash
-ESPTOOL=~/.espressif/python_env/idf6.0_py3.13_env/bin/esptool.py
+ESPTOOL=~/.espressif/python_env/idf6.1_py3.13_env/bin/esptool.py
 $ESPTOOL -p /dev/cu.usbmodem21301 --chip esp32c3 --before default_reset --after hard_reset \
   write_flash --flash_mode dio --flash_freq 80m --flash_size 4MB \
   0x0 bootloader/bootloader.bin 0x8000 partition_table/partition-table.bin \

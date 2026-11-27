@@ -142,6 +142,9 @@ firmware/build_boot/
 captura.wav
 *.wav
 
+### Tests de host del ESP32 ###
+firmware_esp32c3/test/build/
+
 # Salida del build del sitio (Cloudflare la regenera en cada push)
 /dist/
 .wrangler/

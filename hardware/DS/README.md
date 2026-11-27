@@ -24,7 +24,7 @@ Cada unidad es un nodo de audio autónomo que distribuye 32 canales amplificados
                          DS (por unidad)
 ┌────────────────────────────────────────────────────────┐
 │                                                        │
-│  24V DC ──> Buck ──> 5V ──> 32x PAM8302A ──> Speakers │
+│  20V DC ──> Buck ──> 5V ──> 32x PAM8302A ──> Speakers │
 │              │                                         │
 │              └──> LDOs ──> STM32H743 ──SAI──> 4x DAC  │
 │                                │                       │
@@ -34,7 +34,7 @@ Cada unidad es un nodo de audio autónomo que distribuye 32 canales amplificados
 │                                                        │
 └────────────────────────────────────────────────────────┘
          ↑                              ↑
-    24V daisy-chain              Cat5e/RJ45 audio
+    20V daisy-chain              Cat5e/RJ45 audio
     entre cajas                  (4 links × 8ch = 32ch)
 ```
 
@@ -44,7 +44,7 @@ Cada unidad es un nodo de audio autónomo que distribuye 32 canales amplificados
 - **8 canales de entrada** — ADC diferencial 32-bit (micrófonos o señal de referencia)
 - **Sincronización de red** — MCLK 24.576MHz (512xfS) compartido garantiza coherencia de fase entre unidades
 - **WiFi/BLE** — configuración y control inalámbrico
-- **Alimentación 24V** — bus daisy-chain entre cajas, un solo cable de potencia
+- **Alimentación 20V** — bus daisy-chain entre cajas, un solo cable de potencia
 
 ### Escala del sistema completo
 
@@ -53,7 +53,7 @@ Cada unidad es un nodo de audio autónomo que distribuye 32 canales amplificados
 | Canales de salida | 32 | ~576 |
 | Canales de entrada | 8 | ~144 |
 | Parlantes | 32 | ~500 |
-| Alimentación | 24V DC | Bus daisy-chain |
+| Alimentación | 20V DC | Bus daisy-chain |
 
 ---
 
@@ -83,11 +83,17 @@ El STM32H743 corre a 480MHz con DMA audio pipeline y opera los 5 puertos SAI sim
 | AK5538VN | ADC 8ch diferencial 32-bit | SAI3_B (TDM256) |
 | 32× PAM8302A | Amplificador Class-D 2.5W/ch | — |
 | ESP32-C3-Mini | WiFi / BLE | UART |
-| MP2315S | Buck 24V→5V 3A | — |
+| MP2315S | Buck 20V→5V 3A | — |
 
 > **En DS12 la etapa de fuente cambia entera:** el buck pasa a **AP63356** y el LDO digital
 > desaparece. Todo el diseño, con valores y con el porqué de cada uno, en
 > [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md).
+>
+> **Entrada de la DS12: 24 V, ajustada a 24,0 V y nunca más de 25,5 V** (decidido el 2026-10-23;
+> detalle en [DS12_ENTRADA_24V.md](DS12_ENTRADA_24V.md)). Por debajo de ~15 V los amplificadores
+> no encienden (el micro sí); por encima de ~26,7 V conduce el TVS y puede abrirse el fusible.
+> **Esa regla es sólo de la DS12.** La DS11 nunca va a 24 V: su buck MP2315S aguanta 26 V como
+> máximo absoluto. Antes este párrafo decía «20 V, ventana 15–21 V, 24 V no sirve»: ya no vale.
 
 ### PCB
 
@@ -114,7 +120,7 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 
 - PCM1802 (2ch) reemplazado por AK5538VN (8ch, 32-bit) — 4× más entradas
 - 32× PAM8302A integrados en PCB (antes módulo HAT externo)
-- Fuente 24V con buck local por placa (antes fuente externa)
+- Fuente 20V con buck local por placa (antes fuente externa)
 - Supply analógico separado (+3.3VA) para el ADC
 
 ---
@@ -123,6 +129,8 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 
 ### DS12 — lo que se está diseñando ahora
 
+- **[DS12_DECISIONES.md](DS12_DECISIONES.md) — qué está decidido, qué se descartó y qué sigue
+  abierto**, en una página. Empezar por acá; los demás son el porqué de cada fila
 - **[DS12_CHECKLIST.md](DS12_CHECKLIST.md) — la lista para tildar mientras dibujás.**
   El índice de todo lo de abajo, en orden de dibujo: qué poner y dónde está el porqué
 - [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md) — **La etapa de fuente, lista para dibujar.**
@@ -133,6 +141,16 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 - [DS12_AUDITORIA.md](DS12_AUDITORIA.md) — Auditoría previa a fabricar. Doce dimensiones,
   y **sólo lo que sobrevivió a verificación**: cada ítem dice cómo se comprobó
 - [DS12_USB_STM32.md](DS12_USB_STM32.md) — El USB del STM32 (PA11/PA12 hoy al aire)
+- [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md) — Micrófonos MEMS I2S DNP (MSM261S4030H0R): uno en el STM32 (I2S2) y uno en el ESP32 (GPIO6/7/3)
+- [DS12_CAMARA_DVP_FUTURO.md](DS12_CAMARA_DVP_FUTURO.md) — Cámara DVP/MIPI: **no entra en la DS12** (D4–D7 caen sobre el audio); idea archivada, con el cruce de pines
+- [DS12_REVISION_DECISIONES.md](DS12_REVISION_DECISIONES.md) — **Revisión del 2026-11-10** de las decisiones recientes
+  (24 V, LEDs de J9, R20, bias del ADC, micrófono): qué se sostiene, dos errores a corregir y una mejora
+- [DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md) — **Revisión de la
+  alimentación (octubre 2026)**: las fuentes y cómo conviven, contra las hojas de datos, con
+  refutación a ciegas. Los planes que la guían son
+  [DS12_REVISION_ALIMENTACION_PLAN.md](DS12_REVISION_ALIMENTACION_PLAN.md) y
+  [DS12_REVISION_ALIMENTACION_RONDA2.md](DS12_REVISION_ALIMENTACION_RONDA2.md). Las cuentas y
+  simulaciones están en [revision_alimentacion/](revision_alimentacion/), todas con autoprueba
 
 ### Histórico
 
