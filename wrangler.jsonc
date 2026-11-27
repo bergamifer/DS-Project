@@ -5,14 +5,18 @@
   // Worker creado en el panel de Cloudflare.
   //
   //   Build command:  mkdir -p dist && python3 sitio/build_standalone.py && cp sitio/domosonica.html dist/index.html
-  //   Deploy command: npx wrangler deploy           (rama main: publica el sitio)
+  //   Deploy command: npx wrangler deploy   (rama main: publica el sitio)
   //   Non-production branch deploy command:
-  //                   npx wrangler versions upload  (otras ramas: versión de prueba
-  //                                                  con su propio link, sin publicar)
-  //   Ojo: `npx wrangler preview` ya no existe en wrangler; con ese comando el
-  //   build de toda rama que no sea main falla en el último paso.
+  //                   npx wrangler preview  (otras ramas: una "Preview" con su
+  //                                          propio link, sin tocar el sitio)
+  //   `wrangler preview` (beta desde wrangler 4.1xx) exige el bloque `previews`
+  //   de abajo, aunque esté vacío: sin él, el build de toda rama que no sea
+  //   main falla en el último paso.
   "name": "domosonica",
   "compatibility_date": "2026-11-01",
+  // Habilita `wrangler preview` para las ramas. Vacío a propósito: los assets y
+  // la compatibilidad se heredan de arriba.
+  "previews": {},
   "assets": {
     "directory": "./dist",
     // Para direcciones que no existen, servir dist/404.html con código 404
