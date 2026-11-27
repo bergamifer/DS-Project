@@ -119,6 +119,14 @@ secrets.h
 firmware_esp32c3/main/secrets.h
 # Config personal de Claude Code (no compartir: rutas y permisos locales)
 .claude/settings.local.json
+# Copias de traslado entre la Mac y la nube (git bundle / format-patch): son
+# transitorias, el trabajo real vive en ramas de GitHub. Se borran una vez que
+# el commit que llevan aparece en algún origin/* (git branch -r --contains <sha>).
+.claude/*.bundle
+.claude/*.bundle.lock
+.claude/*.patch
+# Worktrees de sesiones de Claude: cada uno tiene su rama propia.
+.claude/worktrees/
 
 # PDF generado de la guia: se rehace con docs/pdf/hacer_pdf.sh en 5 segundos.
 # Fuera del repo a proposito — es un binario de ~460 KB que cambiaria en cada

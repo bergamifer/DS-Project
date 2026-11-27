@@ -66,6 +66,17 @@ es una opinión.
 
 Lo mismo para los hallazgos: verificar antes de afirmar, y decir **cómo** se verificó.
 
+## Git — ramas y respaldo
+
+- **Un push a `main` publica el sitio** (domosonica.com.ar, Worker de Cloudflare). El
+  trabajo va en ramas y PRs; a `main` se mergea a propósito, nunca de pasada.
+- **"Respaldado" quiere decir que el commit está en GitHub**, en cualquier rama:
+  `git branch -r --contains <sha>`. Para ver qué ramas locales tienen algo que GitHub no:
+  `for b in $(git for-each-ref --format='%(refname:short)' refs/heads); do echo "$(git rev-list --count $b --not --remotes) $b"; done`
+  (un número distinto de 0 es trabajo que sólo vive en esta Mac).
+- Los `git bundle` / `.patch` en `.claude/` son copias de traslado entre la Mac y la nube:
+  están en el `.gitignore` y se borran una vez que su commit aparece en `origin/*`.
+
 ## Dónde está cada cosa
 
 | | |
