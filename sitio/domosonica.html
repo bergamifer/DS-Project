@@ -101,6 +101,7 @@
   a{color:var(--wood);text-decoration:none;border-bottom:1px solid rgba(201,160,107,.35);transition:color .2s,border-color .2s}
   a:hover{color:var(--wave);border-color:rgba(111,224,206,.5)}
   a:focus-visible{outline:2px solid var(--wave);outline-offset:3px;border-radius:2px}
+  #field:focus-visible{outline:2px solid var(--wave);outline-offset:-4px}
   strong{color:var(--air);font-weight:600}
   em{color:var(--air)}
 
@@ -259,7 +260,7 @@
 </header>
 
 <section class="hero" id="inicio">
-  <canvas id="field" aria-label="Simulaci&#243;n interactiva de interferencia ac&#250;stica: una fila de parlantes concentra sus ondas en un punto focal que se puede mover con el puntero"></canvas>
+  <canvas id="field" tabindex="0" role="img" aria-label="Simulaci&#243;n interactiva de interferencia ac&#250;stica: una fila de parlantes concentra sus ondas en un punto focal que se puede mover con el puntero o con las flechas del teclado"></canvas>
   <div class="hero-copy">
     <p class="eyebrow">Instalaci&#243;n sonora &#183; instrumento en construcci&#243;n</p>
     <h1>Domosonica</h1>
@@ -499,8 +500,14 @@
   for (let i = 0; i < N; i++) sx[i] = -ARR_W / 2 + i * spacing;
 
   let cw = 0, ch = 0, sceneH = 2.5, zBottom = 0;
-  let dist = null;               // distancias precomputadas fuente\u2192celda
-  const pd = new Float32Array(N);
+  /* Para cada par fuente\u2192celda se guarda e^{iKd} (coseno y seno de la fase que
+     pone la distancia). Mover el foco s\u00f3lo cambia la fase de cada fuente, que
+     es la misma para todas las celdas: e^{i(Kd \u2212 \u03c6)} = e^{iKd} \u00b7 e^{\u2212i\u03c6}.
+     As\u00ed cada cuadro es sumas y productos, sin trigonometr\u00eda por celda: el
+     dibujo es id\u00e9ntico y cuesta ~10 veces menos (en celular antes trababa
+     la p\u00e1gina varios segundos al cargar). Orden celda-mayor para el cach\u00e9. */
+  let cosKd = null, sinKd = null;
+  const pc = new Float32Array(N), ps = new Float32Array(N);
 
   /* --- paleta del campo: tinta \u2192 teal \u2192 blanco caliente (gamma horneado) --- */
   const LR = new Uint8Array(256), LG = new Uint8Array(256), LB = new Uint8Array(256);
@@ -533,7 +540,7 @@
   function buildGeometry() {
     sceneH = SCENE_W * (ch / cw || 0.62);
     zBottom = -0.06 * sceneH;
-    if (!dist || dist.length !== N * CELLS) dist = new Float32Array(N * CELLS);
+    if (!cosKd) { cosKd = new Float32Array(N * CELLS); sinKd = new Float32Array(N * CELLS); }
     let c = 0;
     for (let gy = 0; gy < FH; gy++) {
       const z = zBottom + ((FH - 1 - gy) / (FH - 1)) * sceneH;
@@ -541,7 +548,9 @@
         const x = (gx / (FW - 1) - 0.5) * SCENE_W;
         for (let i = 0; i < N; i++) {
           const dx = x - sx[i];
-          dist[i * CELLS + c] = Math.sqrt(dx * dx + z * z);
+          const kd = K * Math.sqrt(dx * dx + z * z);
+          cosKd[c * N + i] = Math.cos(kd);
+          sinKd[c * N + i] = Math.sin(kd);
         }
         c++;
       }
@@ -569,7 +578,8 @@
     for (let i = 0; i < N; i++) {
       const dx = fx - sx[i];
       const d = Math.sqrt(dx * dx + fz * fz);
-      pd[i] = K * d;
+      pc[i] = Math.cos(K * d);
+      ps[i] = Math.sin(K * d);
       if (d < dmin) dmin = d;
       if (d > dmax) dmax = d;
     }
@@ -578,10 +588,11 @@
     for (let gy = 0; gy < FH; gy++) {
       for (let gx = 0; gx < FW; gx++) {
         let re = 0, im = 0;
+        const b = c * N;
         for (let i = 0; i < N; i++) {
-          const ph = K * dist[i * CELLS + c] - pd[i];
-          re += Math.cos(ph);
-          im += Math.sin(ph);
+          const ck = cosKd[b + i], sk = sinKd[b + i];
+          re += ck * pc[i] + sk * ps[i];
+          im += sk * pc[i] - ck * ps[i];
         }
         let li = (Math.sqrt(re * re + im * im) * invN * amp) | 0;
         if (li > 255) li = 255;
@@ -649,6 +660,22 @@
     setTarget(e);
   });
   addEventListener("pointerup", () => { dragging = false; });
+
+  /* Teclado: con el campo enfocado (Tab), las flechas mueven el foco 10 cm. */
+  cv.addEventListener("keydown", e => {
+    const st = 0.1, k = e.key;
+    if (k === "ArrowLeft") tgx -= st;
+    else if (k === "ArrowRight") tgx += st;
+    else if (k === "ArrowUp") tgz += st;
+    else if (k === "ArrowDown") tgz -= st;
+    else return;
+    e.preventDefault();
+    tgx = Math.max(-.48 * SCENE_W, Math.min(.48 * SCENE_W, tgx));
+    tgz = Math.max(0.22, Math.min(sceneH * 0.98, tgz));
+    lastPoke = performance.now();
+    hideHint();
+    if (RM) { fx = tgx; fz = tgz; needsField = true; }
+  });
 
   function tick(ts) {
     requestAnimationFrame(tick);
