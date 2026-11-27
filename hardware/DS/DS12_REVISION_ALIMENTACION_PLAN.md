@@ -1,5 +1,9 @@
 # DS12 — Plan de revisión del esquemático: fuentes de alimentación y su convivencia
 
+> **🗂️ 2026-11-10 — plan ya ejecutado; sólo interesa como método.** Los resultados y lo decidido
+> están en [DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md) (ronda 2: §9) y resumidos en
+> [DS12_DECISIONES.md](DS12_DECISIONES.md). El «Estado» de abajo es del 1-oct y quedó viejo.
+
 > Escrito el 2026-10-01 para que lo ejecute Opus. **Es un plan, no un informe**: todo lo que
 > figura como *sospecha* (🔎) sale de leer el netlist y los documentos, **no está verificado**, y
 > el trabajo consiste justamente en confirmarlo o refutarlo contra la hoja de datos.

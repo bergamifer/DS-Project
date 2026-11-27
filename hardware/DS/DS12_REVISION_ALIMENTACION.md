@@ -172,6 +172,19 @@ Se hace sobre una DS11 **sin alimentar**, que tiene el mismo PAM y la misma R19/
 (el tester mide 1 kΩ bien; no se anotó si se esperaron los 10 s). **Decisión: R20 se queda en 33 Ω** (la opción
 de 5,1 kΩ no se toma) **y la guarda de firmware de la opción 1 sigue siendo obligatoria**, porque la inyección es real.
 
+> 🔧 **2026-11-10 — propuesta: R20 a 470 Ω.** Entre 33 Ω y 5,1 kΩ no se había mirado ningún valor. Con **470 Ω**
+> (`C25117`, 0402: hay que cambiarle la huella a R20, que es 0603) y los ≈7,6 kΩ de M5:
+>
+> - SD en alto queda en 3,3 × 7,6 / (7,6 + 0,47) = **3,11 V**, contra 1,2 V mínimo del PAM8302A (DS41333, «SHD Input High»);
+> - con `+5VA` en 0, PD3 entrega (3,3 − 0,55) / 470 = **5,9 mA**, debajo de los 8 mA con los que el STM32 garantiza sus
+>   niveles y lejos de los 20 mA máximos.
+>
+> Así PD3 queda protegido **aunque la guarda de firmware falle** (un error, o el programa frenado con el depurador).
+> La guarda no se toca: sigue haciendo falta para el orden de encendido y para el golpe al apagar (S10).
+> Sin cambiar la huella: 200 Ω (`C8218`, 0603, ya en la placa) da 3,22 V y 13,8 mA.
+> **No está probado**: validarlo en una DS11 implica encender amplificadores, y eso lo decide Fernando. La tabla
+> completa está en [DS12_REVISION_DECISIONES.md](DS12_REVISION_DECISIONES.md) §3.
+
 ---
 
 ## 3. S4 — el USB ve más de 10 µF

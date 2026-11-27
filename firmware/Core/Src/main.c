@@ -31,6 +31,7 @@
 #include "ota.h"
 #include "power_guard.h"
 #include "vbus_detect.h"
+#include "jack_leds.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -1722,6 +1723,9 @@ static const char *Amps_MotivoNo(void);
 #if BOARD_HAS_5VA_SENSE
 static void V5A_Init(void);
 static void V5A_Tick(void);
+#if BOARD_HAS_JACK_LEDS
+static void JackLeds_Tick(void);
+#endif
 #endif
 #if BOARD_HAS_VBUS_SENSE
 static void VBUS_Init(void);
@@ -2938,6 +2942,9 @@ int main(void)
 #endif
 #if BOARD_HAS_VBUS_SENSE
     VBUS_Tick();          /* PA5: computadora en el USB del STM32 */
+#endif
+#if BOARD_HAS_JACK_LEDS
+    JackLeds_Tick();      /* PE12/PE13: latido y estado de los amplificadores */
 #endif
 
     // ===== AUTOFOCUS scan driver (chunked correlation, never blocks fills) =====
@@ -5064,6 +5071,17 @@ static void MX_GPIO_Init(void)
                        | GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);   // PE0,PE1,PE9,PE10,PE12-PE15
 
+#if BOARD_HAS_JACK_LEDS
+  /* Los LEDs de J9 (DS12) usan PE12 y PE13, que el bloque de arriba dejó en
+   * analógico: acá pasan a salida, apagados. En la DS11 siguen al aire. */
+  GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull  = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Pin   = JACK_LED1_PIN | JACK_LED2_PIN;
+  HAL_GPIO_Init(JACK_LED_PORT, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(JACK_LED_PORT, JACK_LED1_PIN | JACK_LED2_PIN, GPIO_PIN_RESET);
+#endif
+
   GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_4 | GPIO_PIN_15;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);   // PB2,PB4,PB15
 
@@ -6656,6 +6674,34 @@ static void Autostart_Tick(void)
     default: break;
   }
 }
+
+#if BOARD_HAS_JACK_LEDS
+/** @brief Los LEDs de J9. El patrón lo decide jack_leds.c (sin HAL, con test);
+ *  acá sólo se juntan las entradas y se escriben los pines cuando cambian. */
+static void JackLeds_Tick(void) {
+  static uint8_t ult1 = 0, ult2 = 0;
+  jl_entrada_t e;
+  e.mismatch = board_mismatch;
+  e.amps_on  = amps_enabled;
+#if BOARD_HAS_5VA_SENSE
+  e.guardia_ok = (!v5a_disparo && pgd_permitido(&v5a_guard)) ? 1u : 0u;
+  e.bloqueado  = v5a_guard.bloqueado;
+#else
+  e.guardia_ok = 1u;
+  e.bloqueado  = 0u;
+#endif
+  uint8_t l1, l2;
+  jack_leds_patron(&e, HAL_GetTick(), &l1, &l2);
+  if (l1 != ult1) {
+    HAL_GPIO_WritePin(JACK_LED_PORT, JACK_LED1_PIN, l1 ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    ult1 = l1;
+  }
+  if (l2 != ult2) {
+    HAL_GPIO_WritePin(JACK_LED_PORT, JACK_LED2_PIN, l2 ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    ult2 = l2;
+  }
+}
+#endif /* BOARD_HAS_JACK_LEDS */
 
 /** @brief Por qué NO se pueden encender los amplificadores ahora; NULL si se
  *  puede. Una sola función para los cuatro caminos (autoarranque, POST /amps,

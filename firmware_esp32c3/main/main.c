@@ -45,6 +45,7 @@
 // WiFi credentials live in secrets.h (gitignored). Copy secrets.h.example to
 // secrets.h and fill in your network — keeps passwords out of the public repo.
 #include "secrets.h"
+#include "mic.h"
 
 /* Identidad ÚNICA por placa, derivada del MAC del ESP32.
  *
@@ -982,6 +983,20 @@ static const char *reset_name(uint32_t rsr)
     if (rsr & (1u << 24)) return "SFT";    /* SFTRSTF  */
     if (rsr & (1u << 22)) return "PIN";    /* PINRSTF  */
     return "?";
+}
+
+/* Para el micrófono (mic.c): pide el status y devuelve placa, modo y amps.
+ * Mismo mecanismo que status_handler; si los dos piden a la vez, uno de los
+ * dos puede esperar de más o recibir el status del otro, que es igual de nuevo. */
+static int mic_estado(uint8_t *placa, uint8_t *modo, uint8_t *amps)
+{
+    xSemaphoreTake(status_sem, 0);
+    uart_send_frame(CMD_GET_STATUS, NULL, 0);
+    if (xSemaphoreTake(status_sem, 800 / portTICK_PERIOD_MS) != pdTRUE) return 0;
+    *placa = stm32_board();
+    *modo  = last_status.mode_idx;
+    *amps  = (last_status.state_flags & STATE_F_AMPS) ? 1 : 0;
+    return 1;
 }
 
 static esp_err_t status_handler(httpd_req_t *req)
@@ -2847,6 +2862,12 @@ static httpd_handle_t start_webserver(void)
             { .uri = "/cal",     .method = HTTP_GET,  .handler = cal_handler     },
             { .uri = "/modes",   .method = HTTP_GET,  .handler = modes_handler   },
             { .uri = "/fase",    .method = HTTP_GET,  .handler = fase_handler    },
+            /* El micrófono del ESP32 (DS12, mic.c). En una DS11 contestan
+             * "no activo" y nunca tocan GPIO3/6/7. */
+            { .uri = "/mic/nivel",    .method = HTTP_GET,  .handler = mic_nivel_handler        },
+            { .uri = "/mic/escuchar", .method = HTTP_GET,  .handler = mic_escuchar_handler     },
+            { .uri = "/mic/chequeo",  .method = HTTP_POST, .handler = mic_chequeo_post_handler },
+            { .uri = "/mic/chequeo",  .method = HTTP_GET,  .handler = mic_chequeo_get_handler  },
     };
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -3104,6 +3125,15 @@ void app_main(void)
 
     // Tarea de monitoreo: lee UART1 RX y forwardea con prefijo [STM32]
     xTaskCreate(stm32_monitor_task, "stm32_mon", 4096, NULL, 5, NULL);
+
+    /* El micrófono del ESP32: después del monitor del UART, porque lo primero
+     * que hace es preguntarle al STM32 qué placa es. */
+    static const mic_host_t mic_host = {
+        .enviar = uart_send_and_wait_ack,
+        .estado = mic_estado,
+        .cmd_set_mode = CMD_SET_MODE,
+    };
+    mic_init(&mic_host);
 
     // WiFi + HTTP
     wifi_init();

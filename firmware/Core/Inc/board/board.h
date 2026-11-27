@@ -37,6 +37,7 @@
  || !defined(BOARD_HAS_5VA_SENSE) || !defined(BOARD_HAS_PG) \
  || !defined(BOARD_HAS_VBUS_SENSE) || !defined(BOARD_HAS_USB_FS) \
  || !defined(BOARD_HAS_TIMING_LINE) || !defined(BOARD_HAS_ID_JUMPER) \
+ || !defined(BOARD_HAS_JACK_LEDS) \
  || !defined(ID_JUMPER_ESPERADO)
   #error "El archivo de placa no declara todas las capacidades (ver board_ds11.h)"
 #endif

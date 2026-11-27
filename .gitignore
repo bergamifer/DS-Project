@@ -141,3 +141,6 @@ firmware/build_boot/
 # nombre propio y con el .md que dice que se estaba midiendo.
 captura.wav
 *.wav
+
+### Tests de host del ESP32 ###
+firmware_esp32c3/test/build/

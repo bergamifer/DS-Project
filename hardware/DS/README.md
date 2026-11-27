@@ -89,9 +89,11 @@ El STM32H743 corre a 480MHz con DMA audio pipeline y opera los 5 puertos SAI sim
 > desaparece. Todo el diseño, con valores y con el porqué de cada uno, en
 > [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md).
 >
-> **Entrada de la DS12: 20 V nominal, ventana de 15 a 21 V.** Por debajo de ~14,7 V los
-> amplificadores no encienden (el micro sí); por encima de ~22 V conduce el TVS y puede abrirse
-> el fusible. Una fuente de 12 V o de 24 V no sirve.
+> **Entrada de la DS12: 24 V, ajustada a 24,0 V y nunca más de 25,5 V** (decidido el 2026-10-23;
+> detalle en [DS12_ENTRADA_24V.md](DS12_ENTRADA_24V.md)). Por debajo de ~15 V los amplificadores
+> no encienden (el micro sí); por encima de ~26,7 V conduce el TVS y puede abrirse el fusible.
+> **Esa regla es sólo de la DS12.** La DS11 nunca va a 24 V: su buck MP2315S aguanta 26 V como
+> máximo absoluto. Antes este párrafo decía «20 V, ventana 15–21 V, 24 V no sirve»: ya no vale.
 
 ### PCB
 
@@ -127,6 +129,8 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 
 ### DS12 — lo que se está diseñando ahora
 
+- **[DS12_DECISIONES.md](DS12_DECISIONES.md) — qué está decidido, qué se descartó y qué sigue
+  abierto**, en una página. Empezar por acá; los demás son el porqué de cada fila
 - **[DS12_CHECKLIST.md](DS12_CHECKLIST.md) — la lista para tildar mientras dibujás.**
   El índice de todo lo de abajo, en orden de dibujo: qué poner y dónde está el porqué
 - [DS12_ALIMENTACION.md](DS12_ALIMENTACION.md) — **La etapa de fuente, lista para dibujar.**
@@ -137,7 +141,10 @@ Señal diferencial sobre Cat5e/RJ45 en topología daisy-chain. 4 pares trenzados
 - [DS12_AUDITORIA.md](DS12_AUDITORIA.md) — Auditoría previa a fabricar. Doce dimensiones,
   y **sólo lo que sobrevivió a verificación**: cada ítem dice cómo se comprobó
 - [DS12_USB_STM32.md](DS12_USB_STM32.md) — El USB del STM32 (PA11/PA12 hoy al aire)
-- [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md) — Micrófono MEMS I2S de banco, DNP, sobre las redes I2S2
+- [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md) — Micrófonos MEMS I2S DNP (MSM261S4030H0R): uno en el STM32 (I2S2) y uno en el ESP32 (GPIO6/7/3)
+- [DS12_CAMARA_DVP_FUTURO.md](DS12_CAMARA_DVP_FUTURO.md) — Cámara DVP/MIPI: **no entra en la DS12** (D4–D7 caen sobre el audio); idea archivada, con el cruce de pines
+- [DS12_REVISION_DECISIONES.md](DS12_REVISION_DECISIONES.md) — **Revisión del 2026-11-10** de las decisiones recientes
+  (24 V, LEDs de J9, R20, bias del ADC, micrófono): qué se sostiene, dos errores a corregir y una mejora
 - [DS12_REVISION_ALIMENTACION.md](DS12_REVISION_ALIMENTACION.md) — **Revisión de la
   alimentación (octubre 2026)**: las fuentes y cómo conviven, contra las hojas de datos, con
   refutación a ciegas. Los planes que la guían son

@@ -310,6 +310,17 @@ imprime siempre para que no se cuele sin querer. Y los números que pone en el D
 **posiciones físicas**, no canales: hoy `SPK_PAIR_SWAP = 1` y el cono de la posición p lo
 mueve el canal p^1.
 
+### `verificar_bias_adc.py` — ¿las 16 entradas del ADC tienen su bias?
+Lee el netlist que escribe `sch2net.py` y comprueba que cada red `AINnP/N` del AK5538
+tiene **una** resistencia de 10 kΩ al nodo VCM (el de C58 y C62), y que no cuelga nada de
+más. Sale con código 1 si falta alguna y nombra cuál. Hoy da **1 de 16** (sólo AIN4N): la
+lista de las 15 que faltan, con red, valor y pieza, está en
+[`DS12_BIAS_ADC_LISTA.md`](../hardware/DS/DS12_BIAS_ADC_LISTA.md).
+```
+tools/sch2net.py hardware/DS/DS.kicad_sch /tmp/DS.net && tools/verificar_bias_adc.py /tmp/DS.net
+tools/verificar_bias_adc.py --autoprueba      # que el chequeo pueda fallar
+```
+
 ---
 
 ## Una regla que costó aprender

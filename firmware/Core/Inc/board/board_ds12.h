@@ -22,8 +22,17 @@
 #define BOARD_HAS_VBUS_SENSE    1
 #define BOARD_HAS_USB_FS        1
 #define BOARD_HAS_TIMING_LINE   1
+#define BOARD_HAS_JACK_LEDS     1   /* LEDs de J9 en PE12/PE13 (jack_leds.h) */
 #define BOARD_HAS_ID_JUMPER     1
 #define ID_JUMPER_ESPERADO      0   /* PE15 a masa por JP3 + R36 (board_common.h) */
+
+/* LEDs de los jacks de J9 (jack_leds.h): LED 1 de los cuatro jacks juntos en
+ * PE12 (R111–R114), LED 2 de los cuatro juntos en PE13 (R164–R167). Alto =
+ * encendido. Salida push-pull, velocidad baja: son ≈3 mA por LED (3,3 V / 470 Ω),
+ * ≈11 mA por pin con los cuatro, bajo los 20 mA del pin. */
+#define JACK_LED1_PIN           GPIO_PIN_12     // PE12
+#define JACK_LED2_PIN           GPIO_PIN_13     // PE13
+#define JACK_LED_PORT           GPIOE
 
 /* Lectura de +5VA: R163 100k (de +5VA) / R162 100k (a GND) / C312 4,7 nF.
  * PC1 = +5VA / 2. ADC123_INP11, FT_ha (DS12110). Umbral de SD: 2,25 V en el

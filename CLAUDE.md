@@ -72,6 +72,7 @@ Lo mismo para los hallazgos: verificar antes de afirmar, y decir **cómo** se ve
 |---|---|
 | Mapa del repo, estado y build | [README.md](README.md) |
 | La placa: revisiones, docs de DS12, reglas de DRC | [hardware/DS/README.md](hardware/DS/README.md) |
+| **DS12: qué está decidido, descartado y abierto** (empezar por acá) | [hardware/DS/DS12_DECISIONES.md](hardware/DS/DS12_DECISIONES.md) |
 | Herramientas de medición y de placa | [tools/README.md](tools/README.md) |
 | Por qué se decidió cada cosa, mes a mes | `docs/reporte_2026-0{7,8,9}.md` |
 | Operación en lenguaje llano | [docs/guia_operacion.md](docs/guia_operacion.md) |

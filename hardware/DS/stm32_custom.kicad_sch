@@ -9308,10 +9308,6 @@
 		(uuid "700cc1a8-f6a0-420b-bb9f-613186eb0eff")
 	)
 	(no_connect
-		(at 48.26 110.49)
-		(uuid "78c8ac87-a0a6-4be4-84fd-d54adbd716a2")
-	)
-	(no_connect
 		(at 48.26 156.21)
 		(uuid "85976467-f04a-449c-8631-b19a2e124aca")
 	)
@@ -11850,6 +11846,28 @@
 					(size 1.27 1.27)
 				)
 				(justify right)
+			)
+		)
+	)
+	(global_label "PE13"
+		(shape bidirectional)
+		(at 48.26 110.49 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "95e14c79-0994-409b-9e5a-8e1279c9c20f")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 48.26 110.49 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
 			)
 		)
 	)
