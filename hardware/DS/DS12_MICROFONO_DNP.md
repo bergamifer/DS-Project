@@ -20,6 +20,33 @@ No tiene aplicación directa en la obra. Sirve para probar el STM32 con micrófo
 > Cómo se verificó: la hoja del fabricante del MSM261S4030H0R (MEMSensing, DS-050 v1.0, abril de 2017),
 > leída entera; para los otros dos, la página de producto de TDK y la ficha de DigiKey.
 
+> ✏️ **2026-11-27 — dibujados en el esquemático.**
+>
+> | | Micrófono | 100 nF (`C1525`) | 10 µF (`C1691`) | 100 kΩ (`C25741`) | Hoja |
+> |---|---|---|---|---|---|
+> | STM32 | **MK1** | C332 | C333 | R172 | `stm32_custom` |
+> | ESP32 | **MK2** | C334 | C335 | R173 | `esp32-mini` |
+>
+> Los micrófonos van con `dnp yes` e `in_bom no` (igual que J1 y J10): tienen huella en la placa pero
+> no entran al BOM de JLCPCB. Los seis pasivos sí. Las dos hojas pasaron de A4 a A3 para dibujar el
+> bloque en lugar libre, a la derecha, sin tocar nada de lo existente. La pata 6 del ESP32 (GPIO3)
+> perdió su marca ×.
+>
+> Cómo se verificó: `tools/sch2net.py --erc` antes y después (sin avisos nuevos) y `netlist_diff.py`:
+> 8 componentes agregados, **0 conexiones existentes cambiadas**, GPIO3 deja de estar al aire. Las
+> redes quedan `I2S2_WS` = J6.1 + MK1.3 + PB12, `I2S2_CK` = J6.2 + MK1.6 + PB13, `I2S2_SDI` = J5.5 +
+> MK1.7 + R172 + PB14, `ESP_MIC_SCK` = J1.3 + MK2.6 + GPIO6, `ESP_MIC_WS` = J1.4 + MK2.3 + GPIO7,
+> `ESP_MIC_SD` = MK2.7 + R173 + GPIO3. Autoprueba: corriendo una etiqueta 1,27 mm fuera del cable,
+> `sch2net.py` lo marca («etiqueta que llega a un solo pin»). **No se abrió en KiCad** (en la nube no
+> hay KiCad 10): falta abrirlo, correr el ERC de KiCad y acomodar a gusto.
+>
+> Dato que no estaba en el documento: **J1 ya es DNP y `on_board no`**: no tiene huella en la placa.
+> Así que «perder el JTAG externo» no cuesta nada en la DS12 tal como está.
+>
+> La huella `DS_local_library:MSM261S4030H0R` se armó con las medidas de la sección «La huella» de
+> este documento, no con el plano (la hoja no se pudo bajar). **Compararla con el plano de la DS-050
+> antes de pasarla al PCB.**
+
 ## Por qué I2S y no PDM ni analógico
 
 | Opción | Patas nuevas | Circuito extra | Veredicto |

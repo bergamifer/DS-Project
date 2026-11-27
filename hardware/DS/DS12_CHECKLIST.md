@@ -45,9 +45,9 @@
 - [ ] **Las 15 resistencias de bias del ADC** — tabla de red, pata y pieza en
       [`DS12_BIAS_ADC_LISTA.md`](DS12_BIAS_ADC_LISTA.md). Al terminar, `tools/verificar_bias_adc.py`
       tiene que dar **16 de 16**.
-- [ ] **Micrófono del STM32** (I2S2, DNP) más sus 100 nF, 10 µF y 100 kΩ → §F «Micrófono de banco».
-- [ ] **Micrófono del ESP32** (GPIO6 SCK, GPIO7 WS, GPIO3 SD, DNP) más los mismos tres pasivos →
-      §F. El firmware ya está escrito (`firmware_esp32c3/main/mic.c`).
+- [x] **Micrófono del STM32** (I2S2, DNP) más sus 100 nF, 10 µF y 100 kΩ → §F «Micrófono de banco». Dibujado el 2026-11-27: MK1, C332, C333, R172 en `stm32_custom`.
+- [x] **Micrófono del ESP32** (GPIO6 SCK, GPIO7 WS, GPIO3 SD, DNP) más los mismos tres pasivos →
+      §F. Dibujado el 2026-11-27: MK2, C334, C335, R173 en `esp32-mini`. El firmware ya está escrito (`firmware_esp32c3/main/mic.c`).
 - [ ] **J9** según lo que decidas en 0.1. Si se anula el LED 2: unir los pads según DEC §1.
 - [ ] **R20** según 0.1.
 - [ ] **Nombrar las 64 redes de parlante** `SPK_CH00_P/N`… → §C.
@@ -453,14 +453,14 @@ Cuando llegue la placa, y **antes** de darla por buena:
 - [ ] **S3 y S5–S12**: revisar en DS12_REVISION_ALIMENTACION.md §9 cuáles siguen abiertos.
 - [x] **Medidas de la DS11** (`revision_alimentacion/medidas_ds11.md`): hechas M1–M8, M12 (+M12b/c) y M6 (2026-10-26/27). M7 no concluyente (el ZT703S no resuelve 20 mV); M9 sin medidor; M10/M11 no se hacen. Consecuencias para el esquemático: bias del ADC (B), LEDs de J9 invertidos (B), R20 se queda en 33 Ω.
 
-**Micrófono de banco (DNP)** — [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md). Decidido el 2026-11-07, **sin dibujar**.
+**Micrófono de banco (DNP)** — [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md). Decidido el 2026-11-07, **dibujado el 2026-11-27** (falta el PCB).
 🔧 Corregido el 2026-11-10: el modelo es uno solo, y la huella y las conexiones cambiaron.
 
 - [ ] **Comprar el MSM261S4030H0R** (MEMSensing, puerto superior, 4 × 3 mm). Va DNP, no hace falta que esté en LCSC. Stock no verificado. ~~ICS-43434 y SPH0645LM4H~~: son de puerto inferior (agujero en la placa) y están discontinuados.
 - [x] **Hoja de datos leída** (DS-050): patas, huella y reloj (SCK de 1 a 4 MHz; a 48 kHz son 3,072 MHz).
-- [ ] **Dibujar**: pata 1 GND · 2 sin conectar · 3 `I2S2_WS` · 4 (CHIPEN) a `+3V3` · 5 (L/R) a GND · 6 `I2S2_CK` · 7 `I2S2_SDI` con **100 kΩ a GND** · 8 `+3V3` con **100 nF + 10 µF**. El micrófono DNP; el 100 kΩ y los dos capacitores se ensamblan.
-- [ ] 🆕 2026-11-18 **Segundo micrófono, en el ESP32** (DNP, el mismo MSM261S4030H0R) — [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md) §«El segundo micrófono»: pata 6 SCK → **GPIO6**, 3 WS → **GPIO7**, 7 SD → **GPIO3** con **100 kΩ a GND**, 4 y 8 a `+3V3` con **100 nF + 10 µF**, 5 y 1 a GND, 2 sin conectar. Redes nuevas `ESP_MIC_SCK/WS/SD`. Con él montado se pierde el JTAG externo de J1 (el del USB sigue).
-- [ ] **Huella**: 8 pads de 0,9 × 0,6 mm, copiada del plano de la hoja.
+- [x] **Dibujar** (MK1, C332, C333, R172; hoja `stm32_custom`, pasada a A3): pata 1 GND · 2 sin conectar · 3 `I2S2_WS` · 4 (CHIPEN) a `+3V3` · 5 (L/R) a GND · 6 `I2S2_CK` · 7 `I2S2_SDI` con **100 kΩ a GND** · 8 `+3V3` con **100 nF + 10 µF**. El micrófono DNP; el 100 kΩ y los dos capacitores se ensamblan.
+- [x] 🆕 2026-11-18 **Segundo micrófono, en el ESP32** (dibujado: MK2, C334, C335, R173; hoja `esp32-mini`, pasada a A3) (DNP, el mismo MSM261S4030H0R) — [DS12_MICROFONO_DNP.md](DS12_MICROFONO_DNP.md) §«El segundo micrófono»: pata 6 SCK → **GPIO6**, 3 WS → **GPIO7**, 7 SD → **GPIO3** con **100 kΩ a GND**, 4 y 8 a `+3V3` con **100 nF + 10 µF**, 5 y 1 a GND, 2 sin conectar. Redes nuevas `ESP_MIC_SCK/WS/SD`. Con él montado se pierde el JTAG externo de J1 (el del USB sigue).
+- [ ] **Huella**: 8 pads de 0,9 × 0,6 mm, copiada del plano de la hoja. ⚠️ Hay una `DS_local_library:MSM261S4030H0R` armada con las medidas **del texto** de DS12_MICROFONO_DNP.md (la hoja no se pudo bajar desde la nube): **compararla con el plano de la DS-050** antes de pasarla al PCB.
 - [x] **Redes I2S2 reconfirmadas** el 2026-11-10 contra el esquemático guardado el 28-oct: PB12/J6.1, PB13/J6.2, PB14/J5.5.
 - [ ] **Layout**: lejos de los PAM8302A, del inductor del buck y de los cables de parlantes; con lugar para soldar a mano. **No lavar la placa** después de soldarlo.
 - [x] **Firmware**: no usa I2S2 (verificado el 2026-11-10 en `main.c` y `stm32h7xx_hal_msp.c`).

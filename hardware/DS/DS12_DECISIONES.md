@@ -92,7 +92,7 @@
 ## 4. Falta dibujar (según DEC §7, netlist del 28-oct)
 
 - 15 de las 16 resistencias del bias del ADC (está R171 y el nodo).
-- Los dos micrófonos: el del STM32 (I2S2) y el del ESP32.
+- ~~Los dos micrófonos~~ — dibujados el 27-nov (MK1 en I2S2, MK2 en el ESP32, con sus pasivos); falta el PCB y comparar la huella con la hoja.
 - El cambio de J9 (un LED por jack) y, si se acepta, R20.
 - Actualizar el PCB desde el esquemático (le faltan C58, C62, R169–R171).
 - ~~Firmware: el código de los LEDs de PE12/PE13~~ — hecho el 18-nov (`jack_leds.c`, con test); falta probarlo en una DS12.
